@@ -1,38 +1,94 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[project]
+name = "modmail"
+description = "A Discord Modmail bot."
+authors = [
+    {name = "Taku", email = "taku@modmail.dev"},
+    {name = "FourJr", email = "no-email@example.com"},
+    {name = "Kyber", email = "no-email@example.com"},
+]
+readme = "README.md"
+requires-python = ">=3.13"
+license = {text = "AGPL-3.0-or-later"}
+dynamic = ["version"]
+
+keywords = ["discord", "discord-bot", "modmail", "python", "discord.py", "discord-modmail"]
+classifiers = [
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Chat",
+    "Topic :: Communications :: Conferencing",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "discord.py==2.5.2",
+    "python-dotenv<1.1,>=1.0.1",
+    "beanie~=1.29.0",
+]
+
+[project.optional-dependencies]
+speed = [
+    "discord.py[speed]==2.5.2",
+    "uvloop>=0.21.0; platform_system != \"Windows\"",
+]
+
+[tool.pdm.dev-dependencies]
+lint = [
+    "black>=25.1.0",
+    "pyright>=1.1.396",
+]
+tools = [
+    "pre-commit>=4.1.0,<5",
+]
+
+[project.urls]
+homepage = "https://github.com/modmail-dev/modmail"
+repository = "https://github.com/modmail-dev/modmail"
+
+# PDM build system configs.
+[tool.pdm]
+distribution = true
+
+[tool.pdm.version]
+source = "file"
+path = "src/modmail/__init__.py"
+
+[tool.pdm.build]
+includes = ["src"]
+
+# Using black as linter for now, may switch to ruff in the future.
 [tool.black]
-line-length = "110"
-target-version = ['py310']
+line-length = 115
+target-version = ['py313']
 include = '\.pyi?$'
-extend-exclude = '''
-(
-  /(
-      \.eggs
-    | \.git
-    | \.venv
-    | venv
-    | venv2
-    | _build
-    | build
-    | dist
-    | plugins
-    | temp
-  )/
-)
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | \.env
+  | venv
+  | env
+  | __pycache__
+  | dist
+)/
 '''
 
-[tool.poetry]
-name = 'Modmail'
-version = '4.1.0'
-description = "Modmail is similar to Reddit's Modmail, both in functionality and purpose. It serves as a shared inbox for server staff to communicate with their users in a seamless way."
-license = 'AGPL-3.0-only'
-authors = [
-    'kyb3r <noemail@example.com>',
-    '4jr <noemail@example.com>',
-    'Taki <noemail@example.com>'
+[tool.pyright]
+exclude = [
+    "**/__pycache__",
+    "**/venv",
+    "**/env",
+    "**/.venv",
+    "**/.env",
 ]
-readme = 'README.md'
-repository = 'https://github.com/modmail-dev/modmail'
-homepage = 'https://github.com/modmail-dev/modmail'
-keywords = ['discord', 'modmail']
-
-[tool.pylint.format]
-max-line-length = "110"
+reportMissingImports = true
+pythonVersion = "3.13"
+pythonPlatform = "Linux"
+typeCheckingMode = "strict"

@@ -1,38 +1,30 @@
-FROM python:3.11-slim-bookworm as base
+FROM python:3.13-slim AS py
 
-RUN apt-get update &&  \
-    apt-get install --no-install-recommends -y \
-    # Install CairoSVG dependencies.
-    libcairo2 && \
-    # Cleanup APT.
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    # Create a non-root user.
-    useradd --shell /usr/sbin/nologin --create-home -d /opt/modmail modmail
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/opt/venv
 
-FROM base as builder
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends g++ && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+FROM py AS build
 
-RUN pip install --root-user-action=ignore --no-cache-dir --upgrade pip wheel && \
-    python -m venv /opt/modmail/.venv && \
-    . /opt/modmail/.venv/bin/activate && \
-    pip install --no-cache-dir --upgrade -r requirements.txt
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl git && \
+    curl -sSL https://raw.githubusercontent.com/pdm-project/pdm/main/install-pdm.py | python3 -
 
-FROM base
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Copy the entire venv.
-COPY --from=builder --chown=modmail:modmail /opt/modmail/.venv /opt/modmail/.venv
+COPY pyproject.toml pdm.lock /
+RUN $HOME/.local/bin/pdm install --prod -G speed --no-lock --no-editable
 
-# Copy repository files.
-WORKDIR /opt/modmail
-USER modmail:modmail
-COPY --chown=modmail:modmail . .
+FROM py
 
-# This sets some Python runtime variables and disables the internal auto-update.
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PATH=/opt/modmail/.venv/bin:$PATH \
-    USING_DOCKER=yes
+ENV PATH "$VIRTUAL_ENV/bin:$PATH"
+COPY --from=build /opt/venv /opt/venv
 
-CMD ["python", "bot.py"]
+WORKDIR /bot
+CMD ["python", "start.py"]
+COPY . /bot
