@@ -9,8 +9,10 @@ from __future__ import annotations
 
 __version__ = "5.0a1"
 
+import datetime
 import logging as _logging
 import sys
+from textwrap import dedent
 from typing import TYPE_CHECKING, NoReturn
 
 from .config import load_config
@@ -68,6 +70,34 @@ def run_bot() -> NoReturn:
     if "CONFIG" not in globals():
         logger.warning("init() was not called. Calling init() with the default args.")
         init()
+
+    modmail_text_lines: list[str] = []
+    modmail_ascii_art = dedent(
+        r"""
+        ___  ___          _                 _ _
+        |  \/  |         | |               (_) |
+        | .  . | ___   __| |_ __ ___   __ _ _| |
+        | |\/| |/ _ \ / _` | '_ ` _ \ / _` | | |
+        | |  | | (_) | (_| | | | | | | (_| | | |
+        \_|  |_/\___/ \__,_|_| |_| |_|\__,_|_|_|
+        """
+    )
+    current_time_text = (
+        datetime.datetime.now(tz=datetime.timezone.utc).astimezone().strftime("%B %d, %Y %H:%M:%S %Z")
+    )
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    modmail_text_lines += [line for line in modmail_ascii_art.split("\n")]
+    modmail_text_lines += ["https://github.com/modmail-dev/modmail"]
+    modmail_text_lines += [""]
+    modmail_text_lines += [f"Starting at {current_time_text}"]
+    modmail_text_lines += [f"Version: {__version__} | Python: {python_version}"]
+    modmail_text_lines += [""]
+    modmail_text_width = len(max(modmail_text_lines, key=len)) + 10
+
+    logger.info(
+        "[bold bright_magenta]" + "\n".join([line.center(modmail_text_width) for line in modmail_text_lines]),
+        extra={"markup": True, "highlighter": None},
+    )
 
     from .core import Bot
 

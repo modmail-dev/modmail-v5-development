@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 import pymongo.errors
-from pydantic import BaseModel, field_validator, Field, ValidationInfo
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from pymongo import uri_parser
 
 __all__ = [

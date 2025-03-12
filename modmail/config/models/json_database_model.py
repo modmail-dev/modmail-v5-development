@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 
-from pydantic import BaseModel, field_validator, Field
+from pydantic import BaseModel, Field, field_validator
 
 __all__ = [
     "JsonDatabaseConfig",

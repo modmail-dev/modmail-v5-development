@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from beanie import Document, Indexed  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
+from beanie import Indexed  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
+from beanie import Document
 
 __all__ = [
     "Settings",

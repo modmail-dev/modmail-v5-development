@@ -26,7 +26,7 @@ def do_migration(uri: str, db_name: str) -> None:
 
     path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "migrations")
     settings = migrate.MigrationSettings(
-        distance=0,
+        distance=0,  # Run all migrations
         direction=RunningDirections.FORWARD,
         connection_uri=uri,
         database_name=db_name,

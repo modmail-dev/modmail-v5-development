@@ -9,12 +9,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from typing import Any, TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import discord
 from discord.ext import commands
 
-from .. import __version__, CONFIG
+from .. import CONFIG, __version__
 from ..errors import DatabaseError
 
 if TYPE_CHECKING:
@@ -58,10 +58,13 @@ class Bot(commands.Bot):
         # Set ratelimit timeout to 60s to prevent stalled commands.
         kwargs.setdefault("max_ratelimit_timeout", 60.0)
 
+        # Disable "voice will NOT be supported" warning.
+        discord.VoiceClient.warn_nacl = False
+
         super().__init__(*args, **kwargs)
 
         self.version: str = __version__
-        logger.info("[bold green]Bot version:[/] %s", self.version, extra={"markup": True})
+        logger.debug("[bold green]Bot version: %s", self.version, extra={"markup": True, "highlighter": None})
 
         if CONFIG.database_type == "mongodb":
             from ..backends.mongodb import MongoDBClient
@@ -98,7 +101,7 @@ class Bot(commands.Bot):
         try:
             try:
                 # noinspection PyUnresolvedReferences
-                import uvloop  # type: ignore[reportMissingImports]
+                import uvloop
 
                 # Start the bot with uvloop if available.
                 with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:

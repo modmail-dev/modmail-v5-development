@@ -12,7 +12,7 @@ import logging
 from base64 import b64decode
 from typing import Annotated
 
-from pydantic import BaseModel, field_validator, Field
+from pydantic import BaseModel, Field, field_validator
 
 __all__ = [
     "BotConfig",

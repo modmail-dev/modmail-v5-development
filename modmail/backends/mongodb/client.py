@@ -17,10 +17,10 @@ import pymongo.errors
 from beanie import init_beanie  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from ...errors import DatabaseConnectionError
+from ..abc import DBClientBase
 from .migration import do_migration
 from .models import Settings
-from ..abc import DBClientBase
-from ...errors import DatabaseConnectionError
 
 if TYPE_CHECKING:
     from ...config.models import Config
@@ -154,12 +154,13 @@ class MongoDBClient(DBClientBase):
         assert self._config.mongodb_config is not None, "MongoDB config is not set."
 
         with ProcessPoolExecutor() as pool:
+            # Run the migration in a separate process due to beanie's global overrides during migration.
             await loop.run_in_executor(
                 pool, do_migration, self._config.mongodb_config.uri, self._config.mongodb_config.database
             )
 
         # Load settings from MongoDB
-        self._settings = await Settings.find_one(Settings.bot_id == self._config.bot.bot_id)  # type: ignore[reportUnknownArgumentType]
+        self._settings = await Settings.find_one(Settings.bot_id == self._config.bot.bot_id)
         if self._settings is None:
             logger.debug("Settings not found in MongoDB. Creating new settings.")
             self._settings = Settings(bot_id=self._config.bot.bot_id)

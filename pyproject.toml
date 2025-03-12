@@ -67,6 +67,12 @@ path = "modmail/__init__.py"
 [tool.pdm.build]
 includes = ["modmail"]
 
+[tool.isort]
+profile = "black"
+line_length = 115
+combine_as_imports = true
+combine_star = true
+
 # Using black as linter for now, may switch to ruff in the future.
 [tool.black]
 line-length = 115
@@ -94,6 +100,7 @@ exclude = [
     "dist",
 ]
 reportMissingImports = true
+reportUnnecessaryTypeIgnoreComment = "error"
 pythonVersion = "3.13"
-pythonPlatform = "Linux"
+pythonPlatform = "All"
 typeCheckingMode = "strict"
