@@ -18,6 +18,7 @@ __all__ = [
 
 class Settings(Document):
     bot_id: Annotated[int, Indexed(unique=True)]  # the bot ID
+    last_ran_version: str | None = None  # the last version the bot was run on, None = first run
     main_category_id: int | None = None
     fallback_category_id: int | None = None
 

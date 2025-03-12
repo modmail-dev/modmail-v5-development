@@ -22,7 +22,7 @@ class JsonDatabaseConfig(BaseModel):
     Configuration model for the JSON database.
 
     Attributes:
-        storage_path (str): The path to the storage directory. Defaults to "data".
+        storage_path (str): The path to the storage directory.
     """
 
     storage_path: str = Field("data", validate_default=True)

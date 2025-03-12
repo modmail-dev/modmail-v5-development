@@ -27,8 +27,8 @@ class MongoDBDatabaseConfig(BaseModel):
 
     Attributes:
         uri (str): The MongoDB connection URI.
-        database (str): The name of the database. Defaults to "modmail".
-        tls_allow_invalid_certificates (bool): Whether to allow invalid TLS certificates. Defaults to False.
+        database (str): The name of the database.
+        tls_allow_invalid_certificates (bool): Whether to allow invalid TLS certificates.
     """
 
     uri: str  # the MongoDB connection URI

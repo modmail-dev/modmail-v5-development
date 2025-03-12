@@ -31,9 +31,10 @@ class BotConfig(BaseModel):
     Attributes:
         token (str): The bot token.
         staff_server_id (IDType): The ID of the staff server.
-        prefix (str | None): The command prefix for the bot. Defaults to "?".
-        respond_bot_mention (bool): Whether the bot should respond to mentions. Defaults to True.
-        owner_ids (set[IDType]): A set of owner IDs. Defaults to an empty set.
+        prefix (str | None): The command prefix for the bot.
+        respond_bot_mention (bool): Whether the bot should respond to mentions.
+        owner_ids (set[IDType]): A set of owner IDs.
+        force_sync_commands (bool): Whether to force sync commands.
     """
 
     token: str
@@ -41,6 +42,7 @@ class BotConfig(BaseModel):
     prefix: str | None = "?"  # when prefix is None, the bot will not use a prefix
     respond_bot_mention: bool = True
     owner_ids: set[IDType] = set()
+    force_sync_commands: bool = False
 
     @field_validator("token")
     @classmethod

@@ -39,3 +39,19 @@ class DBClientBase(ABC):
         Disconnect from the database.
         """
         pass
+
+    @abstractmethod
+    async def get_last_ran_version(self) -> str | None:
+        """
+        Get the last ran version of the bot.
+
+        :return: The last ran version of the bot, or None if running for the first time.
+        """
+        pass
+
+    @abstractmethod
+    async def update_last_ran_version(self) -> None:
+        """
+        Update the last ran version of the bot to the current version.
+        """
+        pass

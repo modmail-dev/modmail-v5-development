@@ -17,6 +17,7 @@ import pymongo.errors
 from beanie import init_beanie  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from ... import __version__
 from ...errors import DatabaseConnectionError
 from ..abc import DBClientBase
 from .migration import do_migration
@@ -52,12 +53,16 @@ class MongoDBClient(DBClientBase):
         self._client: AsyncIOMotorClient[dict[str, Any]] | None = None
         self._settings: Settings | None = None
 
-    async def connect(self) -> None:
-        """
-        Connect to the MongoDB database and load the bot settings.
+    @property
+    def settings(self) -> Settings:
+        assert self._settings is not None, "Settings not loaded."
+        return self._settings
 
-        :raises DatabaseConnectionError: If the connection to the database fails.
-        """
+    @settings.setter
+    def settings(self, settings: Settings) -> None:
+        self._settings = settings
+
+    async def connect(self) -> None:
         logger.debug("Connecting to MongoDB...")
         assert self._config.mongodb_config is not None, "MongoDB config is not set."
         self._client = AsyncIOMotorClient(
@@ -134,9 +139,6 @@ class MongoDBClient(DBClientBase):
         await self._startup_setup()
 
     async def disconnect(self) -> None:
-        """
-        Disconnect from the MongoDB database.
-        """
         logger.debug("Disconnecting from MongoDB...")
         if self._client:
             self._client.close()
@@ -167,3 +169,12 @@ class MongoDBClient(DBClientBase):
             await self._settings.create()
 
         logger.debug("Loaded settings from MongoDB.")
+
+    async def get_last_ran_version(self) -> str | None:
+        return self.settings.last_ran_version
+
+    async def update_last_ran_version(self) -> None:
+        logger.debug("Updating last ran version to %s", __version__)
+        self.settings.last_ran_version = __version__
+        # noinspection PyArgumentList
+        await self.settings.save()

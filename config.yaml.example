@@ -51,9 +51,14 @@ bot:
     # To find your user ID, see https://dis.gd/findmyid.
     # If the bot is owned by a team, the owner IDs will, by default, be the IDs of the team members.
     owner_ids:
-#       - 100000000000001
-#       - 100000000000002
-#       - 100000000000003
+    #   - 100000000000001
+    #   - 100000000000002
+    #   - 100000000000003
+
+    # Whether to force sync slash commands to the bot's application.
+    # Only set to true if you are using a development version of the bot.
+    # Modmail will automatically sync the slash commands on version bump.
+    # force_sync_commands: false
 
 # Required: The database type that stores your bot's logs.
 # Can be one of: mongodb, json.
@@ -119,7 +124,7 @@ logging:
     # Configure the logging levels for discord.py's internal loggers.
     # It's suggested to leave these at their default values for easier debugging.
     # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
-    # discord_level: "DEBUG"
+    # discord_level: "INFO"
     # discord_state_level: "INFO"
     # discord_http_level: "INFO"
     # discord_gateway_level: "info"

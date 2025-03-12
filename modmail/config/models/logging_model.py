@@ -23,19 +23,19 @@ class LoggingConfig(BaseModel):
     Configuration model for the logging system.
 
     Attributes:
-        enabled (bool): Whether logging is enabled. Defaults to True.
-        root_level (int): The root logging level. Defaults to logging.DEBUG.
-        console_level (int): The console logging level. Defaults to logging.INFO.
-        logfile_level (int): The logfile logging level. Defaults to logging.DEBUG.
-        stdout_format (str): The format for stdout logging. Defaults to "[%(levelname)s] %(message)s".
-        logfile (str | None): The path to the logfile. Defaults to "modmail.log".
-        logfile_format (str): The format for logfile logging. Defaults to "%(asctime)s %(levelname)s %(name)s:%(lineno)d %(message)s".
-        logfile_max_size (NonNegativeInt): The maximum size of the logfile in bytes. Defaults to 35 MB.
-        logfile_backup_count (NonNegativeInt): The number of backup logfiles to keep. Defaults to 0.
-        discord_level (int): The logging level for discord. Defaults to logging.DEBUG.
-        discord_state_level (int): The logging level for discord.state. Defaults to logging.INFO.
-        discord_http_level (int): The logging level for discord.http. Defaults to logging.INFO.
-        discord_gateway_level (int): The logging level for discord.gateway. Defaults to logging.INFO.
+        enabled (bool): Whether logging is enabled.
+        root_level (int): The root logging level.
+        console_level (int): The console logging level.
+        logfile_level (int): The logfile logging level.
+        stdout_format (str): The format for stdout logging.
+        logfile (str | None): The path to the logfile.
+        logfile_format (str): The format for logfile logging.
+        logfile_max_size (NonNegativeInt): The maximum size of the logfile in bytes.
+        logfile_backup_count (NonNegativeInt): The number of backup logfiles to keep.
+        discord_level (int): The logging level for discord.
+        discord_state_level (int): The logging level for discord.state.
+        discord_http_level (int): The logging level for discord.http.
+        discord_gateway_level (int): The logging level for discord.gateway.
     """
 
     enabled: bool = True
@@ -47,7 +47,7 @@ class LoggingConfig(BaseModel):
     logfile_format: str = "%(asctime)s %(levelname)s %(name)s:%(lineno)d %(message)s"
     logfile_max_size: NonNegativeInt = 1024 * 1024 * 35  # 35 MB
     logfile_backup_count: NonNegativeInt = 0
-    discord_level: int = logging.DEBUG
+    discord_level: int = logging.INFO
     discord_state_level: int = logging.INFO
     discord_http_level: int = logging.INFO
     discord_gateway_level: int = logging.INFO

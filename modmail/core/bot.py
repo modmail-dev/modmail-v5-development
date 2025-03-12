@@ -73,8 +73,23 @@ class Bot(commands.Bot):
     async def setup_hook(self) -> None:
         """
         This is called on bot start.
+
+        Syncs the bot command tree when the bot is updated.
         """
-        ...
+        if CONFIG.bot.force_sync_commands:
+            logger.info("Force syncing bot commands.")
+            logger.warning(
+                "[red]You should turn off force_sync_commands, or else " "your bot will be rate-limited.",
+                extra={"markup": True},
+            )
+            await self.tree.sync()
+
+        last_ran_version = await self._database_client.get_last_ran_version()
+        if last_ran_version is None or last_ran_version != self.version:
+            if not CONFIG.bot.force_sync_commands:
+                logger.debug("Syncing bot commands.")
+                await self.tree.sync()
+            await self._database_client.update_last_ran_version()
 
     def run(self, *args: Any, **kwargs: Any) -> NoReturn:
         """
@@ -96,7 +111,7 @@ class Bot(commands.Bot):
                 await self.load_extension(f".cogs.{ext}", package="modmail")
 
             async with self:
-                logger.info("[green]Starting Modmail![/]", extra={"markup": True})
+                logger.info("[green]Starting Modmail!", extra={"markup": True})
                 try:
                     await self.start(CONFIG.bot.token, reconnect=True)
                 finally:
@@ -147,3 +162,14 @@ class Bot(commands.Bot):
         This is called when the bot is ready.
         """
         logger.info("[bold green]Bot is ready.", extra={"markup": True})
+
+    # async def can_run(self, ctx: commands.Context[Bot], /, *, call_once: bool = False) -> bool:
+    #     """
+    #     Check if the bot can run the command.
+    #     Verify the bot has the following permissions:
+    #     - Send Messages
+    #     - Embed Links
+    #     - Attach Files
+    #     - TODO: Add more permissions
+    #     """
+    #     return True
