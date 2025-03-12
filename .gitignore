@@ -1,6 +1,9 @@
 # Custom
 .pdm.toml
 .pdm-python
+modmail.log
+data/
+config.yaml
 
 ### VisualStudioCode template
 .vscode/*

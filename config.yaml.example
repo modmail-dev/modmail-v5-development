@@ -1,0 +1,127 @@
+# -----------------------------------------------------------------------------
+# How to edit config.yaml:
+#
+# 1. Rename config.yaml.example to config.yaml, and open it in a text editor.
+#
+# 2. Each key in the file represents a setting you can change to make your program work differently.
+#
+# 3. Some settings have to be a certain type of thing (like a number, a word, or a list),
+#    or they might not work right.
+#
+# 4. Change the value of a setting by typing in a new value after the colon.
+#    If a setting is commented out, remove the '#' symbol at the beginning
+#    of the line to uncomment it and make it active.
+#
+# 5. Make sure to use the correct indentation (spacing at the start of each line) to group
+#    related settings together. Use four spaces for each level of indentation.
+#
+# 6. Once you've finished changing the settings you want to change, save the file.
+#
+# 7. If you get an error message when you run your program, double-check the config file
+#    to make sure everything is spelled correctly, looks the way it's supposed to, and is indented properly.
+#
+# 8. If you want to learn more about the YAML syntax,
+#    check out this helpful link: https://yaml.org/spec/1.2/spec.html
+# -----------------------------------------------------------------------------
+
+# TODO: Add .env keys to each config, and add tests for loading from .env.
+
+# The version of the config file, do not change.
+version: "1.0"
+
+# General bot settings
+bot:
+    # Required: The bot's token, REPLACE WITH YOUR BOT'S TOKEN!
+    token: "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.12345.XYZ"
+
+    # Required: The ID of your staff server (the server where new threads/tickets will be created).
+    # To find your server's ID, see https://dis.gd/findmyid.
+    # 1. Enable Developer Mode in your Discord settings.
+    # 2. Right-click on your server's icon in the server list.
+    # 3. Click "Copy ID".
+    staff_server_id: 100000000000001
+
+    # The bot's prefix, set to "" to disable prefixed commands (only allow slash commands).
+    # prefix: "?"
+
+    # Whether the bot should respond to mentions. Only applicable if the bot has a prefix set.
+    # respond_bot_mention: true
+
+    # The ID of the bot's owner(s). Defaults to the bot application's owner if not set.
+    # To find your user ID, see https://dis.gd/findmyid.
+    # If the bot is owned by a team, the owner IDs will, by default, be the IDs of the team members.
+    owner_ids:
+#       - 100000000000001
+#       - 100000000000002
+#       - 100000000000003
+
+# Required: The database type that stores your bot's logs.
+# Can be one of: mongodb, json.
+# json is not recommended for large servers and some bot features may not be available.
+# **** json is not supported at the moment! ****
+database_type: "mongodb"
+
+# Configurations for the MongoDB database type. Only required if database_type is mongodb.
+mongodb_config:
+    # Required: The MongoDB connection URI
+    # See https://docs.mongodb.com/manual/reference/connection-string/ for more information.
+    uri: "mongodb://localhost:27017"
+
+    # The MongoDB database name. Will use the database name from the URI if this is not set.
+    # database: "modmail"
+
+    # Whether to enforce TLS trusted certificates for the MongoDB connection.
+    # This may be useful if you are using a self-signed certificate.
+    # It's recommended to leave this set to false, otherwise you may be vulnerable to MITM attacks.
+    # tls_allow_invalid_certificates: false
+
+# Configurations for the JSON database type. Only required if database_type is json.
+json_config:
+    # The location where the JSON database files will be stored.
+    # If the directory does not exist, it will be created.
+    # storage_path: "data"
+
+# Configures the logging outputs of the bot.
+# If you're unsure what to set, leave this section default.
+logging:
+    # Whether Modmail should configure logging.
+    enabled: true
+
+    # The root logging level (any other levels set in the following configs cannot be lower than this level).
+    # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+    # root_level: "DEBUG"
+
+    # The logging level for the console. Default is INFO to reduce spam from DEBUG messages.
+    # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+    # console_level: "INFO"
+
+    # The logging level for the logfile. Default logs everything to the logfile.
+    # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+    # logfile_level: "DEBUG"
+
+    # The logging format for the console. (The level is already prepended to the message).
+    # See the possible variables here: https://docs.python.org/3/library/logging.html#logrecord-attributes.
+    # stdout_format: "%(message)s"
+
+    # The logging file location, set to "" to disable logging to a file.
+    # logfile: "modmail.log"
+
+    # The logging format for the logfile.
+    # See the possible variables here: https://docs.python.org/3/library/logging.html#logrecord-attributes.
+    # logfile_format: "%(asctime)s %(levelname)s %(name)s:%(lineno)d %(message)s"
+
+    # The maximum size of each logfile, in bytes. Defaults to 35MB.
+    # logfile_max_size: 36700160
+
+    # The number of logfile backups to keep. Default no backups.
+    # logfile_backup_count: 0
+
+    # Configure the logging levels for discord.py's internal loggers.
+    # It's suggested to leave these at their default values for easier debugging.
+    # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+    # discord_level: "DEBUG"
+    # discord_state_level: "INFO"
+    # discord_http_level: "INFO"
+    # discord_gateway_level: "info"
+
+    # TODO: add sentry support
