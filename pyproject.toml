@@ -21,7 +21,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Communications :: Chat",
     "Topic :: Communications :: Conferencing",
     "Typing :: Typed",
@@ -29,10 +29,9 @@ classifiers = [
 
 dependencies = [
     "discord.py==2.5.2",
-    "python-dotenv<1.1,>=1.0.1",
     "beanie[srv]~=1.29.0",
     "rich~=13.9.4",
-    "pydantic<2.11,>=2.10.6",
+    "pydantic[dotenv]<2.11,>=2.10.6",
     "pydantic-settings<2.9,>=2.8.1",
     "packaging",  # For version parsing.
 ]
@@ -47,6 +46,7 @@ speed = [
 lint = [
     "black>=25.1.0",
     "pyright>=1.1.396",
+    "isort>=6.0.1",
 ]
 tools = [
     "pre-commit<5,>=4.1.0",
