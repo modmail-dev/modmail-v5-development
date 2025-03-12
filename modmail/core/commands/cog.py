@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 
 
 class Cog(commands.Cog):
+    def __init__(self, bot: Bot) -> None:
+        """
+        A subclass of discord.py's command.ext.Cog.
+
+        :param bot: The bot instance.
+        """
+        self.bot = bot
+
     async def cog_before_invoke(self, ctx: commands.Context[Bot]) -> None:
         logger.debug("User %s is running the %s command.", ctx.author, ctx.command)
         await super().cog_before_invoke(ctx)
