@@ -20,7 +20,6 @@ from ..errors import DatabaseError
 if TYPE_CHECKING:
     from ..backends.abc import DBClientBase
 
-# from .help import HelpCmd
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +90,11 @@ class Bot(commands.Bot):
 
         async def bot_runner() -> None:
             await self._database_client.connect()
+
+            for ext in ["utility"]:
+                logger.debug("Loading extension %s", ext)
+                await self.load_extension(f".cogs.{ext}", package="modmail")
+
             async with self:
                 logger.info("[green]Starting Modmail![/]", extra={"markup": True})
                 try:
@@ -106,12 +110,14 @@ class Bot(commands.Bot):
                 # Start the bot with uvloop if available.
                 with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
                     runner.run(bot_runner())
-            except ImportError:
+            except ImportError as e:
                 # uvloop is not available on Windows
-                if sys.platform != "win32":
+                if e.name == "uvloop" and sys.platform != "win32":
                     logger.warning("uvloop not installed, consider installing with the -G speed option.")
-                # Start the bot with the default asyncio loop.
-                asyncio.run(bot_runner())
+                    # Start the bot with the default asyncio loop.
+                    asyncio.run(bot_runner())
+                else:
+                    raise  # re-raise the exception if it's not about uvloop
         except KeyboardInterrupt:
             logger.debug("Keyboard interrupt.")
             logger.info("[yellow]Shutting down Modmail.[/]", extra={"markup": True})
