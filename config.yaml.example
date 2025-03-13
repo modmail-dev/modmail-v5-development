@@ -60,6 +60,11 @@ bot:
     # Modmail will automatically sync the slash commands on version bump.
     # force_sync_commands: false
 
+    # Whether to enable jishaku. This is a development tool that allows you to run Python code in Discord.
+    # It is not recommended to enable this in production, as it can be a security risk.
+    # Must install the jishaku package with "pdm install -G debug" to enable.
+    # enable_jishaku: false
+
 # Required: The database type that stores your bot's logs.
 # Can be one of: mongodb, json.
 # json is not recommended for large servers and some bot features may not be available.

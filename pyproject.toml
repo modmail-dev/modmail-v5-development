@@ -51,6 +51,9 @@ lint = [
 tools = [
     "pre-commit<5,>=4.1.0",
 ]
+debug = [
+    "jishaku<2.7,>=2.6.0",
+]
 
 [project.urls]
 homepage = "https://github.com/modmail-dev/modmail"

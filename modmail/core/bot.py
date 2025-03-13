@@ -109,9 +109,12 @@ class Bot(commands.Bot):
             for ext in ["utility"]:
                 logger.debug("Loading extension %s", ext)
                 await self.load_extension(f".cogs.{ext}", package="modmail")
+            if CONFIG.bot.enable_jishaku:
+                logger.warning("[red]Loading extension jishaku (this may be unsafe)", extra={"markup": True})
+                await self.load_extension("jishaku")
 
             async with self:
-                logger.info("[green]Starting Modmail!", extra={"markup": True})
+                logger.info("[bold green]Modmail is starting.", extra={"markup": True})
                 try:
                     await self.start(CONFIG.bot.token, reconnect=True)
                 finally:
@@ -162,6 +165,13 @@ class Bot(commands.Bot):
         This is called when the bot is ready.
         """
         logger.info("[bold green]Bot is ready.", extra={"markup": True})
+
+    async def on_connect(self) -> None:
+        """
+        This is called when the bot connects to Discord.
+        """
+        logger.debug("Connected to Discord.")
+        # TODO: Set presence here
 
     # async def can_run(self, ctx: commands.Context[Bot], /, *, call_once: bool = False) -> bool:
     #     """

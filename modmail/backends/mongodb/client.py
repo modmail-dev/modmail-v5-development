@@ -63,7 +63,6 @@ class MongoDBClient(DBClientBase):
         self._settings = settings
 
     async def connect(self) -> None:
-        logger.debug("Connecting to MongoDB...")
         assert self._config.mongodb_config is not None, "MongoDB config is not set."
         self._client = AsyncIOMotorClient(
             self.uri,
@@ -152,7 +151,7 @@ class MongoDBClient(DBClientBase):
 
         loop = asyncio.get_running_loop()
 
-        logger.debug("Running migration...")
+        logger.debug("Running database migrations.")
         assert self._config.mongodb_config is not None, "MongoDB config is not set."
 
         with ProcessPoolExecutor() as pool:

@@ -35,6 +35,7 @@ class BotConfig(BaseModel):
         respond_bot_mention (bool): Whether the bot should respond to mentions.
         owner_ids (set[IDType]): A set of owner IDs.
         force_sync_commands (bool): Whether to force sync commands.
+        enable_jishaku (bool): Whether to enable jishaku. Need jishaku installed.
     """
 
     token: str
@@ -43,6 +44,7 @@ class BotConfig(BaseModel):
     respond_bot_mention: bool = True
     owner_ids: set[IDType] = set()
     force_sync_commands: bool = False
+    enable_jishaku: bool = False
 
     @field_validator("token")
     @classmethod
@@ -79,6 +81,19 @@ class BotConfig(BaseModel):
         """
         if not v:
             return set()
+        return v
+
+    @field_validator("enable_jishaku")
+    @classmethod
+    def check_jishaku_installed(cls, v: bool) -> bool:
+        """
+        Checks if jishaku is installed.
+        """
+        if v:
+            try:
+                import jishaku  # type: ignore[import]
+            except ImportError:
+                raise ValueError("Jishaku is not installed.")
         return v
 
     def is_using_prefix(self):

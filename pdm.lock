@@ -2,10 +2,10 @@
 # It is not intended for manual editing.
 
 [metadata]
-groups = ["default", "lint", "speed", "tools"]
+groups = ["default", "debug", "lint", "speed", "tools"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:eaea5e4e3ab95509b5864d887f79037a818a5b3e76f2814ab2170106a1568c22"
+content_hash = "sha256:dfa87cd305f7c400b27ea52cbed95f1a51e2867ef951df2819e7dbed3aaccc10"
 
 [[metadata.targets]]
 requires_python = ">=3.13"
@@ -29,7 +29,7 @@ name = "aiohappyeyeballs"
 version = "2.6.1"
 requires_python = ">=3.9"
 summary = "Happy Eyeballs for asyncio"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 files = [
     {file = "aiohappyeyeballs-2.6.1-py3-none-any.whl", hash = "sha256:f349ba8f4b75cb25c99c5c2d84e997e485204d2902a9597802b0371f09331fb8"},
     {file = "aiohappyeyeballs-2.6.1.tar.gz", hash = "sha256:c3f9d0113123803ccadfdf3f0faa505bc78e6a72d1cc4806cbd719826e943558"},
@@ -40,7 +40,7 @@ name = "aiohttp"
 version = "3.11.13"
 requires_python = ">=3.9"
 summary = "Async http client/server framework (asyncio)"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 dependencies = [
     "aiohappyeyeballs>=2.3.0",
     "aiosignal>=1.1.2",
@@ -76,7 +76,7 @@ name = "aiosignal"
 version = "1.3.2"
 requires_python = ">=3.9"
 summary = "aiosignal: a list of registered asynchronous callbacks"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 dependencies = [
     "frozenlist>=1.1.0",
 ]
@@ -101,13 +101,13 @@ files = [
 
 [[package]]
 name = "attrs"
-version = "25.1.0"
+version = "25.2.0"
 requires_python = ">=3.8"
 summary = "Classes Without Boilerplate"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 files = [
-    {file = "attrs-25.1.0-py3-none-any.whl", hash = "sha256:c75a69e28a550a7e93789579c22aa26b0f5b83b75dc4e08fe092980051e1090a"},
-    {file = "attrs-25.1.0.tar.gz", hash = "sha256:1c97078a80c814273a76b2a298a932eb681c87415c11dee0a6921de7f1b02c3e"},
+    {file = "attrs-25.2.0-py3-none-any.whl", hash = "sha256:611344ff0a5fed735d86d7784610c84f8126b95e549bcad9ff61b4242f2d386b"},
+    {file = "attrs-25.2.0.tar.gz", hash = "sha256:18a06db706db43ac232cce80443fcd9f2500702059ecf53489e3c5a3f417acaf"},
 ]
 
 [[package]]
@@ -115,7 +115,7 @@ name = "audioop-lts"
 version = "0.2.1"
 requires_python = ">=3.13"
 summary = "LTS Port of Python audioop"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 marker = "python_version >= \"3.13\""
 files = [
     {file = "audioop_lts-0.2.1-cp313-abi3-macosx_10_13_universal2.whl", hash = "sha256:fd1345ae99e17e6910f47ce7d52673c6a1a70820d78b67de1b7abb3af29c426a"},
@@ -212,6 +212,16 @@ files = [
 ]
 
 [[package]]
+name = "braceexpand"
+version = "0.1.7"
+summary = "Bash-style brace expansion for Python"
+groups = ["debug"]
+files = [
+    {file = "braceexpand-0.1.7-py2.py3-none-any.whl", hash = "sha256:91332d53de7828103dcae5773fb43bc34950b0c8160e35e0f44c4427a3b85014"},
+    {file = "braceexpand-0.1.7.tar.gz", hash = "sha256:e6e539bd20eaea53547472ff94f4fb5c3d3bf9d0a89388c4b56663aba765f705"},
+]
+
+[[package]]
 name = "brotli"
 version = "1.1.0"
 summary = "Python bindings for the Brotli compression library"
@@ -273,7 +283,7 @@ name = "click"
 version = "8.1.8"
 requires_python = ">=3.7"
 summary = "Composable command line interface toolkit"
-groups = ["default", "lint"]
+groups = ["default", "debug", "lint"]
 dependencies = [
     "colorama; platform_system == \"Windows\"",
     "importlib-metadata; python_version < \"3.8\"",
@@ -288,7 +298,7 @@ name = "colorama"
 version = "0.4.6"
 requires_python = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
 summary = "Cross-platform colored terminal text."
-groups = ["default", "lint"]
+groups = ["default", "debug", "lint"]
 marker = "platform_system == \"Windows\""
 files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
@@ -300,7 +310,7 @@ name = "discord-py"
 version = "2.5.2"
 requires_python = ">=3.8"
 summary = "A Python wrapper for the Discord API"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 dependencies = [
     "aiohttp<4,>=3.7.4",
     "audioop-lts; python_version >= \"3.13\"",
@@ -367,7 +377,7 @@ name = "frozenlist"
 version = "1.5.0"
 requires_python = ">=3.8"
 summary = "A list-like structure which implements collections.abc.MutableSequence"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 files = [
     {file = "frozenlist-1.5.0-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:7a1a048f9215c90973402e26c01d1cff8a209e1f1b53f72b95c13db61b00f953"},
     {file = "frozenlist-1.5.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:dd47a5181ce5fcb463b5d9e17ecfdb02b678cca31280639255ce9d0e5aa67af0"},
@@ -404,10 +414,20 @@ name = "idna"
 version = "3.10"
 requires_python = ">=3.6"
 summary = "Internationalized Domain Names in Applications (IDNA)"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 files = [
     {file = "idna-3.10-py3-none-any.whl", hash = "sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3"},
     {file = "idna-3.10.tar.gz", hash = "sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9"},
+]
+
+[[package]]
+name = "import-expression"
+version = "2.2.1.post1"
+summary = "Parses a superset of Python allowing for inline module import expressions"
+groups = ["debug"]
+files = [
+    {file = "import_expression-2.2.1.post1-py3-none-any.whl", hash = "sha256:7b3677e889816e0dbdcc7f42f4534071c54c667f32c71097522ea602f6497902"},
+    {file = "import_expression-2.2.1.post1.tar.gz", hash = "sha256:1c831bf26bef7edf36a97b34c687b962e7abe06116c66f00e14f9a3218623d4f"},
 ]
 
 [[package]]
@@ -419,6 +439,26 @@ groups = ["lint"]
 files = [
     {file = "isort-6.0.1-py3-none-any.whl", hash = "sha256:2dc5d7f65c9678d94c88dfc29161a320eec67328bc97aad576874cb4be1e9615"},
     {file = "isort-6.0.1.tar.gz", hash = "sha256:1cb5df28dfbc742e490c5e41bad6da41b805b0a8be7bc93cd0fb2a8a890ac450"},
+]
+
+[[package]]
+name = "jishaku"
+version = "2.6.0"
+requires_python = ">=3.8.0"
+summary = "A discord.py extension including useful tools for bot development and debugging."
+groups = ["debug"]
+dependencies = [
+    "braceexpand>=0.1.7",
+    "click>=8.1.7",
+    "discord-py>=2.4.0",
+    "import-expression<3.0.0,>=2.0.0",
+    "importlib-metadata>=3.7.0; python_version < \"3.10\"",
+    "tabulate>=0.9.0",
+    "typing-extensions<5,>=4.3",
+]
+files = [
+    {file = "jishaku-2.6.0-py3-none-any.whl", hash = "sha256:a39366e5b2bd51c0d21ef8783c3e00c927c59792a2b0f5467c156b1f69eb912b"},
+    {file = "jishaku-2.6.0.tar.gz", hash = "sha256:b9b4d053b8cbdb6a8fd7a8d549d0928c2e5294044cbb145cbb26df36f97ce289"},
 ]
 
 [[package]]
@@ -479,7 +519,7 @@ name = "multidict"
 version = "6.1.0"
 requires_python = ">=3.8"
 summary = "multidict implementation"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 dependencies = [
     "typing-extensions>=4.1.0; python_version < \"3.11\"",
 ]
@@ -604,7 +644,7 @@ name = "propcache"
 version = "0.3.0"
 requires_python = ">=3.9"
 summary = "Accelerated property cache"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 files = [
     {file = "propcache-0.3.0-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:a2b9bf8c79b660d0ca1ad95e587818c30ccdb11f787657458d6f26a1ea18c568"},
     {file = "propcache-0.3.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:b0c1a133d42c6fc1f5fbcf5c91331657a1ff822e87989bf4a6e2e39b818d0ee9"},
@@ -859,6 +899,17 @@ files = [
 ]
 
 [[package]]
+name = "tabulate"
+version = "0.9.0"
+requires_python = ">=3.7"
+summary = "Pretty-print tabular data"
+groups = ["debug"]
+files = [
+    {file = "tabulate-0.9.0-py3-none-any.whl", hash = "sha256:024ca478df22e9340661486f85298cff5f6dcdba14f3813e8830015b9ed1948f"},
+    {file = "tabulate-0.9.0.tar.gz", hash = "sha256:0095b12bf5966de529c0feb1fa08671671b3368eec77d7ef7ab114be2c068b3c"},
+]
+
+[[package]]
 name = "toml"
 version = "0.10.2"
 requires_python = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
@@ -874,7 +925,7 @@ name = "typing-extensions"
 version = "4.12.2"
 requires_python = ">=3.8"
 summary = "Backported and Experimental Type Hints for Python 3.8+"
-groups = ["default", "lint"]
+groups = ["default", "debug", "lint"]
 files = [
     {file = "typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d"},
     {file = "typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8"},
@@ -919,7 +970,7 @@ name = "yarl"
 version = "1.18.3"
 requires_python = ">=3.9"
 summary = "Yet another URL library"
-groups = ["default", "speed"]
+groups = ["default", "debug", "speed"]
 dependencies = [
     "idna>=2.0",
     "multidict>=4.0",
