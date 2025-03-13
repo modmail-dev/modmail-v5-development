@@ -12,7 +12,7 @@ import logging
 from base64 import b64decode
 from typing import Annotated
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 
 __all__ = [
     "BotConfig",
@@ -38,7 +38,7 @@ class BotConfig(BaseModel):
         enable_jishaku (bool): Whether to enable jishaku. Need jishaku installed.
     """
 
-    token: str
+    token: SecretStr
     staff_server_id: IDType
     prefix: str | None = "?"  # when prefix is None, the bot will not use a prefix
     respond_bot_mention: bool = True
@@ -48,14 +48,15 @@ class BotConfig(BaseModel):
 
     @field_validator("token")
     @classmethod
-    def check_token_format(cls, v: str) -> str:
+    def check_token_format(cls, v: SecretStr) -> SecretStr:
         """
         Checks if the bot token is valid (very basic check).
         """
-        if v.count(".") != 2:
+        token = v.get_secret_value()
+        if token.count(".") != 2:
             raise ValueError("Invalid bot token.")
         try:
-            bot_id = int(b64decode(v.split(".")[0] + "=="))
+            bot_id = int(b64decode(token.split(".")[0] + "=="))
         except Exception as e:
             logger.debug(f"Invalid bot token: {e}", exc_info=True)
             raise ValueError("Invalid bot token.")
@@ -93,7 +94,8 @@ class BotConfig(BaseModel):
             try:
                 import jishaku  # type: ignore[import]
             except ImportError:
-                raise ValueError("Jishaku is not installed.")
+                logger.error("Jishaku is not installed, but is enabled in configs.")
+                return False
         return v
 
     def is_using_prefix(self):
@@ -111,4 +113,4 @@ class BotConfig(BaseModel):
 
         :return: The bot's ID.
         """
-        return int(b64decode(self.token.split(".")[0] + "=="))
+        return int(b64decode(self.token.get_secret_value().split(".")[0] + "=="))

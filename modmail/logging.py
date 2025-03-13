@@ -76,3 +76,5 @@ def setup_logging() -> None:
         logfile_handler.setLevel(CONFIG.logging.logfile_level)
         project_root_logger.addHandler(logfile_handler)
         logger_dc1.addHandler(logfile_handler)
+
+    # TODO: Configure sql + mongodb logging.

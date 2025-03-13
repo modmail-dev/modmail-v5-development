@@ -65,10 +65,15 @@ class Bot(commands.Bot):
         self.version: str = __version__
         logger.debug("[bold green]Bot version: %s", self.version, extra={"markup": True, "highlighter": None})
 
-        if CONFIG.database_type == "mongodb":
+        if CONFIG.database_type == "sql":
+            from ..backends.sql import SQLClient
+
+            self._database_client: DBClientBase = SQLClient(CONFIG)
+
+        elif CONFIG.database_type == "mongodb":
             from ..backends.mongodb import MongoDBClient
 
-            self._database_client: DBClientBase = MongoDBClient(CONFIG)
+            self._database_client = MongoDBClient(CONFIG)
 
     async def setup_hook(self) -> None:
         """
@@ -116,7 +121,7 @@ class Bot(commands.Bot):
             async with self:
                 logger.info("[bold green]Modmail is starting.", extra={"markup": True})
                 try:
-                    await self.start(CONFIG.bot.token, reconnect=True)
+                    await self.start(CONFIG.bot.token.get_secret_value(), reconnect=True)
                 finally:
                     await self._database_client.disconnect()
 

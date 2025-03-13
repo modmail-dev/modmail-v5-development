@@ -41,7 +41,8 @@ repos:
     hooks:
       - id: pdm-export
         args: ["--pyproject", "--without-hashes", "--prod", "-G:all", "-o", "requirements.txt"]
-        files: ^pyproject.toml$
+        files: ^pdm.lock$
+      - id: pdm-lock-check
 
 default_language_version:
     python: python3.13

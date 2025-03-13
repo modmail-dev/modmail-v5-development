@@ -16,9 +16,9 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .bot_model import BotConfig
-from .json_database_model import JsonDatabaseConfig
 from .logging_model import LoggingConfig
 from .mongodb_database_model import MongoDBDatabaseConfig
+from .sql_database_model import SQLDatabaseConfig
 
 if TYPE_CHECKING:
     from pydantic import ValidationInfo
@@ -35,17 +35,17 @@ class Config(BaseSettings):
     Attributes:
         version (str): The config version.
         bot (BotConfig): The bot configuration.
-        database_type (Literal["mongodb", "json"]): The type of database used.
+        database_type (Literal["sql", "mongodb", "json"]): The type of database used.
+        sql_config (SQLDatabaseConfig | None): The SQL database configuration.
         mongodb_config (MongoDBDatabaseConfig | None): The MongoDB configuration.
-        json_config (JsonDatabaseConfig | None): The JSON database configuration.
         logging (LoggingConfig): The logging configuration.
     """
 
     version: str = "1.0"  # the config version
     bot: BotConfig
-    database_type: Literal["mongodb", "json"]
+    database_type: Literal["sql", "mongodb", "json"]
+    sql_config: SQLDatabaseConfig | None = Field(None, validate_default=True)
     mongodb_config: MongoDBDatabaseConfig | None = Field(None, validate_default=True)
-    json_config: JsonDatabaseConfig | None = Field(None, validate_default=True)
     logging: LoggingConfig = Field(LoggingConfig(), validate_default=True)
 
     # Don't load .env when testing.
@@ -56,9 +56,10 @@ class Config(BaseSettings):
             env_file_encoding="utf-8",
             env_nested_delimiter="__",
             case_sensitive=False,
+            extra="ignore",
         )
     else:
-        model_config = SettingsConfigDict(case_sensitive=False)
+        model_config = SettingsConfigDict(case_sensitive=False, extra="ignore")
 
     @classmethod
     def settings_customise_sources(
@@ -92,6 +93,19 @@ class Config(BaseSettings):
 
     _T = TypeVar("_T")
 
+    @field_validator("sql_config", mode="before")
+    @classmethod
+    def check_using_sql_database_config(cls, v: _T, info: ValidationInfo) -> _T | None:
+        """
+        This parses SQL configs when the database type is sql.
+        """
+        if info.data["database_type"] == "sql":
+            if not v:
+                # This may error since it could be missing required fields.
+                v = SQLDatabaseConfig()  # type: ignore[reportCallIssue, reportAssignmentType]
+            return v
+        return None
+
     @field_validator("mongodb_config", mode="before")
     @classmethod
     def check_using_mongodb_database_config(cls, v: _T, info: ValidationInfo) -> _T | None:
@@ -105,19 +119,6 @@ class Config(BaseSettings):
             return v
         return None
 
-    @field_validator("json_config", mode="before")
-    @classmethod
-    def check_using_json_database_config(cls, v: _T, info: ValidationInfo) -> _T | None:
-        """
-        This parses json configs when the database type is json.
-        """
-        if info.data["database_type"] == "json":
-            if not v:
-                # This may error since it could be missing required fields.
-                v = JsonDatabaseConfig()  # type: ignore[reportCallIssue, reportAssignmentType]
-            return v
-        return None
-
     @field_validator("logging", mode="before")
     @classmethod
     def set_default_logging_config(cls, v: LoggingConfig | None) -> LoggingConfig:
@@ -127,3 +128,5 @@ class Config(BaseSettings):
         if v is None:
             return LoggingConfig()
         return v
+
+    # TODO: Add a validator to check if the dependencies for the database type is installed

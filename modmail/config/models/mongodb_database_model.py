@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import logging
 
-import pymongo.errors
-from pydantic import BaseModel, Field, ValidationInfo, field_validator
-from pymongo import uri_parser
+from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
 __all__ = [
     "MongoDBDatabaseConfig",
@@ -31,18 +29,23 @@ class MongoDBDatabaseConfig(BaseModel):
         tls_allow_invalid_certificates (bool): Whether to allow invalid TLS certificates.
     """
 
-    uri: str  # the MongoDB connection URI
+    uri: SecretStr  # the MongoDB connection URI
     database: str = Field("", validate_default=True)  # default is 'modmail'
     tls_allow_invalid_certificates: bool = False
 
     @field_validator("uri")
     @classmethod
-    def check_uri_is_valid(cls, v: str) -> str:
+    def check_uri_is_valid(cls, v: SecretStr) -> SecretStr:
         """
         Validates that the MongoDB connection URI is valid.
         """
+        # Local import to avoid dependency issues when database type is not mongodb
+        import pymongo.errors
+        from pymongo import uri_parser
+
+        uri = v.get_secret_value()
         try:
-            parsed_uri = uri_parser.parse_uri(v)
+            parsed_uri = uri_parser.parse_uri(uri)
         except pymongo.errors.ConfigurationError as e:
             if "The DNS query name does not exist" in str(e):
                 raise ValueError(
@@ -64,12 +67,15 @@ class MongoDBDatabaseConfig(BaseModel):
         """
         If the database name is not provided, it will be parsed from the MongoDB connection URI.
         """
+        # Local import to avoid dependency issues when database type is not mongodb
+        from pymongo import uri_parser
+
         if v:
             return v
 
         try:
             # Check if the URI contains a database name.
-            parsed_uri = uri_parser.parse_uri(info.data["uri"])
+            parsed_uri = uri_parser.parse_uri(info.data["uri"].get_secret_value())
         except KeyError:
             raise ValueError("URI not found in the database config.")
 

@@ -60,6 +60,8 @@ def init(config_file_path: str = "config.yaml") -> None:
 
         setup_logging()
 
+    logger.debug("Loaded config: %s", CONFIG.model_dump_json())
+
 
 def run_bot() -> NoReturn:
     """

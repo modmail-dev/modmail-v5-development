@@ -29,11 +29,11 @@ classifiers = [
 
 dependencies = [
     "discord.py==2.5.2",
-    "beanie[srv]~=1.29.0",
     "rich~=13.9.4",
     "pydantic[dotenv]<2.11,>=2.10.6",
     "pydantic-settings<2.9,>=2.8.1",
     "packaging",  # For version parsing.
+    "pyyaml~=6.0.2",
 ]
 
 [project.optional-dependencies]
@@ -41,8 +41,18 @@ speed = [
     "discord.py[speed]==2.5.2",
     "uvloop>=0.21.0; platform_system != \"Windows\"",
 ]
+sqlite = [
+    "sqlalchemy[asyncio,aiosqlite]<2.1,>=2.0.39",
+    "alembic<1.16,>=1.15.1"
+]
+mongodb = [
+    "beanie[srv]~=1.29.0",
+]
+all = [
+    "modmail[speed,sqlite,mongodb]",
+]
 
-[tool.pdm.dev-dependencies]
+[dependency-groups]
 lint = [
     "black>=25.1.0",
     "pyright>=1.1.396",

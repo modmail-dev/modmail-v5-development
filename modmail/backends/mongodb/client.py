@@ -24,7 +24,7 @@ from .migration import do_migration
 from .models import Settings
 
 if TYPE_CHECKING:
-    from ...config.models import Config
+    from ...config.models import Config, MongoDBDatabaseConfig
 
 __all__ = [
     "MongoDBClient",
@@ -47,9 +47,7 @@ class MongoDBClient(DBClientBase):
         """
 
         super().__init__(config)
-        assert self._config.mongodb_config is not None, "MongoDB config is not set."
-        self.uri = self._config.mongodb_config.uri
-        self.db_name = self._config.mongodb_config.database
+        self.db_name = self._mongodb_config.database
         self._client: AsyncIOMotorClient[dict[str, Any]] | None = None
         self._settings: Settings | None = None
 
@@ -62,13 +60,17 @@ class MongoDBClient(DBClientBase):
     def settings(self, settings: Settings) -> None:
         self._settings = settings
 
-    async def connect(self) -> None:
+    @property
+    def _mongodb_config(self) -> MongoDBDatabaseConfig:
         assert self._config.mongodb_config is not None, "MongoDB config is not set."
+        return self._config.mongodb_config
+
+    async def connect(self) -> None:
         self._client = AsyncIOMotorClient(
-            self.uri,
+            self._mongodb_config.uri.get_secret_value(),
             connectTimeoutMS=4000,
             serverSelectionTimeoutMS=5000,
-            tlsAllowInvalidCertificates=self._config.mongodb_config.tls_allow_invalid_certificates,
+            tlsAllowInvalidCertificates=self._mongodb_config.tls_allow_invalid_certificates,
         )
         try:
             await self._client.server_info()
@@ -152,12 +154,11 @@ class MongoDBClient(DBClientBase):
         loop = asyncio.get_running_loop()
 
         logger.debug("Running database migrations.")
-        assert self._config.mongodb_config is not None, "MongoDB config is not set."
 
         with ProcessPoolExecutor() as pool:
             # Run the migration in a separate process due to beanie's global overrides during migration.
             await loop.run_in_executor(
-                pool, do_migration, self._config.mongodb_config.uri, self._config.mongodb_config.database
+                pool, do_migration, self._mongodb_config.uri.get_secret_value(), self._mongodb_config.database
             )
 
         # Load settings from MongoDB

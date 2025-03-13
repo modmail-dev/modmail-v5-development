@@ -66,10 +66,16 @@ bot:
     # enable_jishaku: false
 
 # Required: The database type that stores your bot's logs.
-# Can be one of: mongodb, json.
-# json is not recommended for large servers and some bot features may not be available.
-# **** json is not supported at the moment! ****
+# Can be one of: "sql" or "mongodb"
 database_type: "mongodb"
+
+# Configurations for the SQL database type. Only required if database_type is sql.
+sql_config:
+    # Required: The SQL connection URI, supported SQL databases are:
+    # - SQLite
+    # Example for SQLite: "sqlite+aiosqlite:///modmail.db"
+    # Example for PostgreSQL: "postgresql+asyncpg://user:password@localhost/modmail"
+    uri: "sqlite+aiosqlite:///modmail.db"
 
 # Configurations for the MongoDB database type. Only required if database_type is mongodb.
 mongodb_config:
@@ -84,12 +90,6 @@ mongodb_config:
     # This may be useful if you are using a self-signed certificate.
     # It's recommended to leave this set to false, otherwise you may be vulnerable to MITM attacks.
     # tls_allow_invalid_certificates: false
-
-# Configurations for the JSON database type. Only required if database_type is json.
-json_config:
-    # The location where the JSON database files will be stored.
-    # If the directory does not exist, it will be created.
-    # storage_path: "data"
 
 # Configures the logging outputs of the bot.
 # If you're unsure what to set, leave this section default.

@@ -10,14 +10,14 @@ from __future__ import annotations
 
 from .bot_model import BotConfig
 from .config_model import Config
-from .json_database_model import JsonDatabaseConfig
 from .logging_model import LoggingConfig
 from .mongodb_database_model import MongoDBDatabaseConfig
+from .sql_database_model import SQLDatabaseConfig
 
 __all__ = [
     "BotConfig",
     "Config",
-    "JsonDatabaseConfig",
     "LoggingConfig",
     "MongoDBDatabaseConfig",
+    "SQLDatabaseConfig",
 ]
