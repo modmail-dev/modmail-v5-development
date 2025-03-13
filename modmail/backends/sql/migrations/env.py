@@ -28,10 +28,14 @@ target_metadata = Base.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+if not config.get_main_option("sqlalchemy.url"):
+    # If the URL is not set in the config, we need to load it from the Modmail config.
+    from modmail.config.loader import load_config
 
-from modmail.config.loader import load_config
-
-modmail_config = load_config("config.yaml")
+    modmail_config = load_config("config.yaml")
+    assert modmail_config is not None, "Failed to load config."
+    assert modmail_config.sql_config is not None, "SQL config is not set."
+    config.set_main_option("sqlalchemy.url", modmail_config.sql_config.uri.get_secret_value())
 
 
 def run_migrations_offline() -> None:
@@ -46,10 +50,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    assert modmail_config is not None, "Failed to load config."
-    assert modmail_config.sql_config is not None, "SQL config is not set."
     context.configure(
-        url=modmail_config.sql_config.uri.get_secret_value(),
+        url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -72,10 +74,6 @@ async def run_async_migrations() -> None:
 
     """
     config_section = config.get_section(config.config_ini_section, {})
-
-    assert modmail_config is not None, "Failed to load config."
-    assert modmail_config.sql_config is not None, "SQL config is not set."
-    config_section["sqlalchemy.url"] = modmail_config.sql_config.uri.get_secret_value()
 
     connectable = async_engine_from_config(
         config_section,

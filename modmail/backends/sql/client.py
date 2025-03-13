@@ -7,7 +7,9 @@ handling initialization and settings management for the Modmail bot.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from concurrent.futures import ProcessPoolExecutor
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -17,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from ... import __version__
 from ...errors import DatabaseConnectionError
 from ..abc import DBClientBase
+from .migration import do_migration
 from .models.settings_model import Settings
 
 if TYPE_CHECKING:
@@ -57,31 +60,41 @@ class SQLClient(DBClientBase):
         """
         Create the async engine and session, then load the settings.
         """
-        try:
-            self.engine = create_async_engine(self._sql_config.uri.get_secret_value())
-            self._async_session = async_sessionmaker(self.engine, expire_on_commit=False)
+        self.engine = create_async_engine(self._sql_config.uri.get_secret_value())
+        self._async_session = async_sessionmaker(self.engine, expire_on_commit=False)
 
-            # TODO: Auto run migrations
+        try:
+            # Test the connection to the database
             async with self.engine.begin():
                 logger.debug("Connected to SQL database.")
-
-            # Load settings from the SQL database
-            async with self._async_session() as session:
-                query = select(Settings).where(Settings.bot_id == self._config.bot.bot_id)
-                result = await session.execute(query)
-                self._settings = result.scalar_one_or_none()
-                if self._settings is None:
-                    logger.debug("Settings not found in SQL database. Creating new settings.")
-                    self._settings = Settings(bot_id=self._config.bot.bot_id)
-                    session.add(self._settings)
-                    await session.commit()
-                logger.debug("Loaded settings from SQL database.")
         except SQLAlchemyError as e:
+            logger.debug("Failed to connect to SQL database.", exc_info=True)
             logger.critical("An error occurred while connecting to SQL database.")
             raise DatabaseConnectionError from e
         except Exception as e:
+            logger.debug("An unknown error occurred during SQL connection.", exc_info=True)
             logger.critical("An unknown error occurred during SQL connection.")
             raise DatabaseConnectionError from e
+
+        loop = asyncio.get_running_loop()
+
+        logger.debug("Running database migrations.")
+
+        with ProcessPoolExecutor() as pool:
+            # Run the migration in a separate process.
+            await loop.run_in_executor(pool, do_migration, self._sql_config.uri.get_secret_value())
+
+        # Load settings from the SQL database
+        async with self._async_session() as session:
+            query = select(Settings).where(Settings.bot_id == self._config.bot.bot_id)
+            result = await session.execute(query)
+            self._settings = result.scalar_one_or_none()
+            if self._settings is None:
+                logger.debug("Settings not found in SQL database. Creating new settings.")
+                self._settings = Settings(bot_id=self._config.bot.bot_id)
+                session.add(self._settings)
+                await session.commit()
+            logger.debug("Loaded settings from SQL database.")
 
     async def disconnect(self) -> None:
         """

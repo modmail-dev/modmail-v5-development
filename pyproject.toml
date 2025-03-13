@@ -17,6 +17,7 @@ dynamic = ["version"]
 
 keywords = ["discord", "discord-bot", "modmail", "python", "discord.py", "discord-modmail"]
 classifiers = [
+    "Environment :: Console",
     "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",
@@ -66,7 +67,7 @@ debug = [
 ]
 
 [project.urls]
-homepage = "https://github.com/modmail-dev/modmail"
+homepage = "https://docs.modmail.dev"
 repository = "https://github.com/modmail-dev/modmail"
 
 # PDM build system configs.
