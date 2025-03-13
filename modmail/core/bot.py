@@ -35,12 +35,12 @@ class Bot(commands.Bot):
             intents = discord.Intents(
                 guilds=True, messages=True, reactions=True, typing=True, message_content=True, expressions=True
             )
-            command_prefix: list[str] | None = [CONFIG.bot.prefix]
+            command_prefix: list[str] = [CONFIG.bot.prefix]
             if CONFIG.bot.respond_bot_mention:
                 command_prefix += [f"<@!{CONFIG.bot.bot_id}> ", f"<@{CONFIG.bot.bot_id}> "]
         else:
             intents = discord.Intents(guilds=True, dm_messages=True, reactions=True, typing=True, expressions=True)
-            command_prefix = None
+            command_prefix = []
 
         # Set owner IDs, if any, otherwise discord.py will fetch the owner IDs from Discord.
         if CONFIG.bot.owner_ids:
@@ -135,7 +135,7 @@ class Bot(commands.Bot):
                     raise  # re-raise the exception if it's not about uvloop
         except KeyboardInterrupt:
             logger.debug("Keyboard interrupt.")
-            logger.info("[yellow]Shutting down Modmail.[/]", extra={"markup": True})
+            logger.info("[yellow]Shutting down Modmail.", extra={"markup": True})
         except DatabaseError:
             logger.critical("[bold red]Failed to connect to the database.", extra={"markup": True})
             sys.exit(1)
