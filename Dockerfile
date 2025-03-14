@@ -18,7 +18,7 @@ RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 COPY pyproject.toml pdm.lock /
-RUN $HOME/.local/bin/pdm install --prod -G speed --no-lock --no-editable
+RUN $HOME/.local/bin/pdm install --prod -G:all --no-lock --no-editable
 
 FROM py
 
