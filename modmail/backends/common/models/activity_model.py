@@ -26,7 +26,7 @@ class ActivityType(enum.Enum):
 
 
 class Activity(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, frozen=True)
 
     type: ActivityType
     name: str

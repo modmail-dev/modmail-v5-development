@@ -10,18 +10,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from concurrent.futures import ProcessPoolExecutor
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from modmail import __version__
 from modmail.backends import DBClientBase, Settings
 from modmail.errors import DatabaseConnectionError
 
 from .migration import do_migration
-from .models import SQLSettingsModel
+from .models import SQLActivityModel, SQLSettingsModel
 
 if TYPE_CHECKING:
     from modmail.config.models import Config, SQLDatabaseConfig
@@ -96,13 +95,14 @@ class SQLClient(DBClientBase):
         async with self._async_session() as session:
             query = select(SQLSettingsModel).where(SQLSettingsModel.bot_id == self._config.bot.bot_id)
             result = await session.execute(query)
-            settings = result.scalar_one_or_none()
-            if settings is None:
+            sql_settings = result.scalar_one_or_none()
+            if sql_settings is None:
                 logger.debug("Settings not found in SQL database. Creating new settings.")
-                settings = SQLSettingsModel(bot_id=self._config.bot.bot_id)
-                session.add(settings)
+                sql_settings = SQLSettingsModel(bot_id=self._config.bot.bot_id)
+                session.add(sql_settings)
                 await session.commit()
-            self._settings = settings
+            session.expunge(sql_settings)  # Detach the settings from the session
+            self._settings = sql_settings
             logger.debug("Loaded settings from SQL database.")
 
     async def disconnect(self) -> None:
@@ -113,23 +113,57 @@ class SQLClient(DBClientBase):
             await self.engine.dispose()
             logger.debug("Disconnected from SQL database.")
 
-    async def get_last_ran_version(self) -> str | None:
+    async def sync_settings(self) -> None:
         """
-        Get the last ran version of the bot.
+        Sync the settings from the SQL database.
+        This is used to ensure that the settings are up-to-date with the database.
         """
-        return self._settings.last_ran_version
-
-    async def update_last_ran_version(self) -> None:
-        """
-        Update the last ran version of the bot to the current version.
-        """
-        self._settings.last_ran_version = __version__
         assert self._async_session is not None, "Session is not initialized."
+        async with self._async_session() as session:
+            query = select(SQLSettingsModel).where(SQLSettingsModel.bot_id == self._config.bot.bot_id)
+            result = await session.execute(query)
+            sql_settings = result.scalar_one()
+            session.expunge(sql_settings)
+            self._settings = sql_settings
+
+    async def update_settings(self, **kwargs: Any) -> None:
+        # Validate the kwargs, by creating a new Settings object with the provided kwargs.
+        # Uses a new Settings model to avoid modifying the original settings and validate the new settings.
+        new_settings = Settings(
+            **self.settings_model.model_dump(exclude={key: True for key in kwargs.keys()}), **kwargs
+        )
+        settings_dict = new_settings.model_dump(include={key: True for key in kwargs.keys()} | {"bot_id": True})
+        logger.debug("Updating settings in SQL database: %s", settings_dict)
+
+        assert self._async_session is not None, "Session is not initialized."
+        assert settings_dict["bot_id"] == self._config.bot.bot_id, "Bot ID mismatch."
+
         try:
             async with self._async_session() as session:
-                session.add(self._settings)
+                sql_settings = await session.merge(self._settings)
+
+                if "activity" in settings_dict:
+                    activity = settings_dict.pop("activity")
+                    if activity is not None:
+                        # Convert the activity dict to SQLActivityModel
+                        sql_settings.activity = SQLActivityModel(**activity, bot_id=self._config.bot.bot_id)
+                        await session.merge(sql_settings.activity)
+                    else:
+                        query = delete(SQLActivityModel).where(SQLActivityModel.bot_id == self._config.bot.bot_id)
+                        await session.execute(query)
+                        sql_settings.activity = None
+
+                # Update the settings in the database
+                for key, value in settings_dict.items():
+                    setattr(sql_settings, key, value)
+
                 await session.commit()
-            logger.debug("Updated last ran version to %s", __version__)
-        except SQLAlchemyError as e:
-            logger.critical("Failed to update the last ran version in SQL database.")
+
+                session.expunge(sql_settings)  # Detach the settings from the session
+                self._settings = sql_settings  # Update the settings model
+
+        except Exception as e:
+            logger.debug("Failed to update settings in SQL database.", exc_info=True)
+            logger.critical("An unknown error occurred while updating settings in SQL database.")
+            await self.sync_settings()
             raise DatabaseConnectionError from e

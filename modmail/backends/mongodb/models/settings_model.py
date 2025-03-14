@@ -35,5 +35,5 @@ class MongoDBSettingsModel(Document):
     activity: MongoDBActivityModel | None = None
 
     class Settings:
-        name = "settings"
+        name = "Settings"
         validate_on_save = True

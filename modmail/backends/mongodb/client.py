@@ -17,12 +17,11 @@ import pymongo.errors
 from beanie import init_beanie  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from modmail import __version__
 from modmail.backends import DBClientBase, Settings
 from modmail.errors import DatabaseConnectionError
 
 from .migration import do_migration
-from .models import MongoDBSettingsModel
+from .models.settings_model import MongoDBActivityModel, MongoDBSettingsModel
 
 if TYPE_CHECKING:
     from modmail.config.models import Config, MongoDBDatabaseConfig
@@ -173,11 +172,26 @@ class MongoDBClient(DBClientBase):
         self._settings = settings
         logger.debug("Loaded settings from MongoDB.")
 
-    async def get_last_ran_version(self) -> str | None:
-        return self._settings.last_ran_version
+    async def update_settings(self, **kwargs: Any) -> None:
+        # Validate the kwargs, by creating a new Settings object with the provided kwargs.
+        # Uses a new Settings model to avoid modifying the original settings and validate the new settings.
+        new_settings = Settings(
+            **self.settings_model.model_dump(exclude={key: True for key in kwargs.keys()}), **kwargs
+        )
+        settings_dict = new_settings.model_dump(include={key: True for key in kwargs.keys()} | {"bot_id": True})
 
-    async def update_last_ran_version(self) -> None:
-        logger.debug("Updating last ran version to %s", __version__)
-        self._settings.last_ran_version = __version__
+        logger.debug("Updating settings in MongoDB: %s", settings_dict)
+        assert settings_dict["bot_id"] == self._config.bot.bot_id, "Bot ID mismatch."
+
+        mongodb_settings = self._settings.model_copy(deep=True)
+        for key, value in settings_dict.items():
+            if key == "bot_id":
+                continue
+            if key == "activity":
+                # Convert the activity to a MongoDBActivityModel
+                value = MongoDBActivityModel(**value)
+            setattr(mongodb_settings, key, value)
+
         # noinspection PyArgumentList
-        await self._settings.save()
+        await mongodb_settings.replace()
+        self._settings = mongodb_settings  # Update the settings model to the new one

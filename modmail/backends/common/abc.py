@@ -7,7 +7,7 @@ This module defines the abstract base class for database clients used by the Mod
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .models import Settings
 
@@ -53,17 +53,11 @@ class DBClientBase(ABC):
         pass
 
     @abstractmethod
-    async def get_last_ran_version(self) -> str | None:
+    async def update_settings(self, **kwargs: Any) -> None:
         """
-        Get the last ran version of the bot.
+        Update settings in the database.
 
-        :return: The last ran version of the bot, or None if running for the first time.
-        """
-        pass
-
-    @abstractmethod
-    async def update_last_ran_version(self) -> None:
-        """
-        Update the last ran version of the bot to the current version.
+        This method updates the specified key=value pairs in the settings.
+        :param kwargs: Optional keyword arguments representing the setting keys to update.
         """
         pass

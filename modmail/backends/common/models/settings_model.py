@@ -26,7 +26,7 @@ class StatusType(enum.Enum):
 
 
 class Settings(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, frozen=True)
 
     bot_id: int
     last_ran_version: str | None  # the last version the bot was run on, None = first run

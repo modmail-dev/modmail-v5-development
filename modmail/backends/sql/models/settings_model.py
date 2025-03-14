@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from modmail.backends import StatusType
@@ -31,7 +31,6 @@ class SQLSettingsModel(SQLBase):
     main_category_id: Mapped[int | None]
     fallback_category_id: Mapped[int | None]
     status: Mapped[StatusType | None]
-    activity_id: Mapped[int | None] = mapped_column(ForeignKey("activity.id", ondelete="SET NULL"))
-    activity: Mapped[SQLActivityModel] = relationship(
-        back_populates="settings", cascade="all, delete-orphan", passive_deletes=True, single_parent=True
+    activity: Mapped[SQLActivityModel | None] = relationship(
+        cascade="all, delete-orphan", passive_deletes=True, single_parent=True, lazy="joined"
     )

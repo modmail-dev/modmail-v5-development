@@ -73,7 +73,7 @@ class Bot(commands.Bot):
         elif CONFIG.database_type == "mongodb":
             from ..backends.mongodb import MongoDBClient
 
-            self._database_client = MongoDBClient(CONFIG)
+            self._database_client: DBClientBase = MongoDBClient(CONFIG)
 
     async def setup_hook(self) -> None:
         """
@@ -89,12 +89,14 @@ class Bot(commands.Bot):
             )
             await self.tree.sync()
 
-        last_ran_version = await self._database_client.get_last_ran_version()
+        last_ran_version = self._database_client.settings_model.last_ran_version
         if last_ran_version is None or last_ran_version != self.version:
-            if not CONFIG.bot.force_sync_commands:
+            if not CONFIG.bot.force_sync_commands:  # Already synced above
                 logger.debug("Syncing bot commands.")
                 await self.tree.sync()
-            await self._database_client.update_last_ran_version()
+
+            await self._database_client.update_settings(last_ran_version=self.version)
+            logger.debug("Updated last ran version to %s", self.version)
 
     def run(self, *args: Any, **kwargs: Any) -> NoReturn:
         """
