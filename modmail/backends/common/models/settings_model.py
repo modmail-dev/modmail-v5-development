@@ -7,12 +7,10 @@ This module defines a uniform model for exporting settings.
 from __future__ import annotations
 
 import enum
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
 
-if TYPE_CHECKING:
-    from .activity_model import Activity
+from .activity_model import Activity
 
 __all__ = [
     "Settings",

@@ -164,14 +164,13 @@ class MongoDBClient(DBClientBase):
             )
 
         # Load settings from MongoDB
-        self.__settings = await MongoDBSettingsModel.find_one(
-            MongoDBSettingsModel.bot_id == self._config.bot.bot_id
-        )
-        if self.__settings is None:
+        settings = await MongoDBSettingsModel.find_one(MongoDBSettingsModel.bot_id == self._config.bot.bot_id)
+        if settings is None:
             logger.debug("Settings not found in MongoDB. Creating new settings.")
-            self.__settings = MongoDBSettingsModel(bot_id=self._config.bot.bot_id)
-            await self.__settings.create()
+            settings = MongoDBSettingsModel(bot_id=self._config.bot.bot_id)
+            await settings.create()
 
+        self._settings = settings
         logger.debug("Loaded settings from MongoDB.")
 
     async def get_last_ran_version(self) -> str | None:

@@ -96,12 +96,13 @@ class SQLClient(DBClientBase):
         async with self._async_session() as session:
             query = select(SQLSettingsModel).where(SQLSettingsModel.bot_id == self._config.bot.bot_id)
             result = await session.execute(query)
-            self.__settings = result.scalar_one_or_none()
-            if self.__settings is None:
+            settings = result.scalar_one_or_none()
+            if settings is None:
                 logger.debug("Settings not found in SQL database. Creating new settings.")
-                self.__settings = SQLSettingsModel(bot_id=self._config.bot.bot_id)
-                session.add(self.__settings)
+                settings = SQLSettingsModel(bot_id=self._config.bot.bot_id)
+                session.add(settings)
                 await session.commit()
+            self._settings = settings
             logger.debug("Loaded settings from SQL database.")
 
     async def disconnect(self) -> None:
