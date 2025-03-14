@@ -9,17 +9,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import Any, NoReturn
 
 import discord
 from discord.ext import commands
 
 from .. import CONFIG, __version__
+from ..backends import ActivityType, DBClientBase
 from ..errors import DatabaseError
-
-if TYPE_CHECKING:
-    from ..backends import DBClientBase
-
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +175,43 @@ class Bot(commands.Bot):
         This is called when the bot connects to Discord.
         """
         logger.debug("Connected to Discord.")
-        # TODO: Set presence here
+        await self.set_bot_presence()
+
+    async def set_bot_presence(self) -> None:
+        """
+        Set the bot's activity and status.
+        """
+        await self.wait_until_ready()  # Wait until the bot is ready
+
+        activity: discord.BaseActivity | None = None
+        status: discord.Status | None = None
+
+        db_activity = self._database_client.settings_model.activity
+        db_status = self._database_client.settings_model.status
+
+        if db_activity:
+            if db_activity.type == ActivityType.custom:
+                activity = discord.CustomActivity(name=db_activity.name)
+            elif db_activity.type == ActivityType.streaming:
+                stream_url = db_activity.url
+                if stream_url is None:
+                    logger.warning("Streaming activity requires a URL. Using a default URL.")
+                    stream_url = "https://www.twitch.tv/live"
+                if not stream_url.startswith("https://www.twitch.tv/"):  # TODO: validate in the model
+                    logger.warning("Streaming activity URL must start with https://www.twitch.tv/")
+                    stream_url = "https://www.twitch.tv/live"
+                activity = discord.Streaming(name=db_activity.name, url=stream_url)
+            else:
+                activity = discord.Activity(
+                    name=db_activity.name, type=discord.ActivityType[db_activity.type.name]
+                )
+
+        if db_status:
+            # noinspection PyTypeChecker
+            status = discord.Status[db_status.name]
+
+        logger.debug("Setting bot presence to %r (%r)", activity, status)
+        await self.change_presence(activity=activity, status=status)
 
     # async def can_run(self, ctx: commands.Context[Bot], /, *, call_once: bool = False) -> bool:
     #     """
