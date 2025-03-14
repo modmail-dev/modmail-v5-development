@@ -10,12 +10,13 @@ from typing import TYPE_CHECKING
 
 from discord.ext import commands
 
-from ....core.commands import lazy_hybrid_group, wrap
+from modmail.core import lazy_hybrid_group, wrap
 
 __all__ = ["about_command"]
 
 if TYPE_CHECKING:
-    from ....core.bot import Bot
+    from modmail.core import Bot
+
     from .. import Utility
 
 

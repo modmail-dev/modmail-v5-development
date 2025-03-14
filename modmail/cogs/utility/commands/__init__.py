@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from .about import about_command
 
 if TYPE_CHECKING:
-    from ....core.commands.command import LazyHybridCommand
+    from modmail.core import LazyHybridCommand
 
 __all__ = [
     "all_commands",

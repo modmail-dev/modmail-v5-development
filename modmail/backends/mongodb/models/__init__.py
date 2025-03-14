@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .settings_model import Settings
+from .settings_model import MongoDBSettingsModel
 
 __all__ = [
-    "Settings",
+    "MongoDBSettingsModel",
 ]

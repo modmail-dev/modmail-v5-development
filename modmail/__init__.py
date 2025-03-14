@@ -13,14 +13,11 @@ import datetime
 import logging as _logging
 import sys
 from textwrap import dedent
-from typing import TYPE_CHECKING, NoReturn
+from typing import NoReturn
 
-from .config import load_config
+from .config import Config, load_config
 
-if TYPE_CHECKING:
-    from .config.models.config_model import Config
-
-__all__ = ["init", "run_bot"]
+__all__ = ["init", "run_bot", "__version__"]
 
 logger = _logging.getLogger(__name__)
 

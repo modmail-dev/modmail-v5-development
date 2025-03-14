@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from .activity_model import Activity
-from .settings_model import Settings
+from .activity_model import SQLActivityModel
+from .settings_model import SQLSettingsModel
 
 __all__ = [
-    "Activity",
-    "Settings",
+    "SQLActivityModel",
+    "SQLSettingsModel",
 ]

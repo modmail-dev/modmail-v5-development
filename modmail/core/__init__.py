@@ -6,6 +6,5 @@ The core module contains the core classes and functions that are used throughout
 
 from __future__ import annotations
 
-from .bot import Bot
-
-__all__ = ["Bot"]
+from .bot import *
+from .commands import *

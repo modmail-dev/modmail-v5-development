@@ -6,34 +6,26 @@ This module defines the SQLAlchemy model for the activity table.
 
 from __future__ import annotations
 
-import enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base
+from modmail.backends import ActivityType
+
+from .base import SQLBase
 
 if TYPE_CHECKING:
-    from .settings_model import Settings
+    from .settings_model import SQLSettingsModel
 
-__all__ = ["Activity", "ActivityType"]
-
-
-class ActivityType(enum.Enum):
-    playing = 0
-    streaming = 1
-    listening = 2
-    watching = 3
-    custom = 4
-    competing = 5
+__all__ = ["SQLActivityModel"]
 
 
-class Activity(Base):
+class SQLActivityModel(SQLBase):
     __tablename__ = "activity"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     type: Mapped[ActivityType]
     name: Mapped[str] = mapped_column(String(128))
     url: Mapped[str | None] = mapped_column(String(2048))
-    settings: Mapped[Settings] = relationship(back_populates="activity", single_parent=True)
+    settings: Mapped[SQLSettingsModel] = relationship(back_populates="activity", single_parent=True)

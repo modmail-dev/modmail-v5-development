@@ -1,14 +1,18 @@
 """
-modmail.backends.abc
-====================
+modmail.backends.common.abc
+===========================
 This module defines the abstract base class for database clients used by the Modmail bot.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from ..config.models import Config
+from .models import Settings
+
+if TYPE_CHECKING:
+    from modmail.config import Config
 
 __all__ = [
     "DBClientBase",
@@ -23,6 +27,14 @@ class DBClientBase(ABC):
         :param config: The configuration object containing database settings.
         """
         self._config = config
+
+    @property
+    @abstractmethod
+    def settings_model(self) -> Settings:
+        """
+        Get the settings model class.
+        """
+        pass
 
     @abstractmethod
     async def connect(self) -> None:

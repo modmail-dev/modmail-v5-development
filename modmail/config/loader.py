@@ -12,7 +12,7 @@ import logging
 import pydantic
 import yaml
 
-from .models.config_model import Config
+from .models import Config
 
 logger = logging.getLogger(__name__)
 

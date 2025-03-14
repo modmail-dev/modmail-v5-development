@@ -16,14 +16,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from ... import __version__
-from ...errors import DatabaseConnectionError
-from ..abc import DBClientBase
+from modmail import __version__
+from modmail.backends import DBClientBase, Settings
+from modmail.errors import DatabaseConnectionError
+
 from .migration import do_migration
-from .models.settings_model import Settings
+from .models import SQLSettingsModel
 
 if TYPE_CHECKING:
-    from ...config.models import Config, SQLDatabaseConfig
+    from modmail.config.models import Config, SQLDatabaseConfig
 
 
 logger = logging.getLogger(__name__)
@@ -40,16 +41,23 @@ class SQLClient(DBClientBase):
         super().__init__(config)
         self.engine = None
         self._async_session: async_sessionmaker[AsyncSession] | None = None
-        self._settings: Settings | None = None
+        self.__settings: SQLSettingsModel | None = None
+        self.__settings_model: Settings | None = None
 
     @property
-    def settings(self) -> Settings:
-        assert self._settings is not None, "Settings not loaded."
-        return self._settings
+    def _settings(self) -> SQLSettingsModel:
+        assert self.__settings is not None, "Settings not loaded."
+        return self.__settings
 
-    @settings.setter
-    def settings(self, settings: Settings) -> None:
-        self._settings = settings
+    @_settings.setter
+    def _settings(self, settings: SQLSettingsModel) -> None:
+        self.__settings = settings
+        self.__settings_model = Settings.model_validate(settings)
+
+    @property
+    def settings_model(self) -> Settings:
+        assert self.__settings_model is not None, "Settings model not loaded."
+        return self.__settings_model
 
     @property
     def _sql_config(self) -> SQLDatabaseConfig:
@@ -86,13 +94,13 @@ class SQLClient(DBClientBase):
 
         # Load settings from the SQL database
         async with self._async_session() as session:
-            query = select(Settings).where(Settings.bot_id == self._config.bot.bot_id)
+            query = select(SQLSettingsModel).where(SQLSettingsModel.bot_id == self._config.bot.bot_id)
             result = await session.execute(query)
-            self._settings = result.scalar_one_or_none()
-            if self._settings is None:
+            self.__settings = result.scalar_one_or_none()
+            if self.__settings is None:
                 logger.debug("Settings not found in SQL database. Creating new settings.")
-                self._settings = Settings(bot_id=self._config.bot.bot_id)
-                session.add(self._settings)
+                self.__settings = SQLSettingsModel(bot_id=self._config.bot.bot_id)
+                session.add(self.__settings)
                 await session.commit()
             logger.debug("Loaded settings from SQL database.")
 
@@ -108,17 +116,17 @@ class SQLClient(DBClientBase):
         """
         Get the last ran version of the bot.
         """
-        return self.settings.last_ran_version
+        return self._settings.last_ran_version
 
     async def update_last_ran_version(self) -> None:
         """
         Update the last ran version of the bot to the current version.
         """
-        self.settings.last_ran_version = __version__
+        self._settings.last_ran_version = __version__
         assert self._async_session is not None, "Session is not initialized."
         try:
             async with self._async_session() as session:
-                session.add(self.settings)
+                session.add(self._settings)
                 await session.commit()
             logger.debug("Updated last ran version to %s", __version__)
         except SQLAlchemyError as e:

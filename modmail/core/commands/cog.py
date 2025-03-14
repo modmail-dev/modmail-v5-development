@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from discord.ext import commands
 
 if TYPE_CHECKING:
-    from ..bot import Bot
+    from .. import Bot
 
 __all__ = [
     "Cog",

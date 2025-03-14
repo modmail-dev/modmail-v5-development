@@ -17,14 +17,15 @@ import pymongo.errors
 from beanie import init_beanie  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from ... import __version__
-from ...errors import DatabaseConnectionError
-from ..abc import DBClientBase
+from modmail import __version__
+from modmail.backends import DBClientBase, Settings
+from modmail.errors import DatabaseConnectionError
+
 from .migration import do_migration
-from .models import Settings
+from .models import MongoDBSettingsModel
 
 if TYPE_CHECKING:
-    from ...config.models import Config, MongoDBDatabaseConfig
+    from modmail.config.models import Config, MongoDBDatabaseConfig
 
 __all__ = [
     "MongoDBClient",
@@ -41,24 +42,26 @@ class MongoDBClient(DBClientBase):
     """
 
     def __init__(self, config: Config):
-        """
-        Initialize the MongoDB client.
-        :param config: The full configuration object.
-        """
-
         super().__init__(config)
         self.db_name = self._mongodb_config.database
         self._client: AsyncIOMotorClient[dict[str, Any]] | None = None
-        self._settings: Settings | None = None
+        self.__settings: MongoDBSettingsModel | None = None
+        self.__settings_model: Settings | None = None
 
     @property
-    def settings(self) -> Settings:
-        assert self._settings is not None, "Settings not loaded."
-        return self._settings
+    def _settings(self) -> MongoDBSettingsModel:
+        assert self.__settings is not None, "Settings not loaded."
+        return self.__settings
 
-    @settings.setter
-    def settings(self, settings: Settings) -> None:
-        self._settings = settings
+    @_settings.setter
+    def _settings(self, settings: MongoDBSettingsModel) -> None:
+        self.__settings = settings
+        self.__settings_model = Settings.model_validate(settings)
+
+    @property
+    def settings_model(self) -> Settings:
+        assert self.__settings_model is not None, "Settings model not loaded."
+        return self.__settings_model
 
     @property
     def _mongodb_config(self) -> MongoDBDatabaseConfig:
@@ -135,16 +138,15 @@ class MongoDBClient(DBClientBase):
             logger.critical("Error: %s", e)
             raise DatabaseConnectionError from e
 
-        await init_beanie(database=self._client.get_database(self.db_name), document_models=[Settings])
+        await init_beanie(database=self._client.get_database(self.db_name), document_models=[MongoDBSettingsModel])
         logger.debug("Connected to MongoDB.")
         await self._startup_setup()
 
     async def disconnect(self) -> None:
-        logger.debug("Disconnecting from MongoDB...")
         if self._client:
             self._client.close()
             self._client = None
-        logger.debug("Disconnected from MongoDB.")
+            logger.debug("Disconnected from MongoDB.")
 
     async def _startup_setup(self) -> None:
         """
@@ -162,19 +164,21 @@ class MongoDBClient(DBClientBase):
             )
 
         # Load settings from MongoDB
-        self._settings = await Settings.find_one(Settings.bot_id == self._config.bot.bot_id)
-        if self._settings is None:
+        self.__settings = await MongoDBSettingsModel.find_one(
+            MongoDBSettingsModel.bot_id == self._config.bot.bot_id
+        )
+        if self.__settings is None:
             logger.debug("Settings not found in MongoDB. Creating new settings.")
-            self._settings = Settings(bot_id=self._config.bot.bot_id)
-            await self._settings.create()
+            self.__settings = MongoDBSettingsModel(bot_id=self._config.bot.bot_id)
+            await self.__settings.create()
 
         logger.debug("Loaded settings from MongoDB.")
 
     async def get_last_ran_version(self) -> str | None:
-        return self.settings.last_ran_version
+        return self._settings.last_ran_version
 
     async def update_last_ran_version(self) -> None:
         logger.debug("Updating last ran version to %s", __version__)
-        self.settings.last_ran_version = __version__
+        self._settings.last_ran_version = __version__
         # noinspection PyArgumentList
-        await self.settings.save()
+        await self._settings.save()

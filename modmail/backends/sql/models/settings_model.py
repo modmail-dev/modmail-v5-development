@@ -6,31 +6,24 @@ This module defines the SQLAlchemy model for the settings table.
 
 from __future__ import annotations
 
-import enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base
+from modmail.backends import StatusType
+
+from .base import SQLBase
 
 if TYPE_CHECKING:
-    from .activity_model import Activity
+    from .activity_model import SQLActivityModel
 
 __all__ = [
-    "Settings",
-    "StatusType",
+    "SQLSettingsModel",
 ]
 
 
-class StatusType(enum.Enum):
-    online = 0
-    idle = 1
-    dnd = 2
-    offline = 3
-
-
-class Settings(Base):
+class SQLSettingsModel(SQLBase):
     __tablename__ = "settings"
 
     bot_id: Mapped[int] = mapped_column(primary_key=True, unique=True)
@@ -39,6 +32,6 @@ class Settings(Base):
     fallback_category_id: Mapped[int | None]
     status: Mapped[StatusType | None]
     activity_id: Mapped[int | None] = mapped_column(ForeignKey("activity.id", ondelete="SET NULL"))
-    activity: Mapped[Activity] = relationship(
+    activity: Mapped[SQLActivityModel] = relationship(
         back_populates="settings", cascade="all, delete-orphan", passive_deletes=True, single_parent=True
     )

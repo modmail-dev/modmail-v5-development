@@ -18,7 +18,7 @@ from .. import CONFIG, __version__
 from ..errors import DatabaseError
 
 if TYPE_CHECKING:
-    from ..backends.abc import DBClientBase
+    from ..backends import DBClientBase
 
 
 logger = logging.getLogger(__name__)

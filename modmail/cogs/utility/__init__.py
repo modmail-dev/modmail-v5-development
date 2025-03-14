@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ...core.commands import Cog
+from modmail.core import Cog
+
 from .commands import all_commands
 
 if TYPE_CHECKING:
     from discord.ext.commands import HybridCommand, HybridGroup  # type: ignore[reportMissingTypeStubs]
 
-    from ...core.bot import Bot
+    from modmail.core import Bot
 
 
 __all__ = ["Utility", "setup"]

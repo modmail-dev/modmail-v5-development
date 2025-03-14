@@ -20,9 +20,9 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 from modmail.backends.sql.models import *
-from modmail.backends.sql.models.base import Base
+from modmail.backends.sql.models.base import SQLBase
 
-target_metadata = Base.metadata
+target_metadata = SQLBase.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -30,7 +30,7 @@ target_metadata = Base.metadata
 # ... etc.
 if not config.get_main_option("sqlalchemy.url"):
     # If the URL is not set in the config, we need to load it from the Modmail config.
-    from modmail.config.loader import load_config
+    from modmail.config import load_config
 
     modmail_config = load_config("config.yaml")
     assert modmail_config is not None, "Failed to load config."
