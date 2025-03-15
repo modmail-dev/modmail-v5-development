@@ -1,8 +1,16 @@
+"""
+modmail.cogs.utility.commands.status
+====================================
+This module contains the status command for the Modmail bot.
+This command allows you to set the bot's status and activity message.
+"""
+
 from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING
 
+from discord import app_commands
 from discord.ext import commands
 
 from modmail.backends import Activity, ActivityType, StatusType
@@ -17,7 +25,8 @@ __all__ = ["status_command"]
 
 
 @wrap(commands.guild_only)
-@lazy_hybrid_group(name="status")
+@wrap(app_commands.describe, status="The status / activity to set.")
+@lazy_hybrid_group(name="status", fallback="set")
 async def status_command(self: Utility, ctx: commands.Context[Bot], *, status: str | None = None) -> None:
     """
     Set the bot's status or activity message.
@@ -124,6 +133,7 @@ async def status_command(self: Utility, ctx: commands.Context[Bot], *, status: s
         await ctx.reply(f"Activity set to {activity}.", ephemeral=True)
 
 
+@wrap(commands.guild_only)
 @status_command.command(name="clear")
 async def status_clear_command(self: Utility, ctx: commands.Context[Bot]) -> None:
     """

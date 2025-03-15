@@ -20,12 +20,17 @@ if TYPE_CHECKING:
     from .. import Utility
 
 
-@wrap(commands.guild_only)
-@lazy_hybrid_group(name="about")
+@lazy_hybrid_group(name="about", fallback="info")
 async def about_command(self: Utility, ctx: commands.Context[Bot]) -> None:
+    """
+    Show information about the Modmail bot.
+    """
     await ctx.reply("Modmail!")
 
 
-@about_command.command(name="version")
+@about_command.command(name="version", with_app_command=False)
 async def about_version_command(self: Utility, ctx: commands.Context[Bot]) -> None:
+    """
+    Show the version of the Modmail bot.
+    """
     await ctx.reply(f"Modmail version: {self.bot.version}!")

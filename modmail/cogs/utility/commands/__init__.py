@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .about import about_command
+from .about import *
 from .status import status_command
 
 if TYPE_CHECKING:

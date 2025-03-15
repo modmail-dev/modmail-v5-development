@@ -12,6 +12,8 @@ from discord.ext import commands
 
 __all__ = ["LazyHybridCommand", "LazyHybridGroup", "lazy_hybrid_command", "lazy_hybrid_group", "wrap"]
 
+T = TypeVar("T")
+
 
 class LazyHybridCommand:
     """
@@ -34,7 +36,7 @@ class LazyHybridCommand:
 
         # Store the wrappers for the command (discord.py's command decorators)
         if hasattr(func, "__modmail_wrappers__"):
-            self.wrappers: list[tuple[Callable[..., Callable[..., Any]], Any, Any]] = func.__modmail_wrappers__  # type: ignore[reportFunctionMemberAccess]
+            self.wrappers: list[tuple[Callable[..., Callable[[T], T]], Any, Any]] = func.__modmail_wrappers__  # type: ignore[reportFunctionMemberAccess]
         else:
             self.wrappers = []
 
@@ -51,12 +53,13 @@ class LazyHybridCommand:
         if not self.func.__qualname__.startswith(f"{cog_name}."):
             self.func.__qualname__ = f"{cog_name}.{self.func.__name__}"
 
+        # Apply the wrappers to the function directly (app_command decorators does not work on command)
+        for wrapper in self.wrappers:
+            self.func = wrapper[0](*wrapper[1], **wrapper[2])(self.func)
+
         # Create the command using the base function (hybrid_command/hybrid_group)
         command = self.base_func(*self.args, **self.kwargs)(self.func)
 
-        # Apply the wrappers to the command
-        for wrapper in self.wrappers:
-            command = wrapper[0](*wrapper[1], **wrapper[2])(command)
         return {self.func.__name__: command}
 
 
@@ -151,9 +154,6 @@ def lazy_hybrid_group(
         return LazyHybridGroup(func, args, kwargs)
 
     return decorator
-
-
-T = TypeVar("T")
 
 
 def wrap(dpy_func: Callable[..., Callable[[T], T]], *args: Any, **kwargs: Any) -> Callable[[T], T]:
