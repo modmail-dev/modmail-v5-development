@@ -5,6 +5,7 @@ alembic<1.16,>=1.15.1
 beanie[srv]~=1.29.0
 discord-py==2.5.2
 discord-py[speed]==2.5.2
+fluent-runtime<0.5,>=0.4.0
 packaging
 pydantic-settings<2.9,>=2.8.1
 pydantic[dotenv]<2.11,>=2.10.6

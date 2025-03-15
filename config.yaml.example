@@ -42,7 +42,7 @@ bot:
     staff_server_id: 100000000000001
 
     # The bot's prefix, set to "" to disable prefixed commands (only allow slash commands).
-    # prefix: "?"
+    prefix: "?"
 
     # Whether the bot should respond to mentions. Only applicable if the bot has a prefix set.
     # respond_bot_mention: true
@@ -51,7 +51,7 @@ bot:
     # To find your user ID, see https://dis.gd/findmyid.
     # If the bot is owned by a team, the owner IDs will, by default, be the IDs of the team members.
     owner_ids:
-    #   - 100000000000001
+        - 100000000000001
     #   - 100000000000002
     #   - 100000000000003
 
@@ -65,6 +65,14 @@ bot:
     # Must install the jishaku package with "pdm install -G debug" to enable.
     # enable_jishaku: false
 
+# Which locales the bot should support. This is used to determine the languages used by the bot.
+# Currently supported locales are:
+#   * en (English)
+allowed_locales: ["en"]
+
+# The default locale for the bot. This is the language that will be used if the user's locale is not supported.
+# default_locale: "en"
+
 # Required: The database type that stores your bot's logs.
 # Can be one of: "sql" or "mongodb"
 database_type: "mongodb"
@@ -72,7 +80,7 @@ database_type: "mongodb"
 # Configurations for the SQL database type. Only required if database_type is sql.
 sql_config:
     # Required: The SQL connection URI, supported SQL databases are:
-    # - SQLite
+    #   * SQLite
     # Example for SQLite: "sqlite+aiosqlite:///modmail.db"
     # Example for PostgreSQL: "postgresql+asyncpg://user:password@localhost/modmail"
     uri: "sqlite+aiosqlite:///modmail.db"

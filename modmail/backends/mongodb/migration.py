@@ -24,7 +24,7 @@ def do_migration(uri: str, db_name: str) -> None:
     from beanie.executors import migrate
     from beanie.migrations.models import RunningDirections
 
-    path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "migrations")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
     settings = migrate.MigrationSettings(
         distance=0,  # Run all migrations
         direction=RunningDirections.FORWARD,

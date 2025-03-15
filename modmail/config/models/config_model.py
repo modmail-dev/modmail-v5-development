@@ -9,7 +9,7 @@ that the configuration is correctly loaded and validated from various sources.
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Literal, TypeVar
+from typing import TYPE_CHECKING, Literal, TypeAlias, TypeVar
 
 from packaging.version import Version
 from pydantic import Field, field_validator
@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 
 __all__ = ["Config"]
 
+SupportedLocales: TypeAlias = Literal["en"]
+SupportedDatabases: TypeAlias = Literal["sql", "mongodb"]
+
 
 # noinspection PyNestedDecorators
 class Config(BaseSettings):
@@ -35,7 +38,9 @@ class Config(BaseSettings):
     Attributes:
         version (str): The config version.
         bot (BotConfig): The bot configuration.
-        database_type (Literal["sql", "mongodb", "json"]): The type of database used.
+        allowed_locales (list[str]): A list of allowed locales for use when converting messages.
+        default_locale (str): The default locale for the bot.
+        database_type (str): The type of database used.
         sql_config (SQLDatabaseConfig | None): The SQL database configuration.
         mongodb_config (MongoDBDatabaseConfig | None): The MongoDB configuration.
         logging (LoggingConfig): The logging configuration.
@@ -43,7 +48,9 @@ class Config(BaseSettings):
 
     version: str = "1.0"  # the config version
     bot: BotConfig
-    database_type: Literal["sql", "mongodb", "json"]
+    allowed_locales: set[SupportedLocales] = Field({"en"}, min_length=1)
+    default_locale: SupportedLocales = Field("en", validate_default=True)
+    database_type: SupportedDatabases
     sql_config: SQLDatabaseConfig | None = Field(None, validate_default=True)
     mongodb_config: MongoDBDatabaseConfig | None = Field(None, validate_default=True)
     logging: LoggingConfig = Field(LoggingConfig(), validate_default=True)
@@ -90,6 +97,16 @@ class Config(BaseSettings):
         # Do version migrations here?
 
         return version
+
+    @field_validator("default_locale")
+    @classmethod
+    def check_default_locale_in_allowed(cls, v: str, info: ValidationInfo) -> str:
+        """
+        Checks if the default locale is valid.
+        """
+        if v not in info.data["allowed_locales"]:
+            raise ValueError(f"The default locale must be in allowed_locales.")
+        return v
 
     _T = TypeVar("_T")
 

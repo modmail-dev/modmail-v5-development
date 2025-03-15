@@ -8,3 +8,4 @@ from __future__ import annotations
 
 from .bot import *
 from .commands import *
+from .translator import *

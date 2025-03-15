@@ -21,7 +21,7 @@ def do_migration(uri: str) -> None:
     from alembic.config import Config
 
     # Determine the absolute path to the .ini file.
-    ini_location = os.path.join(os.path.abspath(os.path.dirname(__file__)), "migrations", "alembic.ini")
+    ini_location = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations", "alembic.ini")
 
     # Create an Alembic configuration instance.
     alembic_cfg = Config(file_=ini_location)

@@ -5,7 +5,7 @@
 groups = ["default", "all", "debug", "lint", "mongodb", "speed", "sqlite", "tools"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:58b9e0d64209ed46eee1be80e12af6fa435b582d87e2020b90dfac0d9846a714"
+content_hash = "sha256:64b3359b4584a13e7650040607506a74165690faad46eb1896fd407bf4efd859"
 
 [[metadata.targets]]
 requires_python = ">=3.13"
@@ -181,6 +181,20 @@ files = [
     {file = "audioop_lts-0.2.1-cp313-cp313t-win_amd64.whl", hash = "sha256:f0f2f336aa2aee2bce0b0dcc32bbba9178995454c7b979cf6ce086a8801e14c7"},
     {file = "audioop_lts-0.2.1-cp313-cp313t-win_arm64.whl", hash = "sha256:78bfb3703388c780edf900be66e07de5a3d4105ca8e8720c5c4d67927e0b15d0"},
     {file = "audioop_lts-0.2.1.tar.gz", hash = "sha256:e81268da0baa880431b68b1308ab7257eb33f356e57a5f9b1f915dfb13dd1387"},
+]
+
+[[package]]
+name = "babel"
+version = "2.17.0"
+requires_python = ">=3.8"
+summary = "Internationalization utilities"
+groups = ["default"]
+dependencies = [
+    "pytz>=2015.7; python_version < \"3.9\"",
+]
+files = [
+    {file = "babel-2.17.0-py3-none-any.whl", hash = "sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2"},
+    {file = "babel-2.17.0.tar.gz", hash = "sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d"},
 ]
 
 [[package]]
@@ -393,13 +407,43 @@ files = [
 
 [[package]]
 name = "filelock"
-version = "3.17.0"
+version = "3.18.0"
 requires_python = ">=3.9"
 summary = "A platform independent file lock."
 groups = ["tools"]
 files = [
-    {file = "filelock-3.17.0-py3-none-any.whl", hash = "sha256:533dc2f7ba78dc2f0f531fc6c4940addf7b70a481e269a5a3b93be94ffbe8338"},
-    {file = "filelock-3.17.0.tar.gz", hash = "sha256:ee4e77401ef576ebb38cd7f13b9b28893194acc20a8e68e18730ba9c0e54660e"},
+    {file = "filelock-3.18.0-py3-none-any.whl", hash = "sha256:c401f4f8377c4464e6db25fff06205fd89bdd83b65eb0488ed1b160f780e21de"},
+    {file = "filelock-3.18.0.tar.gz", hash = "sha256:adbc88eabb99d2fec8c9c1b229b171f18afa655400173ddc653d5d01501fb9f2"},
+]
+
+[[package]]
+name = "fluent-runtime"
+version = "0.4.0"
+summary = "Localization library for expressive translations."
+groups = ["default"]
+dependencies = [
+    "attrs",
+    "babel",
+    "fluent-syntax<0.20,>=0.17",
+    "pytz",
+    "typing-extensions<5,>=3.7",
+]
+files = [
+    {file = "fluent.runtime-0.4.0-py2.py3-none-any.whl", hash = "sha256:51fd02582c2363e1106d7051642967a1b7f406dd9c317bd4600a73ede40c5146"},
+    {file = "fluent.runtime-0.4.0.tar.gz", hash = "sha256:cb5ef96a58a3f67acaaca046d1201d202a1ebf2823e5e664370f359bae20574d"},
+]
+
+[[package]]
+name = "fluent-syntax"
+version = "0.19.0"
+summary = "Localization library for expressive translations."
+groups = ["default"]
+dependencies = [
+    "typing-extensions<5,>=3.7",
+]
+files = [
+    {file = "fluent.syntax-0.19.0-py2.py3-none-any.whl", hash = "sha256:b352b3475fac6c6ed5f06527921f432aac073d764445508ee5218aeccc7cc5c4"},
+    {file = "fluent.syntax-0.19.0.tar.gz", hash = "sha256:920326d7f46864b9758f0044e9968e3112198bc826acee16ddd8f11d359004fd"},
 ]
 
 [[package]]
@@ -961,6 +1005,16 @@ groups = ["default"]
 files = [
     {file = "python-dotenv-1.0.1.tar.gz", hash = "sha256:e324ee90a023d808f1959c46bcbc04446a10ced277783dc6ee09987c37ec10ca"},
     {file = "python_dotenv-1.0.1-py3-none-any.whl", hash = "sha256:f7b63ef50f1b690dddf550d03497b66d609393b40b564ed0d674909a68ebf16a"},
+]
+
+[[package]]
+name = "pytz"
+version = "2025.1"
+summary = "World timezone definitions, modern and historical"
+groups = ["default"]
+files = [
+    {file = "pytz-2025.1-py2.py3-none-any.whl", hash = "sha256:89dd22dca55b46eac6eda23b2d72721bf1bdfef212645d81513ef5d03038de57"},
+    {file = "pytz-2025.1.tar.gz", hash = "sha256:c2db42be2a2518b28e65f9207c4d05e6ff547d1efa4086469ef855e4ab70178e"},
 ]
 
 [[package]]

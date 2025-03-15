@@ -6,36 +6,24 @@ This module contains the utility Cog for the Modmail bot.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from modmail.core import Cog
+from modmail.core import Cog, create_cog
 
 from .commands import all_commands
 
 if TYPE_CHECKING:
-    from discord.ext.commands import HybridCommand, HybridGroup  # type: ignore[reportMissingTypeStubs]
-
     from modmail.core import Bot
 
 
 __all__ = ["Utility", "setup"]
 
+if TYPE_CHECKING:  # Makes linters happy
 
-utility_methods: dict[str, HybridCommand[Any, Any, Any] | HybridGroup[Any, Any, Any]] = {}
-for command in all_commands:
-    utility_methods.update(command.get_command("Utility"))
-
-if TYPE_CHECKING:
-
-    class Utility(Cog):  # For type hinting
-        ...
+    class Utility(Cog): ...
 
 else:
-    Utility = type(
-        "Utility",
-        (Cog,),
-        utility_methods,
-    )
+    Utility = create_cog("Utility", all_commands)
 
 
 async def setup(bot: Bot) -> None:

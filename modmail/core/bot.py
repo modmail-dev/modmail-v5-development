@@ -17,8 +17,11 @@ from discord.ext import commands
 from .. import CONFIG, __version__
 from ..backends import Activity, ActivityType, DBClientBase, StatusType
 from ..errors import DatabaseError
+from .translator import Translator
 
 logger = logging.getLogger(__name__)
+
+__all__ = ["Bot"]
 
 
 class Bot(commands.Bot):
@@ -63,6 +66,8 @@ class Bot(commands.Bot):
 
         super().__init__(*args, **kwargs)
 
+        self.translator = Translator()
+
         self.version: str = __version__
         logger.debug("[bold green]Bot version: %s", self.version, extra={"markup": True, "highlighter": None})
 
@@ -82,6 +87,9 @@ class Bot(commands.Bot):
 
         Syncs the bot command tree when the bot is updated.
         """
+        # Set the translator for the command tree. Should be done before syncing.
+        await self.tree.set_translator(self.translator)
+
         if CONFIG.bot.force_sync_commands:
             logger.info("Force syncing bot commands.")
             logger.warning(

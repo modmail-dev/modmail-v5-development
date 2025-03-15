@@ -70,7 +70,6 @@ def run_bot() -> NoReturn:
         logger.warning("init() was not called. Calling init() with the default args.")
         init()
 
-    modmail_text_lines: list[str] = []
     modmail_ascii_art = dedent(
         r"""
         ___  ___          _                 _ _
@@ -85,11 +84,20 @@ def run_bot() -> NoReturn:
         datetime.datetime.now(tz=datetime.timezone.utc).astimezone().strftime("%B %d, %Y %H:%M:%S %Z")
     )
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    allowed_locale = CONFIG.allowed_locales
+    enabled_locales = ", ".join(
+        [CONFIG.default_locale] + [locale for locale in allowed_locale if locale != CONFIG.default_locale]
+    )
+
+    modmail_text_lines: list[str] = []
     modmail_text_lines += [line for line in modmail_ascii_art.split("\n")]
     modmail_text_lines += ["https://github.com/modmail-dev/modmail"]
     modmail_text_lines += [""]
     modmail_text_lines += [f"Starting at {current_time_text}"]
-    modmail_text_lines += [f"Version: {__version__} | Python: {python_version}"]
+    modmail_text_lines += [
+        f"Version: {__version__} | Python: {python_version} | "
+        f"Language{'s' if len(CONFIG.allowed_locales) != 1 else ''}: {enabled_locales}"
+    ]
     modmail_text_lines += [""]
     modmail_text_width = len(max(modmail_text_lines, key=len)) + 10
 
