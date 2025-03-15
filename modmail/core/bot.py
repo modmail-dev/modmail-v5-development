@@ -15,7 +15,7 @@ import discord
 from discord.ext import commands
 
 from .. import CONFIG, __version__
-from ..backends import ActivityType, DBClientBase
+from ..backends import Activity, ActivityType, DBClientBase, StatusType
 from ..errors import DatabaseError
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,10 @@ class Bot(commands.Bot):
         # Set ratelimit timeout to 60s to prevent stalled commands.
         kwargs.setdefault("max_ratelimit_timeout", 60.0)
 
+        # Disallow all mentions by default.
+        allowed_mention = discord.AllowedMentions.none()
+        kwargs.setdefault("allowed_mentions", allowed_mention)
+
         # Disable "voice will NOT be supported" warning.
         discord.VoiceClient.warn_nacl = False
 
@@ -65,12 +69,12 @@ class Bot(commands.Bot):
         if CONFIG.database_type == "sql":
             from ..backends.sql import SQLClient
 
-            self._database_client: DBClientBase = SQLClient(CONFIG)
+            self.database_client: DBClientBase = SQLClient(CONFIG)
 
         elif CONFIG.database_type == "mongodb":
             from ..backends.mongodb import MongoDBClient
 
-            self._database_client: DBClientBase = MongoDBClient(CONFIG)
+            self.database_client: DBClientBase = MongoDBClient(CONFIG)
 
     async def setup_hook(self) -> None:
         """
@@ -86,13 +90,13 @@ class Bot(commands.Bot):
             )
             await self.tree.sync()
 
-        last_ran_version = self._database_client.settings_model.last_ran_version
+        last_ran_version = self.database_client.settings_model.last_ran_version
         if last_ran_version is None or last_ran_version != self.version:
             if not CONFIG.bot.force_sync_commands:  # Already synced above
                 logger.debug("Syncing bot commands.")
                 await self.tree.sync()
 
-            await self._database_client.update_settings(last_ran_version=self.version)
+            await self.database_client.update_settings(last_ran_version=self.version)
             logger.debug("Updated last ran version to %s", self.version)
 
     def run(self, *args: Any, **kwargs: Any) -> NoReturn:
@@ -108,7 +112,7 @@ class Bot(commands.Bot):
         """
 
         async def bot_runner() -> None:
-            await self._database_client.connect()
+            await self.database_client.connect()
 
             for ext in ["utility"]:
                 logger.debug("Loading extension %s", ext)
@@ -122,7 +126,7 @@ class Bot(commands.Bot):
                 try:
                     await self.start(CONFIG.bot.token.get_secret_value(), reconnect=True)
                 finally:
-                    await self._database_client.disconnect()
+                    await self.database_client.disconnect()
 
         try:
             try:
@@ -177,41 +181,72 @@ class Bot(commands.Bot):
         logger.debug("Connected to Discord.")
         await self.set_bot_presence()
 
-    async def set_bot_presence(self) -> None:
+    def _get_discord_presence_from_settings(self) -> tuple[discord.BaseActivity | None, discord.Status | None]:
         """
-        Set the bot's activity and status.
+        Get the discord presence from the database settings.
+        :return: a tuple of discord.Activity and discord.Status, both may be None.
         """
-        await self.wait_until_ready()  # Wait until the bot is ready
 
-        activity: discord.BaseActivity | None = None
-        status: discord.Status | None = None
+        dc_activity: discord.BaseActivity | None = None
+        dc_status: discord.Status | None = None
 
-        db_activity = self._database_client.settings_model.activity
-        db_status = self._database_client.settings_model.status
+        # db_activity and db_status should be the same as activity and status if provided
+        db_activity = self.database_client.settings_model.activity
+        db_status = self.database_client.settings_model.status
 
         if db_activity:
             if db_activity.type == ActivityType.custom:
-                activity = discord.CustomActivity(name=db_activity.name)
+                dc_activity = discord.CustomActivity(name=db_activity.name)
             elif db_activity.type == ActivityType.streaming:
                 stream_url = db_activity.url
                 if stream_url is None:
-                    logger.warning("Streaming activity requires a URL. Using a default URL.")
+                    logger.warning(
+                        "Streaming activity requires a URL. Using default URL: https://www.twitch.tv/live."
+                    )
                     stream_url = "https://www.twitch.tv/live"
                 if not stream_url.startswith("https://www.twitch.tv/"):  # TODO: validate in the model
                     logger.warning("Streaming activity URL must start with https://www.twitch.tv/")
                     stream_url = "https://www.twitch.tv/live"
-                activity = discord.Streaming(name=db_activity.name, url=stream_url)
+                dc_activity = discord.Streaming(name=db_activity.name, url=stream_url)
             else:
-                activity = discord.Activity(
+                dc_activity = discord.Activity(
                     name=db_activity.name, type=discord.ActivityType[db_activity.type.name]
                 )
 
         if db_status:
             # noinspection PyTypeChecker
-            status = discord.Status[db_status.name]
+            dc_status = discord.Status[db_status.name]
 
-        logger.debug("Setting bot presence to %r (%r)", activity, status)
-        await self.change_presence(activity=activity, status=status)
+        return dc_activity, dc_status
+
+    async def set_bot_presence(
+        self, *, activity: Activity | None = None, status: StatusType | None = None
+    ) -> None:
+        """
+        Set the bot's presence.
+
+        If activity and/or status is provided, it will update the database settings.
+        """
+        await self.wait_until_ready()  # Wait until the bot is ready
+
+        # Update the database settings
+        if activity is not None:
+            await self.database_client.update_settings(activity=activity)
+        if status is not None:
+            await self.database_client.update_settings(status=status)
+
+        dc_activity, dc_status = self._get_discord_presence_from_settings()
+
+        logger.debug("Setting bot presence to %r (%r)", dc_activity, dc_status)
+        await self.change_presence(activity=dc_activity, status=dc_status)
+
+    async def clear_bot_presence(self) -> None:
+        """
+        Clear the bot's presence.
+        """
+        logger.debug("Clearing bot presence.")
+        await self.database_client.update_settings(activity=None, status=None)
+        await self.set_bot_presence()
 
     # async def can_run(self, ctx: commands.Context[Bot], /, *, call_once: bool = False) -> bool:
     #     """

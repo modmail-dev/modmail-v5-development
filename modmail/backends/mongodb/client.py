@@ -187,7 +187,7 @@ class MongoDBClient(DBClientBase):
         for key, value in settings_dict.items():
             if key == "bot_id":
                 continue
-            if key == "activity":
+            if key == "activity" and value is not None:
                 # Convert the activity to a MongoDBActivityModel
                 value = MongoDBActivityModel(**value)
             setattr(mongodb_settings, key, value)

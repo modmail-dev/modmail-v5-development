@@ -27,5 +27,5 @@ async def about_command(self: Utility, ctx: commands.Context[Bot]) -> None:
 
 
 @about_command.command(name="version")
-async def version_command(self: Utility, ctx: commands.Context[Bot]) -> None:
+async def about_version_command(self: Utility, ctx: commands.Context[Bot]) -> None:
     await ctx.reply(f"Modmail version: {self.bot.version}!")

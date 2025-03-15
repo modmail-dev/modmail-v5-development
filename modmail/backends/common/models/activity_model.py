@@ -31,3 +31,22 @@ class Activity(BaseModel):
     type: ActivityType
     name: str
     url: str | None = None  # url for streaming activity, 'None' not enforced for other types
+
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the activity.
+        """
+
+        match self.type:
+            case ActivityType.playing:
+                return f"Playing {self.name}"
+            case ActivityType.streaming:
+                return f"Streaming {self.name} ({self.url if self.url else 'No URL'})"
+            case ActivityType.listening:
+                return f"Listening to {self.name}"
+            case ActivityType.watching:
+                return f"Watching {self.name}"
+            case ActivityType.custom:
+                return f"{self.name} (custom)"
+            case ActivityType.competing:
+                return f"Competing in {self.name}"

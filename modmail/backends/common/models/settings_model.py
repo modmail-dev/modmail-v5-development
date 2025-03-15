@@ -24,6 +24,20 @@ class StatusType(enum.Enum):
     dnd = 2
     offline = 3
 
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the status.
+        """
+        match self:
+            case StatusType.online:
+                return "Online"
+            case StatusType.idle:
+                return "Idle"
+            case StatusType.dnd:
+                return "Do Not Disturb (dnd)"
+            case StatusType.offline:
+                return "Offline"
+
 
 class Settings(BaseModel):
     model_config = ConfigDict(from_attributes=True, frozen=True)
