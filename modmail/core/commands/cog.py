@@ -14,6 +14,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ... import CONFIG
+from .embed import EmbedProxy
 
 if TYPE_CHECKING:
     from .. import Bot
@@ -41,31 +42,105 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         await super().cog_before_invoke(ctx)
 
     async def reply(
-        self, ctx: commands.Context[Bot], message: str | app_commands.locale_str, **kwargs: Any
-    ) -> None:
+        self,
+        ctx: commands.Context[Bot],
+        content: str | app_commands.locale_str | None,
+        *,
+        auto_embed: bool = False,
+        **kwargs: Any,
+    ) -> discord.Message:
         """
         Reply to a command context with a message.
 
         :param ctx: The command context.
-        :param message: The message to send.
+        :param content: The message to send.
+        :param auto_embed: Whether to automatically embed the message.
         :param kwargs: Additional keyword arguments to pass to the reply method.
         """
-        if isinstance(message, app_commands.locale_str):
-            if ctx.interaction:
-                locale: discord.Locale | str = ctx.interaction.locale
+        # Same reply logic as ctx.send()
+        if ctx.interaction is None:
+            return await self.send(ctx, content, auto_embed=auto_embed, reference=ctx.message, **kwargs)
+        else:
+            return await self.send(ctx, content, auto_embed=auto_embed, **kwargs)
+
+    async def send(
+        self,
+        ctx: commands.Context[Bot],
+        content: str | app_commands.locale_str | None,
+        *,
+        auto_embed: bool = False,
+        **kwargs: Any,
+    ) -> discord.Message:
+        """
+        Send a message with the command context.
+        :param ctx: The command context.
+        :param content: The message to send.
+        :param auto_embed: Whether to automatically embed the message.
+        :param kwargs: Additional keyword arguments to pass to the .send() method.
+        """
+
+        if ctx.interaction:
+            locale: discord.Locale | str = ctx.interaction.locale
+        else:
+            locale = CONFIG.default_locale
+
+        if auto_embed:
+            if "embed" in kwargs or "embeds" in kwargs:
+                pass  # Ignore auto_embed if embed or embeds are already in kwargs
+            elif content is None:
+                pass  # Ignore auto_embed if there's no content
             else:
-                locale = CONFIG.default_locale
-            translated_message = await self.bot.translator.translate(
-                message,
-                locale,
-                app_commands.TranslationContext(location=app_commands.TranslationContextLocation.other, data=None),
-            )
+                # Create a "default style" embed with the content
+                embed = EmbedProxy(description=content)  # TODO: Format with colour/style
+                kwargs["embed"] = await embed.to_embed(self.bot.translator, locale)
+                content = None
+
+        # Translate the message if it's a locale_str
+        if isinstance(content, app_commands.locale_str):
+            translated_message = await self.bot.translator.translate(content, locale)
             if translated_message is not None:
-                message = translated_message
+                content = translated_message
             else:
-                logger.warning("Failed to translate message: %s", message)
-                message = message.message
-        await ctx.reply(message, **kwargs)
+                logger.warning("Failed to translate message: %s", content)
+                content = content.message
+
+        # Translate embed and embeds in kwargs
+        if "embed" in kwargs:
+            embed = kwargs["embed"]
+            if isinstance(embed, EmbedProxy):
+                kwargs["embed"] = await embed.to_embed(self.bot.translator, locale)
+
+        if "embeds" in kwargs:
+            embeds: list[discord.Embed] = []
+            for embed in kwargs["embeds"]:
+                if isinstance(embed, EmbedProxy):
+                    embeds.append(await embed.to_embed(self.bot.translator, locale))
+                else:
+                    embeds.append(embed)
+            kwargs["embeds"] = embeds
+
+        return await ctx.send(content, **kwargs)
+
+    # TODO: implement caching
+    async def translate(self, ctx: commands.Context[Bot], string: app_commands.locale_str) -> str:
+        """
+        Translate a message using the bot's Translator.
+
+        :param ctx: The command context.
+        :param string: The string to translate.
+        :return: The translated string or None if translation isn't available.
+        """
+        if ctx.interaction:
+            locale: discord.Locale | str = ctx.interaction.locale
+        else:
+            locale = CONFIG.default_locale
+        message = await self.bot.translator.translate(string, locale)
+        if message is None:
+            logger.warning("Failed to translate message: %s", string)
+            return string.message
+        return message
+
+    # TODO: Add a before invoke hook (here or in bot) that checks if using ctx.send() and warns to use cog.send().
 
 
 def create_cog(name: str, all_commands: list[LazyHybridCommand[Any]]) -> type[Cog]:
@@ -80,7 +155,7 @@ def create_cog(name: str, all_commands: list[LazyHybridCommand[Any]]) -> type[Co
     methods: dict[str, commands.HybridCommand[Any, Any, Any] | commands.HybridGroup[Any, Any, Any]] = {}
 
     for command in all_commands:
-        methods.update(command.get_commands("Utility"))
+        methods.update(command.get_commands(name))
 
     cog = type(name, (Cog,), methods, group_auto_locale_strings=False)
     # noinspection PyTypeChecker

@@ -14,7 +14,10 @@ import discord
 from rich.logging import RichHandler
 from rich.text import Text
 
-from . import CONFIG
+try:
+    from . import CONFIG
+except ImportError as e:
+    raise RuntimeError("Did you forget to first run modmail.init()?") from e
 
 __all__ = ["setup_logging"]
 

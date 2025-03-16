@@ -8,6 +8,8 @@ of the codebase to avoid redundancy and promote code reuse.
 
 from __future__ import annotations
 
+__all__ = ["strtobool"]
+
 
 def strtobool(val: str) -> int:
     """Convert a string representation of truth to true (1) or false (0).

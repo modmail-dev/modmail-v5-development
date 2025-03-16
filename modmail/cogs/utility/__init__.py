@@ -8,13 +8,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from modmail.core import Cog, create_cog
+from modmail.core import Bot, Cog, create_cog
 
 from .commands import all_commands
-
-if TYPE_CHECKING:
-    from modmail.core import Bot
-
 
 __all__ = ["Utility", "setup"]
 

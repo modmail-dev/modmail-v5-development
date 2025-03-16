@@ -10,13 +10,11 @@ from typing import TYPE_CHECKING
 
 from discord.ext import commands
 
-from modmail.core import _, lazy_hybrid_group
+from modmail.core import Bot, _, lazy_hybrid_group
 
 __all__ = ["about_command"]
 
 if TYPE_CHECKING:
-    from modmail.core import Bot
-
     from .. import Utility
 
 
@@ -27,7 +25,7 @@ async def about_command(self: Utility, ctx: commands.Context[Bot]) -> None:
     """
     Show information about the Modmail bot.
     """
-    await ctx.reply("Modmail!")
+    await self.reply(ctx, "Modmail!")
 
 
 @about_command.command(
@@ -37,4 +35,4 @@ async def about_version_command(self: Utility, ctx: commands.Context[Bot]) -> No
     """
     Show the version of the Modmail bot.
     """
-    await self.reply(ctx, _("cmd-about-version-message", version=self.bot.version))
+    await self.reply(ctx, _("cmd-about-version-message", version=self.bot.version), auto_embed=True)

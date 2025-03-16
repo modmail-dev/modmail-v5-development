@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import enum
 
+from discord import app_commands
 from pydantic import BaseModel, ConfigDict
 
 from .activity_model import Activity
@@ -37,6 +38,33 @@ class StatusType(enum.Enum):
                 return "Do Not Disturb (dnd)"
             case StatusType.offline:
                 return "Offline"
+
+    @property
+    def official_name(self) -> app_commands.locale_str:
+        """
+        Returns a locale_str of the localized name of the status.
+        """
+        # noinspection PyProtectedMember
+        from modmail.core import _
+
+        match self:
+            case StatusType.online:
+                return _("model-status-online-name")
+            case StatusType.idle:
+                return _("model-status-idle-name")
+            case StatusType.dnd:
+                return _("model-status-dnd-name")
+            case StatusType.offline:
+                return _("model-status-offline-name")
+
+    def __locale_str__(self) -> app_commands.locale_str:
+        """
+        Returns a locale_str of the localized name of the status.
+        """
+        # noinspection PyProtectedMember
+        from modmail.core import _
+
+        return _(f"model-status-text", status=self.name)
 
 
 class Settings(BaseModel):

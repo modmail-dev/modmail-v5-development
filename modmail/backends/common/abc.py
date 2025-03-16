@@ -9,10 +9,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from .models import Settings
-
 if TYPE_CHECKING:
     from modmail.config import Config
+
+    from .models import Settings
 
 __all__ = [
     "DBClientBase",
