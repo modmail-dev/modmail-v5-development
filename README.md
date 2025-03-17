@@ -7,3 +7,9 @@
 
 Please note that the database structure may change at any time, and database migrations between development versions are not available.
 You will need to drop the database when the structure changes.
+
+## Acknowledgements
+
+The current release of Modmail (v5) is a complete rewrite of the original Modmail bot.
+Special thanks to the original Modmail team (kyb3r, fourjr, Taaku18) for their work,
+and to the contributors of the original Modmail bot for their help in making this project possible.

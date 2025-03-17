@@ -6,22 +6,25 @@ build-backend = "pdm.backend"
 name = "modmail"
 description = "A Discord Modmail bot."
 authors = [
-    {name = "Taku", email = "taku@modmail.dev"},
-    {name = "FourJr (Former, Inactive)", email = "no-email@example.com"},
-    {name = "Kyber (Former, Inactive)", email = "no-email@example.com"},
+    {name = "Taaku18", email = "taku@modmail.dev"},
 ]
 readme = "README.md"
 requires-python = ">=3.13"
 license = {text = "AGPL-3.0-or-later"}
+license-files = ["LICEN[CS]E.*"]
 dynamic = ["version"]
 
 keywords = ["discord", "discord-bot", "modmail", "python", "discord.py", "discord-modmail"]
 classifiers = [
-    "Environment :: Console",
-    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Development Status :: 3 - Alpha",
-    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Framework :: AsyncIO",
+    "Environment :: Console",
+    "Natural Language :: English",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.13",
     "Topic :: Communications :: Chat",
     "Topic :: Communications :: Conferencing",
@@ -68,8 +71,11 @@ debug = [
 ]
 
 [project.urls]
-homepage = "https://docs.modmail.dev"
-repository = "https://github.com/modmail-dev/modmail"
+Documentation = "https://docs.modmail.dev"
+Repository = "https://github.com/modmail-dev/modmail"
+Issues = "https://github.com/modmail-dev/modmail/issues"
+Changelog = "https://github.com/modmail-dev/Modmail/blob/master/CHANGELOG.md"
+# TODO: add Funding = "..."
 
 # PDM build system configs.
 [tool.pdm]
