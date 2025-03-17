@@ -91,21 +91,55 @@ class Bot(commands.Bot):
         await self.tree.set_translator(self.translator)
 
         if CONFIG.bot.force_sync_commands:
-            logger.info("Force syncing bot commands.")
-            logger.warning(
-                "[red]You should turn off force_sync_commands, or else " "your bot will be rate-limited.",
-                extra={"markup": True},
-            )
-            await self.tree.sync()
+            if CONFIG.bot.use_slash_commands:
+                logger.info("Force syncing slash commands.")
+                logger.warning(
+                    "[red]You should turn off force_sync_commands, or else your bot will be rate-limited.",
+                    extra={"markup": True},
+                )
+                await self._sync_slash_commands()
+            else:
+                logger.info("Force un-syncing slash commands.")
+                logger.warning(
+                    "[red]You should turn off force_sync_commands, or else your bot will be rate-limited.",
+                    extra={"markup": True},
+                )
+                await self._unsync_slash_commands()
 
+        else:
+            if CONFIG.bot.use_slash_commands:
+                # Sync slash commands if last synced in a different version.
+                if self.database_client.settings_model.slash_last_synced_version != self.version:
+                    await self._sync_slash_commands()
+            else:
+                # Un-sync slash commands if last synced is not None (it's un-synced when None).
+                if self.database_client.settings_model.slash_last_synced_version is not None:
+                    await self._unsync_slash_commands()
+
+        # Update the last ran version in the database.
         last_ran_version = self.database_client.settings_model.last_ran_version
-        if last_ran_version is None or last_ran_version != self.version:
-            if not CONFIG.bot.force_sync_commands:  # Already synced above
-                logger.debug("Syncing bot commands.")
-                await self.tree.sync()
-
+        if last_ran_version != self.version:
             await self.database_client.update_settings(last_ran_version=self.version)
             logger.debug("Updated last ran version to %s", self.version)
+
+    async def _sync_slash_commands(self) -> None:
+        """
+        Sync the slash commands.
+        """
+        logger.debug("Syncing slash commands.")
+        await self.tree.sync()
+        logger.debug("Slash commands synced.")
+        await self.database_client.update_settings(slash_last_synced_version=self.version)
+
+    async def _unsync_slash_commands(self) -> None:
+        """
+        Unsync the slash commands.
+        """
+        logger.debug("Un-syncing slash commands.")
+        self.tree.clear_commands(guild=None)
+        logger.debug("Slash commands un-synced.")
+        await self.tree.sync()
+        await self.database_client.update_settings(slash_last_synced_version=None)
 
     def run(self, *args: Any, **kwargs: Any) -> NoReturn:
         """

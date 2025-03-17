@@ -2,6 +2,10 @@
 modmail.backends.sql.migration
 ==============================
 This module handles the migration of the SQL database using Alembic.
+
+To create a new migration, use the following command:
+    alembic -c modmail/backends/sql/migrations/alembic.ini revision --autogenerate -m "migration_name"
+Then manually edit the migration file to add the necessary changes.
 """
 
 from __future__ import annotations

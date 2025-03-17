@@ -29,6 +29,7 @@ class MongoDBActivityModel(BaseModel):
 class MongoDBSettingsModel(Document):
     bot_id: Annotated[int, Indexed(unique=True)]  # the bot ID
     last_ran_version: str | None = None  # the last version the bot was run on, None = first run
+    slash_last_synced_version: str | None  # the last version the slash commands were synced on
     main_category_id: int | None = None
     fallback_category_id: int | None = None
     status: StatusType | None = None

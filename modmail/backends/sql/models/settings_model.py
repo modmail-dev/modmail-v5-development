@@ -28,6 +28,7 @@ class SQLSettingsModel(SQLBase):
 
     bot_id: Mapped[int] = mapped_column(primary_key=True, unique=True)
     last_ran_version: Mapped[str | None] = mapped_column(String(32))
+    slash_last_synced_version: Mapped[str | None] = mapped_column(String(32))
     main_category_id: Mapped[int | None]
     fallback_category_id: Mapped[int | None]
     status: Mapped[StatusType | None]

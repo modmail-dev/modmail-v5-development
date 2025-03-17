@@ -2,6 +2,11 @@
 modmail.backends.mongodb.migration
 ==================================
 This module handles the migration of the MongoDB database using Beanie.
+
+To create a new migration, use the following command:
+    beanie new-migration -n migration_name -p modmail/backends/mongodb/migrations
+Then manually edit the migration file to add the necessary changes.
+See: https://beanie-odm.dev/tutorial/migrations/.
 """
 
 from __future__ import annotations

@@ -72,6 +72,7 @@ class Settings(BaseModel):
 
     bot_id: int
     last_ran_version: str | None  # the last version the bot was run on, None = first run
+    slash_last_synced_version: str | None  # the last version the slash commands were synced on
     main_category_id: int | None
     fallback_category_id: int | None
     status: StatusType | None

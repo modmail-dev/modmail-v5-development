@@ -12,7 +12,7 @@ import logging
 from base64 import b64decode
 from typing import Annotated
 
-from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
 __all__ = [
     "BotConfig",
@@ -34,6 +34,7 @@ class BotConfig(BaseModel):
         prefix (str | None): The command prefix for the bot.
         respond_bot_mention (bool): Whether the bot should respond to mentions.
         owner_ids (set[IDType]): A set of owner IDs.
+        use_slash_commands (bool): Whether to use slash commands.
         force_sync_commands (bool): Whether to force sync commands.
         enable_jishaku (bool): Whether to enable jishaku. Need jishaku installed.
     """
@@ -43,7 +44,8 @@ class BotConfig(BaseModel):
     prefix: str | None = "?"  # when prefix is None, the bot will not use a prefix
     respond_bot_mention: bool = True
     owner_ids: set[IDType] = set()
-    force_sync_commands: bool = False
+    use_slash_commands: bool = True
+    force_sync_commands: bool = Field(False, validate_default=True)
     enable_jishaku: bool = False
 
     @field_validator("token")
@@ -72,6 +74,16 @@ class BotConfig(BaseModel):
         """
         if not v:
             return None  # return None when v is an empty string
+        return v
+
+    @field_validator("use_slash_commands")
+    @classmethod
+    def check_any_command_enabled(cls, v: bool, info: ValidationInfo) -> bool:
+        """
+        Checks if either slash commands or prefix command is enabled.
+        """
+        if not v and not info.data["prefix"]:
+            raise ValueError("Slash commands and prefixed commands cannot be both disabled.")
         return v
 
     @field_validator("owner_ids", mode="before")
