@@ -47,7 +47,7 @@ bot:
     prefix: "?"
 
     # Whether the bot should respond to mentions. Only applicable if the bot has a prefix set.
-    # respond_bot_mention: true
+    respond_bot_mention: true
 
     # The ID of the bot's owner(s). Defaults to the bot application's owner if not set.
     # To find your user ID, see https://dis.gd/findmyid.

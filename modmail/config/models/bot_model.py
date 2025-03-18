@@ -37,6 +37,7 @@ class BotConfig(BaseModel):
         use_slash_commands (bool): Whether to use slash commands.
         force_sync_commands (bool): Whether to force sync commands.
         enable_jishaku (bool): Whether to enable jishaku. Need jishaku installed.
+        bypass_public_bot_check (bool): Whether to bypass the public bot check (not recommended).
     """
 
     token: SecretStr
@@ -47,6 +48,7 @@ class BotConfig(BaseModel):
     use_slash_commands: bool = True
     force_sync_commands: bool = Field(False, validate_default=True)
     enable_jishaku: bool = False
+    bypass_public_bot_check: bool = False
 
     @field_validator("token")
     @classmethod

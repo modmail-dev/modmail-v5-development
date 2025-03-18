@@ -94,11 +94,18 @@ class Bot(commands.Bot):
 
         # Modmail should not be public, this is a safety check.
         if app_info.bot_public:
-            logger.critical(
-                '[bold red]Turn off "Public Bot" in the Discord Developer Portal.', extra={"markup": True}
-            )
-            await self.close()
-            return
+            if CONFIG.bot.bypass_public_bot_check:
+                logger.warning(
+                    "[yellow]You have enabled bypass_public_bot_check. This is highly not recommended. "
+                    'Make sure to turn off "Public Bot" in the Discord Developer Portal.',
+                    extra={"markup": True},
+                )
+            else:
+                logger.critical(
+                    '[bold red]Turn off "Public Bot" in the Discord Developer Portal.', extra={"markup": True}
+                )
+                await self.close()
+                return
 
         # Set the translator for the command tree. Should be done before syncing.
         await self.tree.set_translator(self.translator)
