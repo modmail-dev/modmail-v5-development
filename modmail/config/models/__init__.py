@@ -8,16 +8,9 @@ validate, and manage configuration settings for the bot.
 
 from __future__ import annotations
 
-from .bot_model import BotConfig
-from .config_model import Config
-from .logging_model import LoggingConfig
-from .mongodb_database_model import MongoDBDatabaseConfig
-from .sql_database_model import SQLDatabaseConfig
-
-__all__ = [
-    "BotConfig",
-    "Config",
-    "LoggingConfig",
-    "MongoDBDatabaseConfig",
-    "SQLDatabaseConfig",
-]
+from .bot_model import *
+from .config_model import *
+from .logging_model import *
+from .mongodb_database_model import *
+from .permission_model import *
+from .sql_database_model import *

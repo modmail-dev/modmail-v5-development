@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from modmail.backends import StatusType
+from modmail.enum import StatusType
 
 from .base import SQLBase
 

@@ -21,7 +21,9 @@
 #    to make sure everything is spelled correctly, looks the way it's supposed to, and is indented properly.
 #
 # 8. If you want to learn more about the YAML syntax,
-#    check out this helpful link: https://yaml.org/spec/1.2/spec.html
+#    check out these helpful links:
+#      * https://docs.ansible.com/ansible/latest/reference_appendices/YAMLSyntax.html
+#      * https://yaml.org/spec/1.2/spec.html
 # -----------------------------------------------------------------------------
 
 # TODO: Add .env keys to each config, and add tests for loading from .env.
@@ -101,6 +103,25 @@ mongodb_config:
     # This may be useful if you are using a self-signed certificate.
     # It's recommended to leave this set to false, otherwise you may be vulnerable to MITM attacks.
     # tls_allow_invalid_certificates: false
+
+permission:
+    # If set to true, users with the "Administrator" permission will be able to use all non-owner commands.
+    # discord_admin_bypass: true
+
+    # A mapping of command names to permission levels.
+    # You can use this to override the default permission levels for specific commands.
+    # The permission levels are:
+    #   * everyone
+    #   * staff
+    #   * manager
+    #   * admin
+    #   * owner
+    # Command names should be as appears in the code.
+    # For example, the `/status clear` command is called "status_clear_command" in the code (cogs/utility/commands/status.py).
+    # So you would use "status_clear" as the command name for the override.
+    # For most cases, the command name is the same as the actual command, but with underscores instead of spaces and dashes.
+    overrides:
+        some_command_name: staff
 
 # Configures the logging outputs of the bot.
 # If you're unsure what to set, leave this section default.

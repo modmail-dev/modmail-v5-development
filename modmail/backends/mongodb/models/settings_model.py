@@ -12,7 +12,7 @@ from beanie import Indexed  # type: ignore[reportUnknownVariableType]  # beanie 
 from beanie import Document
 from pydantic import BaseModel
 
-from modmail.backends import ActivityType, StatusType
+from modmail.enum import ActivityType, StatusType
 
 __all__ = [
     "MongoDBSettingsModel",

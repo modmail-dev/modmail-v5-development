@@ -13,8 +13,9 @@ from typing import TYPE_CHECKING
 from discord import app_commands
 from discord.ext import commands
 
-from modmail.backends.common import Activity, ActivityType, StatusType
+from modmail.backends.common import Activity
 from modmail.core import Bot, _, lazy_hybrid_group, wrap
+from modmail.enum import ActivityType, StatusType
 
 if TYPE_CHECKING:
     from .. import Utility

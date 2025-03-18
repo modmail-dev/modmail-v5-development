@@ -29,12 +29,12 @@ class LazyHybridCommand(Generic[T]):
     Allows the injection of the cog name into the __qualname__ of the callback function.
     """
 
-    __slot__ = ("func", "args", "kwargs", "wrappers")
+    __slot__ = ("callback", "args", "kwargs", "wrappers")
 
     base_func: Callable[..., Callable[[T], HcHg]] = staticmethod(commands.hybrid_command)
 
     def __init__(self, func: T, args: Any, kwargs: Any):
-        self.func = func
+        self.callback = func
         self.args = args
         self.kwargs = kwargs
 
@@ -49,7 +49,7 @@ class LazyHybridCommand(Generic[T]):
         """
         The name of the command.
         """
-        return self.func.__name__
+        return self.callback.__name__
 
     def get_commands(self, cog_name: str) -> dict[str, HcHg]:
         """
@@ -59,11 +59,11 @@ class LazyHybridCommand(Generic[T]):
         :return: A mapping of function names to commands.
         """
         # Set the __qualname__ of the function to include the cog name
-        if not self.func.__qualname__.startswith(f"{cog_name}."):
-            self.func.__qualname__ = f"{cog_name}.{self.name}"
+        if not self.callback.__qualname__.startswith(f"{cog_name}."):
+            self.callback.__qualname__ = f"{cog_name}.{self.name}"
 
         # Apply the wrappers to the function directly (app_command decorators does not work on command)
-        func = self.func
+        func = self.callback
         for wrapper_func, wrapper_args, wrapper_kwargs in self.wrappers:
             func = wrapper_func(*wrapper_args, **wrapper_kwargs)(func)
 

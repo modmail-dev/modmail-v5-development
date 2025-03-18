@@ -15,7 +15,8 @@ import discord
 from discord.ext import commands
 
 from .. import CONFIG, __version__
-from ..backends.common import Activity, ActivityType, DBClientBase, StatusType
+from ..backends.common import Activity, DBClientBase
+from ..enum import ActivityType, PermissionRequiredLevel, StatusType
 from ..errors import DatabaseError
 from .translator import Translator
 
@@ -83,10 +84,22 @@ class Bot(commands.Bot):
 
     async def setup_hook(self) -> None:
         """
-        This is called on bot start.
+        This is called on bot login.
 
         Syncs the bot command tree when the bot is updated.
         """
+        app_info = self.application
+        if app_info is None:
+            app_info = await self.application_info()
+
+        # Modmail should not be public, this is a safety check.
+        if app_info.bot_public:
+            logger.critical(
+                '[bold red]Turn off "Public Bot" in the Discord Developer Portal.', extra={"markup": True}
+            )
+            await self.close()
+            return
+
         # Set the translator for the command tree. Should be done before syncing.
         await self.tree.set_translator(self.translator)
 
@@ -289,6 +302,44 @@ class Bot(commands.Bot):
         logger.debug("Clearing bot presence.")
         await self.database_client.update_settings(activity=None, status=None)
         await self.set_bot_presence()
+
+    @staticmethod
+    def get_command_permission_level(ctx: commands.Context[Bot]) -> PermissionRequiredLevel:
+        """
+        Get the permission level of the command.
+        Returns "everyone" if no permission level is set.
+
+        :param ctx: The context of the command.
+        :return: The permission level of the command.
+        """
+        if ctx.command is None:  # When would this happen?
+            logger.debug("The context command is None? %s", ctx)
+            return PermissionRequiredLevel.everyone
+
+        default_permission: PermissionRequiredLevel | None = None
+
+        # If the command is a subcommand, if so, add the parents of the command (in reverse order).
+        commands_to_check = [ctx.command] + ctx.command.parents
+
+        for command in commands_to_check:
+            if default_permission is None:
+                # Check if the command has a permission level set.
+                if hasattr(ctx.command.callback, "__permission__"):
+                    # See: modmail/core/permission.py
+                    default_permission = ctx.command.callback.__permission__  # type: ignore[reportFunctionMemberAccess]
+
+            command_name: str = command.callback.__name__.casefold()
+            if command_name.endswith("_command"):
+                command_name = command_name[:-8]
+            else:
+                logger.debug("Command name does not end with _command: %s", command.qualified_name)
+            # Check if the command has a permission level override set in the config.
+            for key, value in CONFIG.permission.overrides.items():
+                if key.casefold() == command_name:
+                    return value
+
+        # If no permission level is set, assume everyone can use the command.
+        return default_permission or PermissionRequiredLevel.everyone
 
     # async def can_run(self, ctx: commands.Context[Bot], /, *, call_once: bool = False) -> bool:
     #     """

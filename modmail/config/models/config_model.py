@@ -9,20 +9,17 @@ that the configuration is correctly loaded and validated from various sources.
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Literal, TypeAlias, TypeVar
+from typing import Literal, TypeAlias, TypeVar
 
 from packaging.version import Version
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, ValidationInfo, field_validator
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from .bot_model import BotConfig
 from .logging_model import LoggingConfig
 from .mongodb_database_model import MongoDBDatabaseConfig
+from .permission_model import PermissionConfig
 from .sql_database_model import SQLDatabaseConfig
-
-if TYPE_CHECKING:
-    from pydantic import ValidationInfo
-    from pydantic_settings import PydanticBaseSettingsSource
 
 __all__ = ["Config"]
 
@@ -53,6 +50,7 @@ class Config(BaseSettings):
     database_type: SupportedDatabases
     sql_config: SQLDatabaseConfig | None = Field(None, validate_default=True)
     mongodb_config: MongoDBDatabaseConfig | None = Field(None, validate_default=True)
+    permission: PermissionConfig = Field(PermissionConfig(), validate_default=True)
     logging: LoggingConfig = Field(LoggingConfig(), validate_default=True)
 
     # Don't load .env when testing.
@@ -144,6 +142,16 @@ class Config(BaseSettings):
         """
         if v is None:
             return LoggingConfig()
+        return v
+
+    @field_validator("permission", mode="before")
+    @classmethod
+    def set_default_permission_config(cls, v: PermissionConfig | None) -> PermissionConfig:
+        """
+        Sets the default permission config if not provided.
+        """
+        if v is None:
+            return PermissionConfig()
         return v
 
     # TODO: Add a validator to check if the dependencies for the database type is installed
