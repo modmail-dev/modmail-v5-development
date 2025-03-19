@@ -8,5 +8,4 @@ from __future__ import annotations
 
 from .activity_model import *
 from .permission_group_model import *
-from .permission_override_model import *
 from .settings_model import *

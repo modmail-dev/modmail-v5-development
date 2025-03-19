@@ -16,14 +16,14 @@ from modmail.enum import StatusType
 from .base import SQLBase
 
 if TYPE_CHECKING:
-    from .activity_model import SQLActivityModel
+    from .activity_model import SQLActivityTable
 
 __all__ = [
-    "SQLSettingsModel",
+    "SQLSettingsTable",
 ]
 
 
-class SQLSettingsModel(SQLBase):
+class SQLSettingsTable(SQLBase):
     __tablename__ = "settings"
 
     bot_id: Mapped[int] = mapped_column(primary_key=True, unique=True)
@@ -32,6 +32,6 @@ class SQLSettingsModel(SQLBase):
     main_category_id: Mapped[int | None]
     fallback_category_id: Mapped[int | None]
     status: Mapped[StatusType | None]
-    activity: Mapped[SQLActivityModel | None] = relationship(
+    activity: Mapped[SQLActivityTable | None] = relationship(
         cascade="all, delete-orphan", passive_deletes=True, single_parent=True, lazy="joined"
     )

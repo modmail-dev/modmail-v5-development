@@ -8,6 +8,7 @@ Defines permission levels, activity types, and status types used by the bot.
 from __future__ import annotations
 
 import enum
+from typing import NamedTuple
 
 from discord import app_commands
 
@@ -52,6 +53,12 @@ class PermissionOverrideType(enum.Enum):
 
     allow = 1
     deny = 2
+
+
+# Technically, this is not an enum
+class PermissionGroupKey(NamedTuple):
+    group_id: int
+    group_type: PermissionGroupType
 
 
 class ActivityType(enum.Enum):

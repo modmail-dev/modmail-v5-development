@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from modmail.enum import PermissionGroupType, PermissionLevel
+from modmail.enum import PermissionGroupType, PermissionLevel, PermissionOverrideType
 
 __all__ = ["PermissionGroup"]
 
@@ -18,9 +18,12 @@ __all__ = ["PermissionGroup"]
 class PermissionGroup(BaseModel):
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
+    bot_id: int
     group_id: int
     group_type: PermissionGroupType
-    level: PermissionLevel
+    level: PermissionLevel | None
+
+    overrides: dict[str, PermissionOverrideType] = {}  # format: {command_name: allow/deny, ...}
 
     # tag: str | None = None
     # colour: str | None = None

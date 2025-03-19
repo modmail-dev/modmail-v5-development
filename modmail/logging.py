@@ -11,6 +11,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 import discord
+import sqlalchemy
 from rich.logging import RichHandler
 from rich.text import Text
 
@@ -47,7 +48,7 @@ def setup_logging() -> None:
         rich_tracebacks=True,
         tracebacks_show_locals=True,
         log_time_format=lambda dt: Text(dt.strftime("%X,%f")[:-3]),
-        tracebacks_suppress=[discord],
+        tracebacks_suppress=[discord, sqlalchemy],
     )
     handler.setFormatter(formatter)
     handler.setLevel(CONFIG.logging.console_level)

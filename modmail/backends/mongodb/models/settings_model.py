@@ -8,14 +8,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from beanie import Indexed  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
-from beanie import Document
+from beanie import Document, Indexed, Link  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
 from pydantic import BaseModel
 
 from modmail.enum import ActivityType, StatusType
 
 __all__ = [
-    "MongoDBSettingsModel",
+    "MongoDBSettingsDocument",
     "MongoDBActivityModel",
 ]
 
@@ -26,7 +25,7 @@ class MongoDBActivityModel(BaseModel):
     url: str | None = None  # url for streaming activity, 'None' not enforced for other types
 
 
-class MongoDBSettingsModel(Document):
+class MongoDBSettingsDocument(Document):
     bot_id: Annotated[int, Indexed(unique=True)]  # the bot ID
     last_ran_version: str | None = None  # the last version the bot was run on, None = first run
     slash_last_synced_version: str | None = None  # the last version the slash commands were synced on

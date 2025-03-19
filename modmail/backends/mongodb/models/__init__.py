@@ -8,8 +8,5 @@ Modules from this directory should not import from modmail.core.* (circular impo
 
 from __future__ import annotations
 
-from .settings_model import MongoDBSettingsModel
-
-__all__ = [
-    "MongoDBSettingsModel",
-]
+from .permission_group_model import *
+from .settings_model import *

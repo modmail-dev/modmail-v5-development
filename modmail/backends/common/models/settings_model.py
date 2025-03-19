@@ -11,8 +11,6 @@ from pydantic import BaseModel, ConfigDict
 from modmail.enum import StatusType
 
 from .activity_model import Activity
-from .permission_group_model import PermissionGroup
-from .permission_override_model import PermissionOverride
 
 __all__ = [
     "Settings",
@@ -29,7 +27,3 @@ class Settings(BaseModel):
     fallback_category_id: int | None
     status: StatusType | None
     activity: Activity | None
-
-    permission_groups: list[PermissionGroup] = []
-    # format: command_name: override_entry
-    permission_overrides: dict[str, PermissionOverride] = {}

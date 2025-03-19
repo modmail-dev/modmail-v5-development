@@ -106,7 +106,7 @@ mongodb_config:
 
 permission:
     # If set to true, users with the "Administrator" permission will be able to use all non-owner commands.
-    # discord_admin_bypass: true
+    discord_admin_bypass: true
 
     # A mapping of command names to permission levels.
     # You can use this to override the default permission levels for specific commands.

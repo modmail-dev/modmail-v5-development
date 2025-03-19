@@ -13,10 +13,10 @@ from modmail.enum import ActivityType
 
 from .base import SQLBase
 
-__all__ = ["SQLActivityModel"]
+__all__ = ["SQLActivityTable"]
 
 
-class SQLActivityModel(SQLBase):
+class SQLActivityTable(SQLBase):
     __tablename__ = "activity"
 
     bot_id: Mapped[int] = mapped_column(ForeignKey("settings.bot_id", ondelete="CASCADE"), primary_key=True)

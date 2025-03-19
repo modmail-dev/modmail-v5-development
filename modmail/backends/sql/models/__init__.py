@@ -8,10 +8,7 @@ Modules from this directory should not import from modmail.core.* (circular impo
 
 from __future__ import annotations
 
-from .activity_model import SQLActivityModel
-from .settings_model import SQLSettingsModel
-
-__all__ = [
-    "SQLActivityModel",
-    "SQLSettingsModel",
-]
+from .activity_model import *
+from .permission_group_model import *
+from .permission_group_override_model import *
+from .settings_model import *
