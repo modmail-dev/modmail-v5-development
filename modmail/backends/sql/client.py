@@ -12,7 +12,7 @@ import logging
 from concurrent.futures import ProcessPoolExecutor
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, event, select
+from sqlalchemy import and_, delete, event, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
@@ -293,18 +293,24 @@ class SQLClient(DBClientBase):
                 self.__permission_groups[group_key] = (group, self._make_perm_group_from_table(group))
                 logger.debug("Created new permission group in SQL database: %s", group_key)
 
-    async def delete_permission_group(self, group_id: int, group_type: PermissionGroupType) -> None:
+    async def delete_permission_group(self, group_id: int, group_type: PermissionGroupType | None) -> None:
         assert self._async_session is not None, "Session is not initialized."
 
-        group_key = PermissionGroupKey(group_id, group_type)
-        self.__permission_groups.pop(group_key, None)  # Remove from local cache
+        if group_type is None:
+            for key in list(self.__permission_groups.keys()):
+                if key.group_id == group_id:
+                    del self.__permission_groups[key]
+        else:
+            group_key = PermissionGroupKey(group_id, group_type)
+            self.__permission_groups.pop(group_key, None)  # Remove from local cache
 
         async with self._async_session() as session:
             query = delete(SQLPermissionGroupTable).where(
-                SQLPermissionGroupTable.bot_id == self._config.bot.bot_id,
-                SQLPermissionGroupTable.group_id == group_id,
-                SQLPermissionGroupTable.group_type == group_type,
+                and_(
+                    SQLPermissionGroupTable.bot_id == self._config.bot.bot_id,
+                    SQLPermissionGroupTable.group_id == group_id,
+                )
             )
             await session.execute(query)
             await session.commit()
-            logger.debug("Deleted permission group from SQL database: %s", group_key)
+            logger.debug("Deleted permission group from SQL database: %s", group_id)

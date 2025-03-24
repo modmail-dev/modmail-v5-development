@@ -21,7 +21,7 @@ class PermissionGroup(BaseModel):
     bot_id: int
     group_id: int
     group_type: PermissionGroupType
-    level: PermissionLevel | None
+    level: PermissionLevel | None = None
 
     overrides: dict[str, PermissionOverrideType] = {}  # format: {command_name: allow/deny, ...}
 

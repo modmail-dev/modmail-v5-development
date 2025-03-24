@@ -84,11 +84,11 @@ class DBClientBase(ABC):
         pass
 
     @abstractmethod
-    async def delete_permission_group(self, group_id: int, group_type: PermissionGroupType) -> None:
+    async def delete_permission_group(self, group_id: int, group_type: PermissionGroupType | None) -> None:
         """
         Delete a permission group from the database.
 
         :param group_id: The ID of the user/role.
-        :param group_type: The type of the group (user/role).
+        :param group_type: The type of the group (user/role). None if unknown.
         """
         pass

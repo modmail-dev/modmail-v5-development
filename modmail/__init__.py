@@ -7,7 +7,7 @@ It handles platform-specific configurations and ensures that logging is properly
 
 from __future__ import annotations
 
-__version__ = "5.0a1"
+__version__ = "5.0a2"
 
 import datetime
 import logging as _logging

@@ -19,7 +19,9 @@ if TYPE_CHECKING:
 
 
 @lazy_hybrid_group(
-    name=_("cmd-about-name"), fallback=_("cmd-about-fallback-name"), description=_("cmd-about-description")
+    name=_("ftl-cmd-about-name"),
+    fallback=_("ftl-cmd-about-fallback-name"),
+    description=_("ftl-cmd-about-description"),
 )
 async def about_command(self: Utility, ctx: commands.Context[Bot]) -> None:
     """
@@ -29,10 +31,12 @@ async def about_command(self: Utility, ctx: commands.Context[Bot]) -> None:
 
 
 @about_command.command(
-    name=_("cmd-about-version-name"), description=_("cmd-about-version-description"), with_app_command=False
+    name=_("ftl-cmd-about-version-name"),
+    description=_("ftl-cmd-about-version-description"),
+    with_app_command=False,
 )
 async def about_version_command(self: Utility, ctx: commands.Context[Bot]) -> None:
     """
     Show the version of the Modmail bot.
     """
-    await self.reply(ctx, _("cmd-about-version-message", version=self.bot.version), auto_embed=True)
+    await self.reply(ctx, _("ftl-cmd-about-version-message", version=self.bot.version), auto_embed=True)

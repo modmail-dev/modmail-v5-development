@@ -23,6 +23,19 @@ class PermissionLevel(enum.IntEnum):
     manager = 3
     admin = 4
 
+    def __locale_str__(self) -> app_commands.locale_str:
+        from .core import _
+
+        match self:
+            case PermissionLevel.everyone:
+                return _("ftl-perm-level-everyone")
+            case PermissionLevel.staff:
+                return _("ftl-perm-level-staff")
+            case PermissionLevel.manager:
+                return _("ftl-perm-level-manager")
+            case PermissionLevel.admin:
+                return _("ftl-perm-level-admin")
+
 
 class PermissionRequiredLevel(enum.IntEnum):
     """
@@ -35,6 +48,21 @@ class PermissionRequiredLevel(enum.IntEnum):
     manager = 3
     admin = 4
     owner = 5
+
+    def __locale_str__(self) -> app_commands.locale_str:
+        from .core import _
+
+        match self:
+            case PermissionRequiredLevel.everyone:
+                return _("ftl-perm-level-everyone")
+            case PermissionRequiredLevel.staff:
+                return _("ftl-perm-level-staff")
+            case PermissionRequiredLevel.manager:
+                return _("ftl-perm-level-manager")
+            case PermissionRequiredLevel.admin:
+                return _("ftl-perm-level-admin")
+            case PermissionRequiredLevel.owner:
+                return _("ftl-perm-level-owner")
 
 
 class PermissionGroupType(enum.Enum):
@@ -69,29 +97,28 @@ class ActivityType(enum.Enum):
     custom = 4
     competing = 5
 
-    @property
-    def official_name(self) -> app_commands.locale_str:
+    def __locale_str__(self) -> app_commands.locale_str:
         """
         Returns a locale_str representation of the Discord prefix for the activity type.
 
         e.g. "playing" -> "playing", "listening" -> "listening to", etc.
         """
         # noinspection PyProtectedMember
-        from modmail.core import _
+        from .core import _
 
         match self:
             case ActivityType.playing:
-                return _("model-activity-playing-name")
+                return _("ftl-model-activity-playing-name")
             case ActivityType.streaming:
-                return _("model-activity-streaming-name")
+                return _("ftl-model-activity-streaming-name")
             case ActivityType.listening:
-                return _("model-activity-listening-name")
+                return _("ftl-model-activity-listening-name")
             case ActivityType.watching:
-                return _("model-activity-watching-name")
+                return _("ftl-model-activity-watching-name")
             case ActivityType.competing:
-                return _("model-activity-competing-name")
+                return _("ftl-model-activity-competing-name")
             case ActivityType.custom:
-                return _("flt-blank")
+                return _("ftl-blank")
 
 
 class StatusType(enum.Enum):
@@ -114,29 +141,11 @@ class StatusType(enum.Enum):
             case StatusType.offline:
                 return "Offline"
 
-    @property
-    def official_name(self) -> app_commands.locale_str:
+    def __locale_str__(self) -> app_commands.locale_str:
         """
         Returns a locale_str of the localized name of the status.
         """
         # noinspection PyProtectedMember
         from .core import _
 
-        match self:
-            case StatusType.online:
-                return _("model-status-online-name")
-            case StatusType.idle:
-                return _("model-status-idle-name")
-            case StatusType.dnd:
-                return _("model-status-dnd-name")
-            case StatusType.offline:
-                return _("model-status-offline-name")
-
-    def __locale_str__(self) -> app_commands.locale_str:
-        """
-        Returns a locale_str of the localized name of the status.
-        """
-        # noinspection PyProtectedMember
-        from modmail.core import _
-
-        return _(f"model-status-text", status=self.name)
+        return _("ftl-model-status-text", status=self.name)

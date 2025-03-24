@@ -33,42 +33,42 @@ version: "1.0"
 
 # General bot settings
 bot:
-    # Required: The bot's token, REPLACE WITH YOUR BOT'S TOKEN!
-    token: "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.12345.XYZ"
+  # Required: The bot's token, REPLACE WITH YOUR BOT'S TOKEN!
+  token: "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.12345.XYZ"
 
-    # Required: The ID of your staff server (the server where new threads/tickets will be created).
-    # To find your server's ID, see https://dis.gd/findmyid.
-    # 1. Enable Developer Mode in your Discord settings.
-    # 2. Right-click on your server's icon in the server list.
-    # 3. Click "Copy ID".
-    staff_server_id: 100000000000001
+  # Required: The ID of your staff server (the server where new threads/tickets will be created).
+  # To find your server's ID, see https://dis.gd/findmyid.
+  # 1. Enable Developer Mode in your Discord settings.
+  # 2. Right-click on your server's icon in the server list.
+  # 3. Click "Copy ID".
+  staff_server_id: 100000000000001
 
-    # The bot's prefix, set to "" to disable prefixed commands (only allow slash commands).
-    prefix: "?"
+  # The bot's prefix, set to "" to disable prefixed commands (only allow slash commands).
+  prefix: "?"
 
-    # Whether the bot should respond to mentions. Only applicable if the bot has a prefix set.
-    respond_bot_mention: true
+  # Whether the bot should respond to mentions. Only applicable if the bot has a prefix set.
+  respond_bot_mention: true
 
-    # The ID of the bot's owner(s). Defaults to the bot application's owner if not set.
-    # To find your user ID, see https://dis.gd/findmyid.
-    # If the bot is owned by a team, the owner IDs will, by default, be the IDs of the team members.
-    owner_ids:
-        - 100000000000001
-    #   - 100000000000002
-    #   - 100000000000003
+  # The ID of the bot's owner(s). Defaults to the bot application's owner if not set.
+  # To find your user ID, see https://dis.gd/findmyid.
+  # If the bot is owned by a team, the owner IDs will, by default, be the IDs of the team members.
+  owner_ids:
+    - 100000000000001
+  #   - 100000000000002
+  #   - 100000000000003
 
-    # Whether to use slash commands (i.e. /cmd). If set to false, the bot will only respond to prefixed commands.
-    use_slash_commands: true
+  # Whether to use slash commands (i.e. /cmd). If set to false, the bot will only respond to prefixed commands.
+  use_slash_commands: true
 
-    # Whether to force sync/un-sync slash commands to/from the bot's application.
-    # Only set to true if you are using a development version of the bot and slash commands are not syncing properly.
-    # Modmail should automatically sync and un-sync slash commands.
-    # force_sync_commands: false
+  # Whether to force sync/un-sync slash commands to/from the bot's application.
+  # Only set to true if you are using a development version of the bot and slash commands are not syncing properly.
+  # Modmail should automatically sync and un-sync slash commands.
+  # force_sync_commands: false
 
-    # Whether to enable jishaku. This is a development tool that allows you to run Python code in Discord.
-    # It is not recommended to enable this in production, as it can be a security risk.
-    # Must install the jishaku package with "pdm install -G debug" to enable.
-    # enable_jishaku: false
+  # Whether to enable jishaku. This is a development tool that allows you to run Python code in Discord.
+  # It is not recommended to enable this in production, as it can be a security risk.
+  # Must install the jishaku package with "pdm install -G debug" to enable.
+  # enable_jishaku: false
 
 # Which locales the bot should support. This is used to determine the languages used by the bot.
 # Currently supported locales are:
@@ -84,86 +84,86 @@ database_type: "mongodb"
 
 # Configurations for the SQL database type. Only required if database_type is sql.
 sql_config:
-    # Required: The SQL connection URI, supported SQL databases are:
-    #   * SQLite
-    # Example for SQLite: "sqlite+aiosqlite:///modmail.db"
-    # Example for PostgreSQL: "postgresql+asyncpg://user:password@localhost/modmail"
-    uri: "sqlite+aiosqlite:///modmail.db"
+  # Required: The SQL connection URI, supported SQL databases are:
+  #   * SQLite
+  # Example for SQLite: "sqlite+aiosqlite:///modmail.db"
+  # Example for PostgreSQL: "postgresql+asyncpg://user:password@localhost/modmail"
+  uri: "sqlite+aiosqlite:///modmail.db"
 
 # Configurations for the MongoDB database type. Only required if database_type is mongodb.
 mongodb_config:
-    # Required: The MongoDB connection URI
-    # See https://docs.mongodb.com/manual/reference/connection-string/ for more information.
-    uri: "mongodb://localhost:27017"
+  # Required: The MongoDB connection URI
+  # See https://docs.mongodb.com/manual/reference/connection-string/ for more information.
+  uri: "mongodb://localhost:27017"
 
-    # The MongoDB database name. Will use the database name from the URI if this is not set.
-    # database: "modmail"
+  # The MongoDB database name. Will use the database name from the URI if this is not set.
+  # database: "modmail"
 
-    # Whether to enforce TLS trusted certificates for the MongoDB connection.
-    # This may be useful if you are using a self-signed certificate.
-    # It's recommended to leave this set to false, otherwise you may be vulnerable to MITM attacks.
-    # tls_allow_invalid_certificates: false
+  # Whether to enforce TLS trusted certificates for the MongoDB connection.
+  # This may be useful if you are using a self-signed certificate.
+  # It's recommended to leave this set to false, otherwise you may be vulnerable to MITM attacks.
+  # tls_allow_invalid_certificates: false
 
 permission:
-    # If set to true, users with the "Administrator" permission will be able to use all non-owner commands.
-    discord_admin_bypass: true
+  # If set to true, users with the "Administrator" permission will be able to use all non-owner commands.
+  discord_admin_bypass: true
 
-    # A mapping of command names to permission levels.
-    # You can use this to override the default permission levels for specific commands.
-    # The permission levels are:
-    #   * everyone
-    #   * staff
-    #   * manager
-    #   * admin
-    #   * owner
-    # Command names should be as appears in the code.
-    # For example, the `/status clear` command is called "status_clear_command" in the code (cogs/utility/commands/status.py).
-    # So you would use "status_clear" as the command name for the override.
-    # For most cases, the command name is the same as the actual command, but with underscores instead of spaces and dashes.
-    overrides:
-        some_command_name: staff
+  # A mapping of command names to permission levels.
+  # You can use this to override the default permission levels for specific commands.
+  # The permission levels are (use English here):
+  #   * everyone
+  #   * staff
+  #   * manager
+  #   * admin
+  #   * owner
+  # Command names should be as appears in the code.
+  # For example, the `/status clear` command is called "status_clear_command" in the code (cogs/utility/commands/status.py).
+  # So you would use "status_clear" as the command name for the override.
+  # For most cases, the command name is the same as the actual command, but with underscores instead of spaces and dashes.
+  overrides:
+    some_command_name: staff
 
 # Configures the logging outputs of the bot.
 # If you're unsure what to set, leave this section default.
 logging:
-    # Whether Modmail should configure logging.
-    enabled: true
+  # Whether Modmail should configure logging.
+  enabled: true
 
-    # The root logging level (any other levels set in the following configs cannot be lower than this level).
-    # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
-    # root_level: "DEBUG"
+  # The root logging level (any other levels set in the following configs cannot be lower than this level).
+  # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+  # root_level: "DEBUG"
 
-    # The logging level for the console. Default is INFO to reduce spam from DEBUG messages.
-    # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
-    # console_level: "INFO"
+  # The logging level for the console. Default is INFO to reduce spam from DEBUG messages.
+  # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+  # console_level: "INFO"
 
-    # The logging level for the logfile. Default logs everything to the logfile.
-    # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
-    # logfile_level: "DEBUG"
+  # The logging level for the logfile. Default logs everything to the logfile.
+  # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+  # logfile_level: "DEBUG"
 
-    # The logging format for the console. (The level is already prepended to the message).
-    # See the possible variables here: https://docs.python.org/3/library/logging.html#logrecord-attributes.
-    # stdout_format: "%(message)s"
+  # The logging format for the console. (The level is already prepended to the message).
+  # See the possible variables here: https://docs.python.org/3/library/logging.html#logrecord-attributes.
+  # stdout_format: "%(message)s"
 
-    # The logging file location, set to "" to disable logging to a file.
-    # logfile: "modmail.log"
+  # The logging file location, set to "" to disable logging to a file.
+  # logfile: "modmail.log"
 
-    # The logging format for the logfile.
-    # See the possible variables here: https://docs.python.org/3/library/logging.html#logrecord-attributes.
-    # logfile_format: "%(asctime)s %(levelname)s %(name)s:%(lineno)d %(message)s"
+  # The logging format for the logfile.
+  # See the possible variables here: https://docs.python.org/3/library/logging.html#logrecord-attributes.
+  # logfile_format: "%(asctime)s %(levelname)s %(name)s:%(lineno)d %(message)s"
 
-    # The maximum size of each logfile, in bytes. Defaults to 35MB.
-    # logfile_max_size: 36700160
+  # The maximum size of each logfile, in bytes. Defaults to 35MB.
+  # logfile_max_size: 36700160
 
-    # The number of logfile backups to keep. Default no backups.
-    # logfile_backup_count: 0
+  # The number of logfile backups to keep. Default no backups.
+  # logfile_backup_count: 0
 
-    # Configure the logging levels for discord.py's internal loggers.
-    # It's suggested to leave these at their default values for easier debugging.
-    # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
-    # discord_level: "INFO"
-    # discord_state_level: "INFO"
-    # discord_http_level: "INFO"
-    # discord_gateway_level: "info"
+  # Configure the logging levels for discord.py's internal loggers.
+  # It's suggested to leave these at their default values for easier debugging.
+  # Valid options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+  # discord_level: "INFO"
+  # discord_state_level: "INFO"
+  # discord_http_level: "INFO"
+  # discord_gateway_level: "info"
 
-    # TODO: add sentry support
+  # TODO: add sentry support

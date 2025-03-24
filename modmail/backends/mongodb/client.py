@@ -258,12 +258,16 @@ class MongoDBClient(DBClientBase):
             self.__permission_groups[group_key] = (group, PermissionGroup.model_validate(group))
             logger.debug("Created new permission group %s in MongoDB.", group_key)
 
-    async def delete_permission_group(self, group_id: int, group_type: PermissionGroupType) -> None:
-        group_key = PermissionGroupKey(group_id, group_type)
-        self.__permission_groups.pop(group_key, None)  # Remove from local cache
+    async def delete_permission_group(self, group_id: int, group_type: PermissionGroupType | None) -> None:
+        if group_type is None:
+            for key in list(self.__permission_groups.keys()):
+                if key.group_id == group_id:
+                    del self.__permission_groups[key]
+        else:
+            group_key = PermissionGroupKey(group_id, group_type)
+            self.__permission_groups.pop(group_key, None)  # Remove from local cache
         await MongoDBPermissionGroupDocument.find(
             MongoDBPermissionGroupDocument.bot_id == self._config.bot.bot_id
             and MongoDBPermissionGroupDocument.group_id == group_id
-            and MongoDBPermissionGroupDocument.group_type == group_type
         ).delete()
-        logger.debug("Deleted permission group %s from MongoDB.", group_key)
+        logger.debug("Deleted permission group %d from MongoDB.", group_id)

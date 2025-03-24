@@ -9,15 +9,14 @@ authors = [
     {name = "Taaku18", email = "taku@modmail.dev"},
 ]
 readme = "README.md"
-requires-python = ">=3.13"
-license = {text = "AGPL-3.0-or-later"}
-license-files = ["LICEN[CS]E.*"]
+requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+license-files = ["LICEN[CS]E*"]
 dynamic = ["version"]
 
 keywords = ["discord", "discord-bot", "modmail", "python", "discord.py", "discord-modmail"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Framework :: AsyncIO",
     "Environment :: Console",
     "Natural Language :: English",
@@ -25,6 +24,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Communications :: Chat",
     "Topic :: Communications :: Conferencing",
@@ -51,20 +51,24 @@ sqlite = [
     "alembic<1.16,>=1.15.1"
 ]
 mongodb = [
-    "beanie[srv]~=1.29.0",
+    "beanie[srv] @ git+https://github.com/Taaku18/beanie@change-toml-dependency",
 ]
 all = [
     "modmail[speed,sqlite,mongodb]",
 ]
 
 [dependency-groups]
-lint = [
+dev = [
     "black>=25.1.0",
     "pyright>=1.1.396",
     "isort>=6.0.1",
-]
-tools = [
     "pre-commit<5,>=4.1.0",
+    "pytest<9,>=8.3.5",
+    # When updating pytest plugins, update it below in the pytest "required_plugins" section too
+    "pytest-mock<4,>=3.14.0",
+    "pytest-asyncio<1,>=0.25.3",
+    "pytest-cov<7,>=6.0.0",
+    "mock"  # used by pytest-mock
 ]
 debug = [
     "jishaku<2.7,>=2.6.0",
@@ -97,31 +101,61 @@ combine_star = true
 # Using black as linter for now, may switch to ruff in the future.
 [tool.black]
 line-length = 115
-target-version = ['py313']
+target-version = ['py312']
 include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-  | \.venv
-  | \.env
-  | venv
-  | env
-  | __pycache__
-  | dist
-)/
-'''
 
 [tool.pyright]
 exclude = [
     "**/__pycache__",
+    "**/.tox",
     "**/venv",
     "**/env",
     "**/.venv",
     "**/.env",
     "dist",
 ]
-reportMissingImports = true
-reportUnnecessaryTypeIgnoreComment = "error"
-pythonVersion = "3.13"
+reportUnnecessaryTypeIgnoreComment = "warning"
+reportPropertyTypeMismatch = "error"
+pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "strict"
+
+[tool.pytest.ini_options]
+mock_use_standalone_module = true
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--cov=modmail --cov-report html"
+testpaths = ["tests"]
+required_plugins = ["pytest-mock<4,>=3.14.0", "pytest-asyncio<1,>=0.25.3", "pytest-cov<7,>=6.0.0"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if \"pytest\" not in sys.modules:",
+    "raise NotImplementedError",
+    "raise AssertionError",
+]
+
+# To run tox development automation: `pip install tox tox-pdm`, then run `tox`.
+[tool.tox]
+min_version = "4"
+requires = ["tox-pdm"]
+envlist = ["py12", "py13", "lint", "pyright"]
+
+[tool.tox.env_run_base]
+description = "Run test under {base_python}"
+groups = ["all", "dev"]
+commands = [["pytest"]]
+
+[tool.tox.env.lint]
+description = "run linters (pre-commit)"
+skip_install = true
+deps = ["pre-commit<5,>=4.1.0"]
+commands = [["pre-commit", { replace = "posargs", default = ["run", "--all-files"], extend = true} ]]
+
+[tool.tox.env.pyright]
+description = "run pyright"
+groups = ["all"]
+commands = [
+    ["pyright", { replace = "posargs", extend = true}],
+]

@@ -49,5 +49,5 @@ class Activity(BaseModel):
         from modmail.core import _
 
         return _(
-            "model-activity-text", activity_type=self.type.name, activity_name=self.name, activity_url=self.url
+            "ftl-model-activity-text", activity_type=self.type, activity_name=self.name, activity_url=self.url
         )
