@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Type, cast
+from typing import TYPE_CHECKING, NamedTuple, Type, cast
 
 import discord
 from discord.ext import commands
@@ -155,85 +155,23 @@ async def make_perm_customize_view(
     return PermCustomizeView
 
 
-@lazy_hybrid_group(
-    name=_("ftl-cmd-perm-name"),
-    fallback=_("ftl-cmd-perm-fallback-name"),
-    description=_("ftl-cmd-perm-description"),
-)
-async def perm_command(self: Utility, ctx: commands.Context[Bot]) -> None:
+class GroupDetail(NamedTuple):
+    mention: str
+    id_: int
+    type_: PermissionGroupType | None
+
+
+def _get_group_detail(
+    *, user: discord.User | None = None, role: discord.Role | None = None, id_: int | None = None
+) -> GroupDetail | None:
     """
-    View the currently set perm.
+    Get a sanitized GroupDetail from the raw user/role/id_ command inputs.
+
+    :param user: The group user if type is user.
+    :param role: The group role if type is role.
+    :param id_: The group_id if type is unknown.
+    :return: A GroupDetail of the user/role/id_, None if no input was provided.
     """
-    ...
-
-
-@perm_command.command(name=_("ftl-cmd-perm-add-name"), description=_("ftl-cmd-perm-add-description"))
-async def add_command(
-    self: Utility,
-    ctx: commands.Context[Bot],
-    user: discord.User | None = None,
-    role: discord.Role | None = None,
-) -> None:
-    """
-    Add a user/role to the staff list.
-    """
-    if role is not None and user is not None:
-        await self.reply(ctx, _("ftl-cmd-perm-add-both"))
-        return
-
-    if role is None and user is None:
-        await self.reply(ctx, _("ftl-cmd-perm-add-none"))
-        return
-
-    group_mention: str
-    group_id: int
-    group_type: PermissionGroupType
-    if role is not None:
-        if role.is_default():
-            group_mention = "@everyone"
-        else:
-            group_mention = role.mention
-        group_id = role.id
-        group_type = PermissionGroupType.role
-    else:
-        assert user is not None  # Fix pyright type check, user cannot be None here
-        group_mention = user.mention
-        group_id = user.id
-        group_type = PermissionGroupType.user
-
-    # Check if the user/role is already in the staff list
-    existing_group = self.bot.database_client.get_permission_group(group_id, group_type)
-    if existing_group is not None:
-        await self.reply(ctx, _("ftl-cmd-perm-add-already-exists", group=group_mention))
-        return
-
-    new_group = PermissionGroup(bot_id=CONFIG.bot.bot_id, group_id=group_id, group_type=group_type)
-    await self.bot.database_client.update_permission_group(new_group)
-
-    view = (await make_perm_customize_view(self, ctx, new_group))()
-    message = await self.reply(ctx, _("ftl-cmd-perm-add-success", group=group_mention), view=view)
-    view.set_original_message(message)
-
-
-@perm_command.command(name=_("ftl-cmd-perm-remove-name"), description=_("ftl-cmd-perm-remove-description"))
-async def remove_command(
-    self: Utility,
-    ctx: commands.Context[Bot],
-    role: discord.Role | None = None,
-    user: discord.User | None = None,
-    id_: int | None = None,  # in case role/user was deleted
-) -> None:
-    """
-    Remove a user/role from the staff list.
-    """
-    if role is not None and user is not None:
-        await self.reply(ctx, _("ftl-cmd-perm-remove-both"))
-        return
-
-    if role is None and user is None and id_ is None:
-        await self.reply(ctx, _("ftl-cmd-perm-remove-none"))
-        return
-
     group_mention: str
     group_id: int
     group_type: PermissionGroupType | None
@@ -249,10 +187,114 @@ async def remove_command(
         group_mention = user.mention
         group_id = user.id
         group_type = PermissionGroupType.user
-    else:
+    elif id_ is not None:
         group_mention = f"`{id_}`"
         group_id = id_
         group_type = None
+    else:
+        return None
+    return GroupDetail(group_mention, group_id, group_type)
 
-    await self.bot.database_client.delete_permission_group(group_id=group_id, group_type=group_type)
-    await self.reply(ctx, _("ftl-cmd-perm-remove-success", group=group_mention))
+
+@lazy_hybrid_group(
+    name=_("ftl-cmd-perm-name"),
+    fallback=_("ftl-cmd-perm-fallback-name"),
+    description=_("ftl-cmd-perm-description"),
+)
+async def perm_command(self: Utility, ctx: commands.Context[Bot]) -> None:
+    """
+    View the currently set perm.
+    """
+    ...
+
+
+@perm_command.command(name=_("ftl-cmd-perm-add-name"), description=_("ftl-cmd-perm-add-description"))
+async def perm_add_command(
+    self: Utility,
+    ctx: commands.Context[Bot],
+    user: discord.User | None = None,
+    role: discord.Role | None = None,
+) -> None:
+    """
+    Add a user/role to the staff list.
+    """
+    if role is not None and user is not None:
+        await self.reply(ctx, _("ftl-cmd-perm-add-both"))
+        return
+
+    group_detail = _get_group_detail(user=user, role=role)
+
+    if group_detail is None:
+        await self.reply(ctx, _("ftl-cmd-perm-add-none"))
+        return
+    assert group_detail.type_ is not None, "Group type cannot be None"
+
+    # Check if the user/role is already in the staff list
+    existing_group = self.bot.database_client.get_permission_group(group_detail.id_, group_detail.type_)
+    if existing_group is not None:
+        await self.reply(ctx, _("ftl-cmd-perm-add-already-exists", group=group_detail.mention))
+        return
+
+    new_group = PermissionGroup(bot_id=CONFIG.bot.bot_id, group_id=group_detail.id_, group_type=group_detail.type_)
+    await self.bot.database_client.update_permission_group(new_group)
+
+    view = (await make_perm_customize_view(self, ctx, new_group))()
+    message = await self.reply(ctx, _("ftl-cmd-perm-add-success", group=group_detail.mention), view=view)
+    view.set_original_message(message)
+
+
+@perm_command.command(name=_("ftl-cmd-perm-remove-name"), description=_("ftl-cmd-perm-remove-description"))
+async def perm_remove_command(
+    self: Utility,
+    ctx: commands.Context[Bot],
+    role: discord.Role | None = None,
+    user: discord.User | None = None,
+    id_: int | None = None,  # in case role/user was deleted
+) -> None:
+    """
+    Remove a user/role from the staff list.
+    """
+    if role is not None and user is not None:
+        await self.reply(ctx, _("ftl-cmd-perm-remove-both"))
+        return
+
+    group_detail = _get_group_detail(user=user, role=role, id_=id_)
+    if group_detail is None:
+        await self.reply(ctx, _("ftl-cmd-perm-remove-none"))
+        return
+
+    await self.bot.database_client.delete_permission_group(
+        group_id=group_detail.id_, group_type=group_detail.type_
+    )
+    await self.reply(ctx, _("ftl-cmd-perm-remove-success", group=group_detail.mention))
+
+
+@perm_command.command(name=_("ftl-cmd-perm-customize-name"), description=_("ftl-cmd-perm-customize-description"))
+async def perm_customize_command(
+    self: Utility,
+    ctx: commands.Context[Bot],
+    user: discord.User | None = None,
+    role: discord.Role | None = None,
+) -> None:
+    """
+    Customize a user/role's attributes.
+    """
+    if role is not None and user is not None:
+        await self.reply(ctx, _("ftl-cmd-perm-customize-both"))
+        return
+
+    group_detail = _get_group_detail(user=user, role=role)
+    if group_detail is None:
+        await self.reply(ctx, _("ftl-cmd-perm-customize-none"))
+        return
+    assert group_detail.type_ is not None, "Group type cannot be None"
+
+    # Check if the user/role is not in the staff list
+    group = self.bot.database_client.get_permission_group(group_detail.id_, group_detail.type_)
+    if group is None:
+        await self.reply(ctx, _("ftl-cmd-perm-customize-not-found", group=group_detail.mention))
+        return
+
+    view = (await make_perm_customize_view(self, ctx, group))()
+    message = await self.reply(ctx, _("ftl-cmd-perm-customize-message", group=group_detail.mention), view=view)
+    view.set_original_message(message)

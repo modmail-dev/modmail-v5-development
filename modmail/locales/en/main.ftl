@@ -67,9 +67,18 @@ ftl-cmd-perm-add-success = Added { $group } to the ACL list.
 
 ftl-cmd-perm-remove-name = remove
 ftl-cmd-perm-remove-description = Remove a user or role from the ACL list.
-ftl-cmd-perm-remove-both = { -ftl-cmd-perm-add-both }
-ftl-cmd-perm-remove-none = { -ftl-cmd-perm-add-none }
+ftl-cmd-perm-remove-both = { ftl-cmd-perm-add-both }
+ftl-cmd-perm-remove-none = { ftl-cmd-perm-add-none }
 ftl-cmd-perm-remove-success = Removed { $group } from the ACL list.
+
+## Subcommand: Utility.perm.customize
+
+ftl-cmd-perm-customize-name = customize
+ftl-cmd-perm-customize-description = Modify customizable settings of an ACL user or role.
+ftl-cmd-perm-customize-both = { ftl-cmd-perm-add-both }
+ftl-cmd-perm-customize-none = { ftl-cmd-perm-add-none }
+ftl-cmd-perm-customize-not-found = The user or role does not exist in the ACL list.
+ftl-cmd-perm-customize-message = Customizing { $group }.
 
 ### ========================
 ###         Messages
