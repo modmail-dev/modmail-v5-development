@@ -58,8 +58,6 @@ ftl-view-perm-select-level-success = Successfully set the permission level to { 
 
 ftl-cmd-perm-add-name = add
 ftl-cmd-perm-add-description = Add a user or role to the ACL list.
-ftl-cmd-perm-add-both = User and role cannot be used at the same time.
-ftl-cmd-perm-add-none = Please provide either a user or role.
 ftl-cmd-perm-add-already-exists = The user or role already exists in the ACL list.
 ftl-cmd-perm-add-success = Added { $group } to the ACL list.
 
@@ -67,18 +65,37 @@ ftl-cmd-perm-add-success = Added { $group } to the ACL list.
 
 ftl-cmd-perm-remove-name = remove
 ftl-cmd-perm-remove-description = Remove a user or role from the ACL list.
-ftl-cmd-perm-remove-both = { ftl-cmd-perm-add-both }
-ftl-cmd-perm-remove-none = { ftl-cmd-perm-add-none }
+ftl-cmd-perm-remove-both = Please only enter a user, role, or ID.
+ftl-cmd-perm-remove-none = Please provide either a user, role, or ID.
 ftl-cmd-perm-remove-success = Removed { $group } from the ACL list.
 
 ## Subcommand: Utility.perm.customize
 
 ftl-cmd-perm-customize-name = customize
 ftl-cmd-perm-customize-description = Modify customizable settings of an ACL user or role.
-ftl-cmd-perm-customize-both = { ftl-cmd-perm-add-both }
-ftl-cmd-perm-customize-none = { ftl-cmd-perm-add-none }
 ftl-cmd-perm-customize-not-found = The user or role does not exist in the ACL list.
 ftl-cmd-perm-customize-message = Customizing { $group }.
+
+## Subgroup: Utility.perm.override
+ftl-cmd-perm-override-name = override
+ftl-cmd-perm-override-description = Explicitly grant/deny a user or role access to a command.
+
+## Subcommand: Utility.perm.override.allow
+ftl-cmd-perm-override-allow-name = allow
+ftl-cmd-perm-override-allow-description = Allow a user or role to use a command.
+ftl-cmd-perm-override-allow-success = Allowed { $group } to use the command.
+
+## Subcommand: Utility.perm.override.deny
+ftl-cmd-perm-override-deny-name = deny
+ftl-cmd-perm-override-deny-description = Deny a user or role to use a command.
+ftl-cmd-perm-override-deny-success = Denied { $group } to use the command.
+
+## Subcommand: Utility.perm.override.unset
+ftl-cmd-perm-override-unset-name = unset
+ftl-cmd-perm-override-unset-description = Unset a permission override for a user or role on a command.
+ftl-cmd-perm-override-unset-success = Unset the permission override for { $group } on { $command }.
+ftl-cmd-perm-override-unset-group-not-found = The user or role does not exist in the ACL list.
+ftl-cmd-perm-override-unset-override-not-found = The permission override does not exist for the user or role.
 
 ### ========================
 ###         Messages

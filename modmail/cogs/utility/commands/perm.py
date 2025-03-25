@@ -1,3 +1,10 @@
+"""
+modmail.cogs.utility.commands.perm
+==================================
+This file implements permission management commands for the modmail bot. It defines
+several commands for adding, removing, customizing, and overriding permissions for users/roles.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -12,12 +19,12 @@ from modmail.core import Bot, _, lazy_hybrid_group
 
 __all__ = ["perm_command"]
 
-from modmail.enum import PermissionGroupType, PermissionLevel
+from modmail.enum import PermissionGroupType, PermissionLevel, PermissionOverrideType
 
 if TYPE_CHECKING:
     from .. import Utility
 
-    class PermCustomizeView(discord.ui.View):
+    class CustomizeView(discord.ui.View):
         _original_message: discord.Message | None
 
         def set_original_message(self, message: discord.Message) -> None: ...
@@ -28,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 async def make_perm_customize_view(
     cog: Utility, ctx: commands.Context[Bot], group: PermissionGroup
-) -> Type[PermCustomizeView]:
+) -> Type[CustomizeView]:
     """
     Create a view for customizing permissions.
     This view contains a "Customize" button and a select menu for choosing a permission level.
@@ -162,13 +169,12 @@ class GroupDetail(NamedTuple):
 
 
 def _get_group_detail(
-    *, user: discord.User | None = None, role: discord.Role | None = None, id_: int | None = None
+    *, user_or_role: discord.User | discord.Role | None = None, id_: int | None = None
 ) -> GroupDetail | None:
     """
     Get a sanitized GroupDetail from the raw user/role/id_ command inputs.
 
-    :param user: The group user if type is user.
-    :param role: The group role if type is role.
+    :param user_or_role: The discord User or Role when the type is known.
     :param id_: The group_id if type is unknown.
     :return: A GroupDetail of the user/role/id_, None if no input was provided.
     """
@@ -176,17 +182,17 @@ def _get_group_detail(
     group_id: int
     group_type: PermissionGroupType | None
 
-    if role is not None:
-        if role.is_default():
-            group_mention = "@everyone"
+    if user_or_role is not None:
+        group_id = user_or_role.id
+        if isinstance(user_or_role, discord.Role):
+            if user_or_role.is_default():
+                group_mention = "@everyone"
+            else:
+                group_mention = user_or_role.mention
+            group_type = PermissionGroupType.role
         else:
-            group_mention = role.mention
-        group_id = role.id
-        group_type = PermissionGroupType.role
-    elif user is not None:
-        group_mention = user.mention
-        group_id = user.id
-        group_type = PermissionGroupType.user
+            group_mention = user_or_role.mention
+            group_type = PermissionGroupType.user
     elif id_ is not None:
         group_mention = f"`{id_}`"
         group_id = id_
@@ -210,23 +216,15 @@ async def perm_command(self: Utility, ctx: commands.Context[Bot]) -> None:
 
 @perm_command.command(name=_("ftl-cmd-perm-add-name"), description=_("ftl-cmd-perm-add-description"))
 async def perm_add_command(
-    self: Utility,
-    ctx: commands.Context[Bot],
-    user: discord.User | None = None,
-    role: discord.Role | None = None,
+    self: Utility, ctx: commands.Context[Bot], user_or_role: discord.User | discord.Role
 ) -> None:
     """
     Add a user/role to the staff list.
     """
-    if role is not None and user is not None:
-        await self.reply(ctx, _("ftl-cmd-perm-add-both"))
-        return
 
-    group_detail = _get_group_detail(user=user, role=role)
+    group_detail = _get_group_detail(user_or_role=user_or_role)
 
-    if group_detail is None:
-        await self.reply(ctx, _("ftl-cmd-perm-add-none"))
-        return
+    assert group_detail is not None, "Group detail cannot be None"
     assert group_detail.type_ is not None, "Group type cannot be None"
 
     # Check if the user/role is already in the staff list
@@ -247,18 +245,17 @@ async def perm_add_command(
 async def perm_remove_command(
     self: Utility,
     ctx: commands.Context[Bot],
-    role: discord.Role | None = None,
-    user: discord.User | None = None,
-    id_: int | None = None,  # in case role/user was deleted
+    user_or_role: discord.User | discord.Role,
+    id_: int | None,  # in case role/user was deleted TODO: auto delete on bot start so this isn't necessary
 ) -> None:
     """
     Remove a user/role from the staff list.
     """
-    if role is not None and user is not None:
+    if user_or_role is not None and id_ is not None:
         await self.reply(ctx, _("ftl-cmd-perm-remove-both"))
         return
 
-    group_detail = _get_group_detail(user=user, role=role, id_=id_)
+    group_detail = _get_group_detail(user_or_role=user_or_role, id_=id_)
     if group_detail is None:
         await self.reply(ctx, _("ftl-cmd-perm-remove-none"))
         return
@@ -273,20 +270,13 @@ async def perm_remove_command(
 async def perm_customize_command(
     self: Utility,
     ctx: commands.Context[Bot],
-    user: discord.User | None = None,
-    role: discord.Role | None = None,
+    user_or_role: discord.User | discord.Role,
 ) -> None:
     """
     Customize a user/role's attributes.
     """
-    if role is not None and user is not None:
-        await self.reply(ctx, _("ftl-cmd-perm-customize-both"))
-        return
-
-    group_detail = _get_group_detail(user=user, role=role)
-    if group_detail is None:
-        await self.reply(ctx, _("ftl-cmd-perm-customize-none"))
-        return
+    group_detail = _get_group_detail(user_or_role=user_or_role)
+    assert group_detail is not None, "Group detail cannot be None"
     assert group_detail.type_ is not None, "Group type cannot be None"
 
     # Check if the user/role is not in the staff list
@@ -298,3 +288,131 @@ async def perm_customize_command(
     view = (await make_perm_customize_view(self, ctx, group))()
     message = await self.reply(ctx, _("ftl-cmd-perm-customize-message", group=group_detail.mention), view=view)
     view.set_original_message(message)
+
+
+# Using a new group since slash commands does not support multi-layer groups
+@perm_command.group(name=_("ftl-cmd-perm-override-name"), description=_("ftl-cmd-perm-override-description"))
+async def perm_override_command(
+    self: Utility,
+    ctx: commands.Context[Bot],
+) -> None:
+    """
+    Manage command permission overrides.
+    """
+    ...
+
+
+@perm_override_command.command(
+    name=_("ftl-cmd-perm-override-allow-name"), description=_("ftl-cmd-perm-override-allow-description")
+)
+async def perm_override_allow_command(
+    self: Utility,
+    ctx: commands.Context[Bot],
+    user_or_role: discord.User | discord.Role,
+    command_name: str,
+) -> None:
+    """
+    Allow a user/role to use a specific command.
+    """
+    group_detail = _get_group_detail(user_or_role=user_or_role)
+    assert group_detail is not None, "Group detail cannot be None"
+    assert group_detail.type_ is not None, "Group type cannot be None"
+
+    # Check if the user/role exists in the database
+    group = self.bot.database_client.get_permission_group(group_detail.id_, group_detail.type_)
+    if group is None:
+        # Create a new permission group if it doesn't exist
+        group = PermissionGroup(bot_id=CONFIG.bot.bot_id, group_id=group_detail.id_, group_type=group_detail.type_)
+
+    # Update the overrides
+    overrides = group.overrides.copy()
+    overrides[command_name] = PermissionOverrideType.allow
+    new_group = group.model_copy(deep=True, update={"overrides": overrides})
+
+    await self.bot.database_client.update_permission_group(new_group)
+    await self.reply(
+        ctx, _("ftl-cmd-perm-override-allow-success", group=group_detail.mention, command=command_name)
+    )
+
+
+@perm_override_command.command(
+    name=_("ftl-cmd-perm-override-deny-name"), description=_("ftl-cmd-perm-override-deny-description")
+)
+async def perm_override_deny_command(
+    self: Utility,
+    ctx: commands.Context[Bot],
+    user_or_role: discord.User | discord.Role,
+    command_name: str,
+) -> None:
+    """
+    Deny a user/role to use a specific command.
+    """
+    group_detail = _get_group_detail(user_or_role=user_or_role)
+    assert group_detail is not None, "Group detail cannot be None"
+    assert group_detail.type_ is not None, "Group type cannot be None"
+
+    # Check if the user/role exists in the database
+    group = self.bot.database_client.get_permission_group(group_detail.id_, group_detail.type_)
+    if group is None:
+        # Create a new permission group if it doesn't exist
+        group = PermissionGroup(bot_id=CONFIG.bot.bot_id, group_id=group_detail.id_, group_type=group_detail.type_)
+
+    # Update the overrides
+    overrides = group.overrides.copy()
+    overrides[command_name] = PermissionOverrideType.deny
+    new_group = group.model_copy(deep=True, update={"overrides": overrides})
+
+    await self.bot.database_client.update_permission_group(new_group)
+    await self.reply(
+        ctx, _("ftl-cmd-perm-override-deny-success", group=group_detail.mention, command=command_name)
+    )
+
+
+@perm_override_command.command(
+    name=_("ftl-cmd-perm-override-unset-name"), description=_("ftl-cmd-perm-override-unset-description")
+)
+async def perm_override_unset_command(
+    self: Utility,
+    ctx: commands.Context[Bot],
+    user_or_role: discord.User | discord.Role,
+    command_name: str | None,
+) -> None:
+    """
+    Remove a command permission override for a user/role.
+    If no command is specified, remove all overrides.
+    """
+    group_detail = _get_group_detail(user_or_role=user_or_role)
+    assert group_detail is not None, "Group detail cannot be None"
+    assert group_detail.type_ is not None, "Group type cannot be None"
+
+    # Check if the user/role exists in the database
+    group = self.bot.database_client.get_permission_group(group_detail.id_, group_detail.type_)
+    if group is None:
+        await self.reply(ctx, _("ftl-cmd-perm-override-unset-group-not-found", group=group_detail.mention))
+        return
+
+    if command_name is not None:
+        # Check if the command override exists
+        overrides = dict(group.overrides)
+        if command_name not in overrides:
+            await self.reply(
+                ctx,
+                _(
+                    "ftl-cmd-perm-override-unset-override-not-found",
+                    group=group_detail.mention,
+                    command=command_name,
+                ),
+            )
+            return
+
+        # Remove the override
+        del overrides[command_name]
+    else:
+        # Remove all overrides
+        overrides = {}
+    new_group = group.model_copy(deep=True, update={"overrides": overrides})
+
+    await self.bot.database_client.update_permission_group(new_group)
+    await self.reply(
+        ctx, _("ftl-cmd-perm-override-unset-success", group=group_detail.mention, command=command_name)
+    )
