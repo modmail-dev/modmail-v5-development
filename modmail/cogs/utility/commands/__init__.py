@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from .about import *
-from .perm import *
+from .profile import *
 from .status import *
 
 if TYPE_CHECKING:
@@ -16,5 +16,5 @@ __all__ = [
 all_commands: list[LazyHybridCommand[Any]] = [
     about_command,
     status_command,
-    perm_command,
+    profile_command,
 ]

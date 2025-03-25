@@ -2,7 +2,7 @@
 modmail.enum
 ============
 Contains enumeration classes used throughout the application.
-Defines permission levels, activity types, and status types used by the bot.
+Defines access levels, activity types, status types, etc. used by the bot.
 """
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from typing import NamedTuple
 from discord import app_commands
 
 
-class PermissionLevel(enum.IntEnum):
+class AccessLevel(enum.IntEnum):
     """
-    Enum representing the permission levels for a user/role permission group.
+    Enum representing the permission access levels assignable to a profile.
     """
 
     everyone = 1
@@ -27,20 +27,20 @@ class PermissionLevel(enum.IntEnum):
         from .core import _
 
         match self:
-            case PermissionLevel.everyone:
-                return _("ftl-perm-level-everyone")
-            case PermissionLevel.staff:
-                return _("ftl-perm-level-staff")
-            case PermissionLevel.manager:
-                return _("ftl-perm-level-manager")
-            case PermissionLevel.admin:
-                return _("ftl-perm-level-admin")
+            case AccessLevel.everyone:
+                return _("ftl-access-level-everyone")
+            case AccessLevel.staff:
+                return _("ftl-access-level-staff")
+            case AccessLevel.manager:
+                return _("ftl-access-level-manager")
+            case AccessLevel.admin:
+                return _("ftl-access-level-admin")
 
 
-class PermissionRequiredLevel(enum.IntEnum):
+class RequiredAccessLevel(enum.IntEnum):
     """
-    Enum representing the required permission levels to run a command.
-    Adds owner since it cannot be assigned to a permission group.
+    Enum representing the required access level to run a command.
+    Differs from AccessLevel since owner cannot be assigned to a profile.
     """
 
     everyone = 1
@@ -53,40 +53,45 @@ class PermissionRequiredLevel(enum.IntEnum):
         from .core import _
 
         match self:
-            case PermissionRequiredLevel.everyone:
-                return _("ftl-perm-level-everyone")
-            case PermissionRequiredLevel.staff:
-                return _("ftl-perm-level-staff")
-            case PermissionRequiredLevel.manager:
-                return _("ftl-perm-level-manager")
-            case PermissionRequiredLevel.admin:
-                return _("ftl-perm-level-admin")
-            case PermissionRequiredLevel.owner:
-                return _("ftl-perm-level-owner")
+            case RequiredAccessLevel.everyone:
+                return _("ftl-access-level-everyone")
+            case RequiredAccessLevel.staff:
+                return _("ftl-access-level-staff")
+            case RequiredAccessLevel.manager:
+                return _("ftl-access-level-manager")
+            case RequiredAccessLevel.admin:
+                return _("ftl-access-level-admin")
+            case RequiredAccessLevel.owner:
+                return _("ftl-access-level-owner")
 
 
-class PermissionGroupType(enum.Enum):
+class ProfileType(enum.Enum):
     """
-    Enum representing the type of permission group.
+    Enum representing the type of profile's owner.
     """
 
     user = 1
     role = 2
 
 
-class PermissionOverrideType(enum.Enum):
+class PermissionOverrideValue(enum.Enum):
     """
-    Enum representing the type of permission override.
+    Enum representing the value (allow/deny) of a permission override.
     """
 
     allow = 1
     deny = 2
 
 
-# Technically, this is not an enum
-class PermissionGroupKey(NamedTuple):
-    group_id: int
-    group_type: PermissionGroupType
+# Technically, this is not an enum, but storing in this file for consistency.
+class ProfileKey(NamedTuple):
+    """
+    A key for a profile, used to identify the profile in a dictionary.
+    Internal use only.
+    """
+
+    profile_id: int
+    profile_type: ProfileType
 
 
 class ActivityType(enum.Enum):

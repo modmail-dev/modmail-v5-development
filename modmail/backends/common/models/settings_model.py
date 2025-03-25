@@ -21,9 +21,9 @@ class Settings(BaseModel):
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     bot_id: int
-    last_ran_version: str | None  # the last version the bot was run on, None = first run
-    slash_last_synced_version: str | None  # the last version the slash commands were synced on
-    main_category_id: int | None
-    fallback_category_id: int | None
-    status: StatusType | None
-    activity: Activity | None
+    last_ran_version: str | None = None  # the last version the bot was run on, None = first run
+    slash_last_synced_version: str | None = None  # the last version the slash commands were synced on
+    main_category_id: int | None = None
+    fallback_category_id: int | None = None
+    status: StatusType | None = None
+    activity: Activity | None = None

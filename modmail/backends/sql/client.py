@@ -16,8 +16,8 @@ from sqlalchemy import and_, delete, event, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from modmail.backends import DBClientBase, PermissionGroup, Settings
-from modmail.enum import PermissionGroupKey, PermissionGroupType
+from modmail.backends import DBClientBase, Profile, Settings
+from modmail.enum import ProfileKey, ProfileType
 from modmail.errors import DatabaseConnectionError
 
 from .migration import do_migration
@@ -47,8 +47,8 @@ class SQLClient(DBClientBase):
         self.__settings_table: SQLSettingsTable | None = None
         self.__settings_model: Settings | None = None
 
-        # Permission groups are loaded from the database on startup.
-        self.__permission_groups: dict[PermissionGroupKey, tuple[SQLPermissionGroupTable, PermissionGroup]] = {}
+        # Profiles are loaded and cached from the database on startup.
+        self.__profiles_cache: dict[ProfileKey, tuple[SQLProfileTable, Profile]] = {}
 
     @property
     def _settings_table(self) -> SQLSettingsTable:
@@ -121,11 +121,12 @@ class SQLClient(DBClientBase):
                 settings_table = SQLSettingsTable(bot_id=self._config.bot.bot_id)
                 session.add(settings_table)
                 await session.commit()
+                await session.refresh(settings_table)  # Make sure all relationships are loaded
             session.expunge(settings_table)  # Detach the settings from the session
             self._settings_table = settings_table
             logger.debug("Loaded settings from SQL database.")
 
-        await self._sync_permission_groups()
+        await self._sync_profiles()
 
     async def disconnect(self) -> None:
         if self.engine:
@@ -178,6 +179,7 @@ class SQLClient(DBClientBase):
                     setattr(settings_table, key, value)
 
                 await session.commit()
+                await session.refresh(settings_table)  # Refresh the settings table to get the latest data
 
                 session.expunge(settings_table)  # Detach the settings from the session
                 self._settings_table = settings_table  # Update the settings model
@@ -189,128 +191,134 @@ class SQLClient(DBClientBase):
             raise DatabaseConnectionError from e
 
     @staticmethod
-    def _make_perm_group_from_table(group: SQLPermissionGroupTable) -> PermissionGroup:
+    def _make_profile_from_table(profile_row: SQLProfileTable) -> Profile:
         """
-        Convert a SQLPermissionGroupTable object to a PermissionGroup object.
+        Convert a SQLProfileTable object to a Profile object.
         """
         attributes = {
-            field: getattr(group, field)
-            for field in SQLPermissionGroupTable.__table__.columns.keys()
-            if field != "overrides"
+            field: getattr(profile_row, field)
+            for field in SQLProfileTable.__table__.columns.keys()
+            if field != "permission_overrides"
         }
-        attributes["overrides"] = {override.command_name: override.override_value for override in group.overrides}
-        return PermissionGroup(**attributes)
+        attributes["permission_overrides"] = {
+            override.command_name: override.override_value for override in profile_row.permission_overrides
+        }
+        return Profile(**attributes)
 
-    async def _sync_permission_groups(self) -> None:
+    async def _sync_profiles(self) -> None:
         """
-        Sync the permission groups from the database to the local cache.
+        Sync the profiles from the database to the local cache.
         """
         assert self._async_session is not None, "Session is not initialized."
-        self.__permission_groups.clear()
+        self.__profiles_cache.clear()
         async with self._async_session() as session:
-            query = select(SQLPermissionGroupTable).where(
-                SQLPermissionGroupTable.bot_id == self._config.bot.bot_id
-            )
+            query = select(SQLProfileTable).where(SQLProfileTable.bot_id == self._config.bot.bot_id)
             results = (await session.execute(query)).scalars().fetchall()
-            for group in results:
-                group_key = PermissionGroupKey(group.group_id, group.group_type)
-                self.__permission_groups[group_key] = (group, self._make_perm_group_from_table(group))
-                session.expunge(group)
-        logger.debug("Synchronized permission groups from SQL database.")
+            for profile_row in results:
+                profile_key = ProfileKey(profile_row.profile_id, profile_row.profile_type)
+                self.__profiles_cache[profile_key] = (profile_row, self._make_profile_from_table(profile_row))
+                session.expunge(profile_row)
+        logger.debug("Synchronized profiles from SQL database.")
 
-    def get_permission_group(self, group_id: int, group_type: PermissionGroupType) -> PermissionGroup | None:
-        group_key = PermissionGroupKey(group_id, group_type)
-        if group_key in self.__permission_groups:
-            return self.__permission_groups[group_key][1]
+    def get_profile(self, profile_id: int, profile_type: ProfileType) -> Profile | None:
+        profile_key = ProfileKey(profile_id, profile_type)
+        if profile_key in self.__profiles_cache:
+            return self.__profiles_cache[profile_key][1]
         return None
 
-    async def update_permission_group(self, perm_group: PermissionGroup) -> None:
+    async def update_profile(self, profile: Profile) -> None:
         assert self._async_session is not None, "Session is not initialized."
 
-        group_key = PermissionGroupKey(perm_group.group_id, perm_group.group_type)
-        permission_group_dict = perm_group.model_dump(exclude={"group_id", "group_type"})
-        all_overrides = perm_group.overrides.copy()
+        profile_key = ProfileKey(profile.profile_id, profile.profile_type)
+        new_profile_dict = profile.model_dump(exclude={"profile_id", "profile_type"})
+        new_permission_overrides = profile.permission_overrides.copy()
 
-        assert permission_group_dict.pop("bot_id") == self._config.bot.bot_id, "Bot ID mismatch."
+        assert new_profile_dict.pop("bot_id") == self._config.bot.bot_id, "Bot ID mismatch."
 
         async with self._async_session() as session:
-            if group_key in self.__permission_groups:
-                # Update the existing permission group
-                group = await session.merge(self.__permission_groups[group_key][0])
-                for key, value in permission_group_dict.items():
-                    if key == "overrides":
-                        for override in group.overrides.copy():
-                            if (override_value := all_overrides.pop(override.command_name, None)) is not None:
-                                if override_value != override.override_value:
+            if profile_key in self.__profiles_cache:
+                # Update the existing profile
+                profile_row = await session.merge(self.__profiles_cache[profile_key][0])
+                for key, value in new_profile_dict.items():
+                    if key == "permission_overrides":
+                        to_remove: list[SQLPermissionOverrideTable] = []
+
+                        for old_override in profile_row.permission_overrides:
+                            if (
+                                new_override_value := new_permission_overrides.pop(old_override.command_name, None)
+                            ) is not None:
+                                if new_override_value != old_override.override_value:
                                     # Update the override value of an existing override entry
-                                    override.override_value = override_value
+                                    old_override.override_value = new_override_value
                             else:
-                                # If the override is no longer in new overrides, delete it
-                                group.overrides.remove(override)
+                                # If the override is no longer in new overrides, mark it for removal
+                                to_remove.append(old_override)
+
+                        for old_override in to_remove:
+                            profile_row.permission_overrides.remove(old_override)
 
                         # Add new overrides
-                        for command_name, override_value in all_overrides.items():
-                            new_override = SQLPermissionGroupOverrideTable(
+                        for command_name, new_override_value in new_permission_overrides.items():
+                            new_override = SQLPermissionOverrideTable(
                                 bot_id=self._config.bot.bot_id,
-                                group_id=perm_group.group_id,
-                                group_type=perm_group.group_type,
+                                profile_id=profile.profile_id,
+                                profile_type=profile.profile_type,
                                 command_name=command_name,
-                                override_value=override_value,
+                                override_value=new_override_value,
                             )
-                            group.overrides.append(new_override)
+                            profile_row.permission_overrides.append(new_override)
                     else:
-                        setattr(group, key, value)
+                        setattr(profile_row, key, value)
 
                 await session.commit()
-                session.expunge(group)
-                self.__permission_groups[group_key] = (group, self._make_perm_group_from_table(group))
-                logger.debug("Updated permission group in SQL database: %s", group_key)
+                await session.refresh(profile_row)  # Refresh the profile row to get the latest data
+                session.expunge(profile_row)
+                self.__profiles_cache[profile_key] = (profile_row, self._make_profile_from_table(profile_row))
+                logger.debug("Updated profile %s in SQL database.", profile_key)
             else:
-                # Create a new permission group
+                # Create a new profile
 
-                # Convert overrides: {command_name: override_type, ...} to a list of SQLPermissionGroupOverrideTable objects
+                # Convert overrides: {command_name: override_type, ...} to a list of SQLPermissionOverrideTable objects
                 overrides = [
-                    SQLPermissionGroupOverrideTable(
+                    SQLPermissionOverrideTable(
                         bot_id=self._config.bot.bot_id,
-                        group_id=perm_group.group_id,
-                        group_type=perm_group.group_type,
+                        profile_id=profile.profile_id,
+                        profile_type=profile.profile_type,
                         command_name=command_name,
                         override_value=override_value,
                     )
-                    for command_name, override_value in all_overrides.items()
+                    for command_name, override_value in new_permission_overrides.items()
                 ]
-                permission_group_dict["overrides"] = overrides
+                new_profile_dict["permission_overrides"] = overrides
 
-                group = SQLPermissionGroupTable(
+                profile_row = SQLProfileTable(
                     bot_id=self._config.bot.bot_id,
-                    group_id=perm_group.group_id,
-                    group_type=perm_group.group_type,
-                    **permission_group_dict,
+                    profile_id=profile.profile_id,
+                    profile_type=profile.profile_type,
+                    **new_profile_dict,
                 )
-                session.add(group)
+                session.add(profile_row)
                 await session.commit()
-                session.expunge(group)
-                self.__permission_groups[group_key] = (group, self._make_perm_group_from_table(group))
-                logger.debug("Created new permission group in SQL database: %s", group_key)
+                await session.refresh(profile_row)
+                session.expunge(profile_row)
+                self.__profiles_cache[profile_key] = (profile_row, self._make_profile_from_table(profile_row))
+                logger.debug("Created new profile in SQL database: %s", profile_key)
 
-    async def delete_permission_group(self, group_id: int, group_type: PermissionGroupType | None) -> None:
+    async def delete_profile(self, profile_id: int) -> None:
         assert self._async_session is not None, "Session is not initialized."
 
-        if group_type is None:
-            for key in list(self.__permission_groups.keys()):
-                if key.group_id == group_id:
-                    del self.__permission_groups[key]
-        else:
-            group_key = PermissionGroupKey(group_id, group_type)
-            self.__permission_groups.pop(group_key, None)  # Remove from local cache
-
         async with self._async_session() as session:
-            query = delete(SQLPermissionGroupTable).where(
+            query = delete(SQLProfileTable).where(
                 and_(
-                    SQLPermissionGroupTable.bot_id == self._config.bot.bot_id,
-                    SQLPermissionGroupTable.group_id == group_id,
+                    SQLProfileTable.bot_id == self._config.bot.bot_id,
+                    SQLProfileTable.profile_id == profile_id,
                 )
             )
             await session.execute(query)
             await session.commit()
-            logger.debug("Deleted permission group from SQL database: %s", group_id)
+
+        for profile_key in list(self.__profiles_cache.keys()):
+            if profile_key.profile_id == profile_id:
+                del self.__profiles_cache[profile_key]
+
+        logger.debug("Deleted profile from SQL database: %s", profile_id)

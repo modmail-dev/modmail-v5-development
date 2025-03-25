@@ -11,9 +11,9 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from modmail.config import Config
-    from modmail.enum import PermissionGroupType
+    from modmail.enum import ProfileType
 
-    from .models import PermissionGroup, Settings
+    from .models import Profile, Settings
 
 __all__ = [
     "DBClientBase",
@@ -64,31 +64,31 @@ class DBClientBase(ABC):
         pass
 
     @abstractmethod
-    def get_permission_group(self, group_id: int, group_type: PermissionGroupType) -> PermissionGroup | None:
+    def get_profile(self, profile_id: int, profile_type: ProfileType) -> Profile | None:
         """
-        Get a permission group from the database.
+        Retrieves a profile from the database.
+        This method does not fetch the profile from the database, but rather returns a cached version.
 
-        :param group_id: The ID of the user/role.
-        :param group_type: The type of the group (user/role).
-        :return: The permission group if found, None otherwise.
-        """
-        pass
-
-    @abstractmethod
-    async def update_permission_group(self, perm_group: PermissionGroup) -> None:
-        """
-        Update or create a permission group to the database.
-
-        :param perm_group: The permission group to update or create.
+        :param profile_id: The ID that belongs to a profile.
+        :param profile_type: The type of the profile (user/role).
+        :return: The profile if found, None otherwise.
         """
         pass
 
     @abstractmethod
-    async def delete_permission_group(self, group_id: int, group_type: PermissionGroupType | None) -> None:
+    async def update_profile(self, profile: Profile) -> None:
         """
-        Delete a permission group from the database.
+        Update or create a profile on the database.
 
-        :param group_id: The ID of the user/role.
-        :param group_type: The type of the group (user/role). None if unknown.
+        :param profile: The profile to update or create.
+        """
+        pass
+
+    @abstractmethod
+    async def delete_profile(self, profile_id: int) -> None:
+        """
+        Delete a profile from the database.
+
+        :param profile_id: The ID of the profile.
         """
         pass

@@ -5,11 +5,11 @@
 ###         General
 ### ========================
 
-ftl-perm-level-everyone = Everyone
-ftl-perm-level-staff = Staff
-ftl-perm-level-manager = Manager
-ftl-perm-level-admin = Admin
-ftl-perm-level-owner = Owner
+ftl-access-level-everyone = Everyone
+ftl-access-level-staff = Staff
+ftl-access-level-manager = Manager
+ftl-access-level-admin = Admin
+ftl-access-level-owner = Owner
 
 ### ========================
 ###         Commands
@@ -25,7 +25,7 @@ ftl-cmd-about-description = Shows information about the Modmail bot.
 
 ftl-cmd-about-version-name = version
 ftl-cmd-about-version-description = Shows the version of the Modmail bot.
-# Has $version as the version of the bot
+# :param $version: the version of the bot
 ftl-cmd-about-version-message = Modmail v{ $version }
 
 ## Command: Utility.status
@@ -40,62 +40,70 @@ ftl-cmd-status-param-status-description = The status to set.
 ftl-cmd-status-clear-name = clear
 ftl-cmd-status-clear-description = Clear the status of the Modmail bot.
 
-## Command: Utility.perm
+## Command: Utility.profile
 
-ftl-cmd-perm-name = perm
-ftl-cmd-perm-description = Manage the permissions of the Modmail bot.
-ftl-cmd-perm-fallback-name = view
+ftl-cmd-profile-name = profile
+ftl-cmd-profile-description = View a list of all profiles.
+ftl-cmd-profile-fallback-name = view
 
-ftl-modal-perm-customize-title = Customize Permissions
-ftl-model-perm-customize-colour = Colour
-ftl-model-perm-customize-tag = Tag
-ftl-view-perm-button-customize-label = Customize
-ftl-view-perm-select-level-placeholder = Select a permission level
-ftl-view-perm-select-level-option-none = None
-ftl-view-perm-select-level-success = Successfully set the permission level to { $level }.
+ftl-modal-profile-customize-title = Customize Profile
+ftl-modal-profile-customize-colour = Colour
+ftl-modal-profile-customize-tag = Tag
+ftl-view-profile-button-customize-label = Customize
+ftl-view-profile-select-level-placeholder = Select an Access Level
+ftl-view-profile-select-level-option-none = None
+# :param $level: the name of the access level
+# :param $name: the name of the user or role
+ftl-view-profile-select-level-success = Successfully set the access level of { $name } to { $level }.
 
-## Subcommand: Utility.perm.add
+## Subcommand: Utility.profile.add
 
-ftl-cmd-perm-add-name = add
-ftl-cmd-perm-add-description = Add a user or role to the ACL list.
-ftl-cmd-perm-add-already-exists = The user or role already exists in the ACL list.
-ftl-cmd-perm-add-success = Added { $group } to the ACL list.
+ftl-cmd-profile-add-name = add
+ftl-cmd-profile-add-description = Create a profile for a user or role.
+# The following params can be used for the next 2 lines
+# :param $name: the name of the user or role
+ftl-cmd-profile-add-already-exists = { $name } already has a profile.
+ftl-cmd-profile-add-success = Successfully created a profile for { $name }.
 
-## Subcommand: Utility.perm.remove
+## Subcommand: Utility.profile.delete
 
-ftl-cmd-perm-remove-name = remove
-ftl-cmd-perm-remove-description = Remove a user or role from the ACL list.
-ftl-cmd-perm-remove-both = Please only enter a user, role, or ID.
-ftl-cmd-perm-remove-none = Please provide either a user, role, or ID.
-ftl-cmd-perm-remove-success = Removed { $group } from the ACL list.
+ftl-cmd-profile-delete-name = delete
+ftl-cmd-profile-delete-description = Delete a profile.
+ftl-cmd-profile-delete-both = Please only enter a user, role, or ID.
+ftl-cmd-profile-delete-none = Please provide a user, role, or ID.
+# :param $name: the name of the user or role or ID
+ftl-cmd-profile-delete-success = Deleted the profile of { $name }.
 
-## Subcommand: Utility.perm.customize
+## Subcommand: Utility.profile.customize
 
-ftl-cmd-perm-customize-name = customize
-ftl-cmd-perm-customize-description = Modify customizable settings of an ACL user or role.
-ftl-cmd-perm-customize-not-found = The user or role does not exist in the ACL list.
-ftl-cmd-perm-customize-message = Customizing { $group }.
+ftl-cmd-profile-customize-name = customize
+ftl-cmd-profile-customize-description = Customize the profile.
+# :param $name: the name of the user or role
+ftl-cmd-profile-customize-message = Customizing the profile of { $name }.
 
-## Subgroup: Utility.perm.override
-ftl-cmd-perm-override-name = override
-ftl-cmd-perm-override-description = Explicitly grant/deny a user or role access to a command.
+## Subcommand: Utility.profile.allow
+ftl-cmd-profile-allow-name = allow
+ftl-cmd-profile-allow-description = Allow users of this profile to use a command.
+# :param $name: the name of the user or role
+# :param $command: the name of the command
+ftl-cmd-profile-allow-success = Allowed { $name } to use { $command }.
 
-## Subcommand: Utility.perm.override.allow
-ftl-cmd-perm-override-allow-name = allow
-ftl-cmd-perm-override-allow-description = Allow a user or role to use a command.
-ftl-cmd-perm-override-allow-success = Allowed { $group } to use the command.
+## Subcommand: Utility.profile.deny
+ftl-cmd-profile-deny-name = deny
+ftl-cmd-profile-deny-description = Deny users of this profile from using a command.
+# :param $name: the name of the user or role
+# :param $command: the name of the command
+ftl-cmd-profile-deny-success = Denied { $name } from using { $command }.
 
-## Subcommand: Utility.perm.override.deny
-ftl-cmd-perm-override-deny-name = deny
-ftl-cmd-perm-override-deny-description = Deny a user or role to use a command.
-ftl-cmd-perm-override-deny-success = Denied { $group } to use the command.
-
-## Subcommand: Utility.perm.override.unset
-ftl-cmd-perm-override-unset-name = unset
-ftl-cmd-perm-override-unset-description = Unset a permission override for a user or role on a command.
-ftl-cmd-perm-override-unset-success = Unset the permission override for { $group } on { $command }.
-ftl-cmd-perm-override-unset-group-not-found = The user or role does not exist in the ACL list.
-ftl-cmd-perm-override-unset-override-not-found = The permission override does not exist for the user or role.
+## Subcommand: Utility.profile.unset
+ftl-cmd-profile-unset-name = unset
+ftl-cmd-profile-unset-description = Remove an allow/deny override from this profile on a command.
+# The following params can be used for the next 3 lines
+# :param $name: the name of the user or role
+# :param $command: the name of the command
+ftl-cmd-profile-unset-success = The override for { $name } on { $command } has been unset.
+ftl-cmd-profile-unset-profile-not-found = { $name } does not have a profile.
+ftl-cmd-profile-unset-override-not-found = No override exists on { $command } for { $name }.
 
 ### ========================
 ###         Messages

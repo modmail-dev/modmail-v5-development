@@ -1,7 +1,7 @@
 """
 modmail.core.bot
 ================
-This module contains the main Bot class for the Modmail bot, responsible for handling commands and events.
+This module contains the main Bot class for the Modmail bot, responsible for handling events and loading cogs.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from .. import CONFIG, __version__
 from ..backends import Activity, DBClientBase
 from ..enum import (
     ActivityType,
-    PermissionRequiredLevel,
+    RequiredAccessLevel,
     StatusType,
 )
 from ..errors import DatabaseError
@@ -315,42 +315,43 @@ class Bot(commands.Bot):
         await self.set_bot_presence()
 
     @staticmethod
-    def get_command_permission_level(ctx: commands.Context[Bot]) -> PermissionRequiredLevel:
+    def get_command_access_level(ctx: commands.Context[Bot]) -> RequiredAccessLevel:
         """
-        Get the permission level of the command.
-        Returns "everyone" if no permission level is set.
+        Get the access level of the command.
+        Returns "everyone" if no access level is set.
 
         :param ctx: The context of the command.
-        :return: The permission level of the command.
+        :return: The access level of the command.
         """
         if ctx.command is None:  # When would this happen?
             logger.debug("The context command is None? %s", ctx)
-            return PermissionRequiredLevel.everyone
+            return RequiredAccessLevel.everyone
 
-        default_permission: PermissionRequiredLevel | None = None
+        default_access_level: RequiredAccessLevel | None = None
 
         # If the command is a subcommand, if so, add the parents of the command (in reverse order).
         commands_to_check = [ctx.command] + ctx.command.parents
 
         for command in commands_to_check:
-            if default_permission is None:
-                # Check if the command has a permission level set.
+            if default_access_level is None:
+                # Check if the command has an access level set.
                 if hasattr(ctx.command.callback, "__permission__"):
                     # See: modmail/core/permission.py
-                    default_permission = ctx.command.callback.__permission__  # type: ignore[reportFunctionMemberAccess]
+                    default_access_level = ctx.command.callback.__permission__  # type: ignore[reportFunctionMemberAccess]
 
             command_name: str = command.callback.__name__.casefold()
             if command_name.endswith("_command"):
                 command_name = command_name[:-8]
             else:
                 logger.debug("Command name does not end with _command: %s", command.qualified_name)
-            # Check if the command has a permission level override set in the config.
+
+            # Check if the command has an override set in the config.
             for key, value in CONFIG.permission.overrides.items():
                 if key.casefold() == command_name:
                     return value
 
-        # If no permission level is set, assume everyone can use the command.
-        return default_permission or PermissionRequiredLevel.everyone
+        # If no access level is set, then everyone can use the command.
+        return default_access_level if default_access_level is not None else RequiredAccessLevel.everyone
 
     # async def can_run(self, ctx: commands.Context[Bot], /, *, call_once: bool = False) -> bool:
     #     """

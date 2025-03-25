@@ -8,5 +8,5 @@ Modules from this directory should not import from modmail.core.* (circular impo
 
 from __future__ import annotations
 
-from .permission_group_model import *
+from .profile_model import *
 from .settings_model import *

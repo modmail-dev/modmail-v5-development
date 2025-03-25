@@ -17,8 +17,8 @@ import pymongo.errors
 from beanie import init_beanie  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from modmail.backends import DBClientBase, PermissionGroup, Settings
-from modmail.enum import PermissionGroupKey, PermissionGroupType
+from modmail.backends import DBClientBase, Profile, Settings
+from modmail.enum import ProfileKey, ProfileType
 from modmail.errors import DatabaseConnectionError
 
 from .migration import do_migration
@@ -50,10 +50,8 @@ class MongoDBClient(DBClientBase):
         )
         self.__settings_model: Settings | None = None  # a read-only view of the settings model
 
-        # Permission groups are loaded from the database on startup.
-        self.__permission_groups: dict[
-            PermissionGroupKey, tuple[MongoDBPermissionGroupDocument, PermissionGroup]
-        ] = {}
+        # Profiles are cached from the database on startup.
+        self.__profiles_cache: dict[ProfileKey, tuple[MongoDBProfileDocument, Profile]] = {}
 
     @property
     def _settings_document(self) -> MongoDBSettingsDocument:
@@ -147,7 +145,7 @@ class MongoDBClient(DBClientBase):
 
         await init_beanie(
             database=self._client.get_database(self.db_name),
-            document_models=[MongoDBSettingsDocument, MongoDBPermissionGroupDocument],
+            document_models=[MongoDBSettingsDocument, MongoDBProfileDocument],
         )
         logger.debug("Connected to MongoDB.")
         await self._startup_setup()
@@ -185,7 +183,7 @@ class MongoDBClient(DBClientBase):
         self._settings_document = settings_document
         logger.debug("Loaded settings from MongoDB.")
 
-        await self._sync_permission_groups()
+        await self._sync_profiles()
 
     async def update_settings(self, **kwargs: Any) -> None:
         # Validate the kwargs, by creating a new Settings object with the provided kwargs.
@@ -211,63 +209,64 @@ class MongoDBClient(DBClientBase):
         await settings_document.replace()  # Use .replace() to update the document in place
         self._settings_document = settings_document  # Update the settings model to the new one
 
-    async def _sync_permission_groups(self) -> None:
+    async def _sync_profiles(self) -> None:
         """
-        Sync the permission groups from the database to the local cache.
+        Sync the profiles from the database to the local cache.
         """
-        self.__permission_groups.clear()
-        async for group in MongoDBPermissionGroupDocument.find(
-            MongoDBPermissionGroupDocument.bot_id == self._config.bot.bot_id
+        self.__profiles_cache.clear()
+        # Finds all profiles in the database and adds them to the cache.
+        async for profile_document in MongoDBProfileDocument.find(
+            MongoDBProfileDocument.bot_id == self._config.bot.bot_id
         ):
-            group_key = PermissionGroupKey(group.group_id, group.group_type)
-            self.__permission_groups[group_key] = (group, PermissionGroup.model_validate(group))
-        logger.debug("Synced %d permission groups from MongoDB.", len(self.__permission_groups))
+            profile_key = ProfileKey(profile_document.profile_id, profile_document.profile_type)
+            self.__profiles_cache[profile_key] = (profile_document, Profile.model_validate(profile_document))
+        logger.debug("Synced %d profiles from MongoDB.", len(self.__profiles_cache))
 
-    def get_permission_group(self, group_id: int, group_type: PermissionGroupType) -> PermissionGroup | None:
-        group_key = PermissionGroupKey(group_id, group_type)
-        if group_key in self.__permission_groups:
-            return self.__permission_groups[group_key][1]
+    def get_profile(self, profile_id: int, profile_type: ProfileType) -> Profile | None:
+        profile_key = ProfileKey(profile_id, profile_type)
+        if profile_key in self.__profiles_cache:
+            return self.__profiles_cache[profile_key][1]
         return None
 
-    async def update_permission_group(self, perm_group: PermissionGroup) -> None:
-        group_key = PermissionGroupKey(perm_group.group_id, perm_group.group_type)
-        permission_group_dict = perm_group.model_dump(exclude={"group_id", "group_type"})
+    async def update_profile(self, profile: Profile) -> None:
+        profile_key = ProfileKey(profile.profile_id, profile.profile_type)
+        new_profile_dict = profile.model_dump(exclude={"profile_id", "profile_type"})
 
-        assert permission_group_dict.pop("bot_id") == self._config.bot.bot_id, "Bot ID mismatch."
+        assert new_profile_dict.pop("bot_id") == self._config.bot.bot_id, "Bot ID mismatch."
 
-        if group_key in self.__permission_groups:
-            # Update the existing permission group
-            group = self.__permission_groups[group_key][0].model_copy(deep=True)
-            for key, value in permission_group_dict.items():
-                setattr(group, key, value)
+        if profile_key in self.__profiles_cache:
+            # Update the existing profile
+            new_profile = self.__profiles_cache[profile_key][0].model_copy(deep=True)
+            for key, value in new_profile_dict.items():
+                setattr(new_profile, key, value)
 
             # noinspection PyArgumentList
-            await group.replace()
-            self.__permission_groups[group_key] = (group, PermissionGroup.model_validate(group))
-            logger.debug("Updated permission group %s in MongoDB.", group_key)
+            await new_profile.replace()
+            self.__profiles_cache[profile_key] = (new_profile, Profile.model_validate(new_profile))
+            logger.debug("Updated profile %s in MongoDB.", profile_key)
         else:
 
-            # Create a new permission group
-            group = MongoDBPermissionGroupDocument(
+            # Create a new profile
+            new_profile = MongoDBProfileDocument(
                 bot_id=self._config.bot.bot_id,
-                group_id=perm_group.group_id,
-                group_type=perm_group.group_type,
-                **permission_group_dict,
+                profile_id=profile.profile_id,
+                profile_type=profile.profile_type,
+                **new_profile_dict,
             )
-            await group.create()
-            self.__permission_groups[group_key] = (group, PermissionGroup.model_validate(group))
-            logger.debug("Created new permission group %s in MongoDB.", group_key)
+            await new_profile.create()
+            self.__profiles_cache[profile_key] = (new_profile, Profile.model_validate(new_profile))
+            logger.debug("Created new profile %s in MongoDB.", profile_key)
 
-    async def delete_permission_group(self, group_id: int, group_type: PermissionGroupType | None) -> None:
-        if group_type is None:
-            for key in list(self.__permission_groups.keys()):
-                if key.group_id == group_id:
-                    del self.__permission_groups[key]
-        else:
-            group_key = PermissionGroupKey(group_id, group_type)
-            self.__permission_groups.pop(group_key, None)  # Remove from local cache
-        await MongoDBPermissionGroupDocument.find(
-            MongoDBPermissionGroupDocument.bot_id == self._config.bot.bot_id
-            and MongoDBPermissionGroupDocument.group_id == group_id
+    async def delete_profile(self, profile_id: int) -> None:
+        # Delete the profile from the database.
+        await MongoDBProfileDocument.find(
+            MongoDBProfileDocument.bot_id == self._config.bot.bot_id
+            and MongoDBProfileDocument.profile_id == profile_id
         ).delete()
-        logger.debug("Deleted permission group %d from MongoDB.", group_id)
+
+        # Delete the profile from cache.
+        for profile_key in list(self.__profiles_cache.keys()):
+            if profile_key.profile_id == profile_id:
+                del self.__profiles_cache[profile_key]
+
+        logger.debug("Deleted profile ID=%d from MongoDB.", profile_id)

@@ -1,8 +1,8 @@
 """
 modmail.core.permission
 =======================
-Contains decorators for setting permission levels on commands.
-These decorators are used to restrict command usage to users with specific permission levels.
+Contains decorators for setting access levels on commands.
+These decorators are used to restrict command usage to users with specific access levels.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, TypeAlias, TypeVar
 
 from discord.ext import commands
 
-from ..enum import PermissionRequiredLevel
+from ..enum import RequiredAccessLevel
 
 if TYPE_CHECKING:
     from .commands import LazyHybridCommand
@@ -22,58 +22,58 @@ T = TypeVar("T", bound=commands.Command[Any, Any, Any] | LazyHybridCommand[Any] 
 __all__ = ["staff_only", "manager_only", "admin_only", "owner_only"]
 
 
-def _set_permission(func: T, permission: PermissionRequiredLevel) -> T:
+def _set_access_level(func: T, access_level: RequiredAccessLevel) -> T:
     """
-    Set the default required permission level for the function.
+    Set the default required access level for the function.
     Injects __permission__ into the command callback function.
 
     :param func: A command or function to set the permission level for.
-    :param permission: The permission level to set.
+    :param access_level: The access level to set.
     :return: Returns back func.
     """
-    # Lots of type ignore here because we are using function injection to set the permission level.
+    # Lots of type ignore here because we are using function injection to set the access level.
     if isinstance(func, commands.Command | LazyHybridCommand):  # Inject into the command callback
-        func.callback.__permission__ = permission  # type: ignore[reportUnknownMemberType,reportFunctionMemberAccess]
+        func.callback.__permission__ = access_level  # type: ignore[reportUnknownMemberType,reportFunctionMemberAccess]
     else:  # Inject into the function itself
-        func.__permission__ = permission  # type: ignore[reportUnknownMemberType]
+        func.__permission__ = access_level  # type: ignore[reportUnknownMemberType]
     return func  # type: ignore[reportUnknownVariableType,reportReturnType]
 
 
 def staff_only(func: T) -> T:
     """
-    Decorator to set the permission level to staff.
+    Decorator to set the access level to staff.
 
-    :param func: A command or function to set the permission level for.
+    :param func: A command or function to set the access level for.
     :return: Returns back func.
     """
-    return _set_permission(func, PermissionRequiredLevel.staff)
+    return _set_access_level(func, RequiredAccessLevel.staff)
 
 
 def manager_only(func: T) -> T:
     """
-    Decorator to set the permission level to manager.
+    Decorator to set the access level to manager.
 
-    :param func: A command or function to set the permission level for.
+    :param func: A command or function to set the access level for.
     :return: Returns back func.
     """
-    return _set_permission(func, PermissionRequiredLevel.manager)
+    return _set_access_level(func, RequiredAccessLevel.manager)
 
 
 def admin_only(func: T) -> T:
     """
-    Decorator to set the permission level to admin.
+    Decorator to set the access level to admin.
 
-    :param func: A command or function to set the permission level for.
+    :param func: A command or function to set the access level for.
     :return: Returns back func.
     """
-    return _set_permission(func, PermissionRequiredLevel.admin)
+    return _set_access_level(func, RequiredAccessLevel.admin)
 
 
 def owner_only(func: T) -> T:
     """
-    Decorator to set the permission level to owner.
+    Decorator to set the access level to owner.
 
-    :param func: A command or function to set the permission level for.
+    :param func: A command or function to set the access level for.
     :return: Returns back func.
     """
-    return _set_permission(func, PermissionRequiredLevel.owner)
+    return _set_access_level(func, RequiredAccessLevel.owner)
