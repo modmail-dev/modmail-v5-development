@@ -73,7 +73,8 @@ bot:
 # Which locales the bot should support. This is used to determine the languages used by the bot.
 # Currently supported locales are:
 #   * en (English)
-allowed_locales: ["en"]
+#   * de (German)
+allowed_locales: ["en", "de"]
 
 # The default locale for the bot. This is the language that will be used if the user's locale is not supported.
 default_locale: "en"

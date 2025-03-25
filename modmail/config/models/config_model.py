@@ -23,7 +23,7 @@ from .sql_database_model import SQLDatabaseConfig
 
 __all__ = ["Config"]
 
-SupportedLocales: TypeAlias = Literal["en"]
+SupportedLocales: TypeAlias = Literal["en", "de"]
 SupportedDatabases: TypeAlias = Literal["sql", "mongodb"]
 
 
@@ -45,7 +45,7 @@ class Config(BaseSettings):
 
     version: str = "1.0"  # the config version
     bot: BotConfig
-    allowed_locales: set[SupportedLocales] = Field({"en"}, min_length=1)
+    allowed_locales: set[SupportedLocales] = Field({"en", "de"}, min_length=1)
     default_locale: SupportedLocales = Field("en", validate_default=True)
     database_type: SupportedDatabases
     sql_config: SQLDatabaseConfig | None = Field(None, validate_default=True)
