@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 IDType = Annotated[int, Field(gt=100000000000000, lt=99999999999999999999)]  # 15-20 digit integer
 
 
-# noinspection PyNestedDecorators
 class BotConfig(BaseModel):
     """
     Configuration model for the bot settings.

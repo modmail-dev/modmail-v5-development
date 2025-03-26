@@ -86,6 +86,8 @@ class Bot(commands.Bot):
 
             self.database_client: DBClientBase = MongoDBClient(CONFIG)
 
+        self.add_check(self._global_check)
+
     async def setup_hook(self) -> None:
         """
         This is called on bot login.
@@ -280,7 +282,6 @@ class Bot(commands.Bot):
                 )
 
         if db_status:
-            # noinspection PyTypeChecker
             dc_status = discord.Status[db_status.name]
 
         return dc_activity, dc_status
@@ -353,13 +354,17 @@ class Bot(commands.Bot):
         # If no access level is set, then everyone can use the command.
         return default_access_level if default_access_level is not None else RequiredAccessLevel.everyone
 
-    # async def can_run(self, ctx: commands.Context[Bot], /, *, call_once: bool = False) -> bool:
-    #     """
-    #     Check if the bot can run the command.
-    #     Verify the bot has the following permissions:
-    #     - Send Messages
-    #     - Embed Links
-    #     - Attach Files
-    #     - TODO: Add more permissions
-    #     """
-    #     return True
+    def _global_check(self, ctx: commands.Context[Bot]) -> bool:
+        """
+        A global check that runs before every command.
+        This can be used to enforce certain conditions globally.
+        """
+        #     Check if the bot can run the command.
+        #     Verify the bot has the following permissions:
+        #     - Send Messages
+        #     - Embed Links
+        #     - Attach Files
+        #     - TODO: Add more permissions
+        #     """
+        #     return True
+        return True

@@ -8,7 +8,7 @@ of the codebase to avoid redundancy and promote code reuse.
 
 from __future__ import annotations
 
-__all__ = ["strtobool"]
+__all__ = ["strtobool", "int_to_colour_hex", "colour_hex_to_int"]
 
 
 def strtobool(val: str) -> int:
@@ -27,3 +27,21 @@ def strtobool(val: str) -> int:
         return 0
     else:
         raise ValueError(f"invalid truth value {val!r}")
+
+
+def int_to_colour_hex(value: int) -> str:
+    """Convert an integer to a hex color string.
+
+    :param value: The integer value to convert.
+    :return: A hex color string in the format '#RRGGBB'.
+    """
+    return f"#{value:06X}"
+
+
+def colour_hex_to_int(value: str) -> int:
+    """Convert a hex color string to an integer.
+
+    :param value: The hex color string in the format '#RRGGBB'.
+    :return: The integer value of the color.
+    """
+    return int(value.lstrip("#"), 16)

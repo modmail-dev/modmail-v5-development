@@ -14,7 +14,6 @@ from modmail.enum import RequiredAccessLevel
 __all__ = ["PermissionConfig"]
 
 
-# noinspection PyNestedDecorators
 class PermissionConfig(BaseModel):
     """
     Configuration model for the permission system.
@@ -53,7 +52,6 @@ class PermissionConfig(BaseModel):
             key = key.casefold().strip().replace(" ", "_").replace("-", "_")
             if isinstance(value, str):
                 try:
-                    # noinspection PyTypeChecker
                     new_v[key] = RequiredAccessLevel[value.casefold()]
                 except KeyError:
                     raise ValueError(f"Invalid permission access level: {value}")

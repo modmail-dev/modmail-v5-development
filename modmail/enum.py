@@ -24,6 +24,7 @@ class AccessLevel(enum.IntEnum):
     admin = 4
 
     def __locale_str__(self) -> app_commands.locale_str:
+        # noinspection PyProtectedMember
         from .core import _
 
         match self:
@@ -50,6 +51,7 @@ class RequiredAccessLevel(enum.IntEnum):
     owner = 5
 
     def __locale_str__(self) -> app_commands.locale_str:
+        # noinspection PyProtectedMember
         from .core import _
 
         match self:

@@ -27,7 +27,6 @@ SupportedLocales: TypeAlias = Literal["en", "de"]
 SupportedDatabases: TypeAlias = Literal["sql", "mongodb"]
 
 
-# noinspection PyNestedDecorators
 class Config(BaseSettings):
     """
     Primary configuration model for the Modmail bot.

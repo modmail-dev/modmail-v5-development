@@ -67,7 +67,6 @@ class Translator(app_commands.Translator):
 
         l10n = all_l10n[CONFIG.default_locale]
 
-        # noinspection PyUnresolvedReferences
         locale_name = locale.value if isinstance(locale, discord.Locale) else locale
         if locale_name in all_l10n:
             l10n = all_l10n[locale_name]

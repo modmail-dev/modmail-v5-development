@@ -17,7 +17,6 @@ __all__ = [
 ]
 
 
-# noinspection PyNestedDecorators
 class LoggingConfig(BaseModel):
     """
     Configuration model for the logging system.

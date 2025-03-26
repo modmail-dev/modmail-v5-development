@@ -8,18 +8,22 @@ several commands for adding, removing, customizing profiles and interface for ov
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, NamedTuple, Type, cast
+import re
+from typing import TYPE_CHECKING, Any, NamedTuple, Type
 
 import discord
 from discord.ext import commands
 
+# noinspection PyProtectedMember
 from modmail import CONFIG
 from modmail.backends import Profile
+
+# noinspection PyProtectedMember
 from modmail.core import Bot, _, lazy_hybrid_group
+from modmail.enum import AccessLevel, PermissionOverrideValue, ProfileType
+from modmail.utils import colour_hex_to_int, int_to_colour_hex
 
 __all__ = ["profile_command"]
-
-from modmail.enum import AccessLevel, PermissionOverrideValue, ProfileType
 
 if TYPE_CHECKING:
     from .. import Utility
@@ -87,6 +91,9 @@ async def make_profile_customize_view(
     :param profile: The profile to customize.
     :return: A Discord.py UI view for customizing the profile.
     """
+    # Stores the previous interaction so we can delete the response later
+    _previous_interaction: discord.Interaction | None = None
+
     ui_button_label = await cog.translate(ctx, _("ftl-view-profile-button-customize-label"))
     ui_select_level_placeholder = await cog.translate(ctx, _("ftl-view-profile-select-level-placeholder"))
     _LEVEL_NONE = "None"
@@ -116,25 +123,64 @@ async def make_profile_customize_view(
     class ProfileCustomizeModal(discord.ui.Modal, title=ui_title):
         # TODO: Use default from current profile
         colour: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
-            label=ui_colour_label, default="#000000", required=False
+            label=ui_colour_label,
+            placeholder="#000000",
+            default=int_to_colour_hex(profile.colour) if profile.colour is not None else None,
+            required=False,
         )
         tag: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
-            label=ui_tag_label, default="", required=False
+            label=ui_tag_label,
+            default=profile.tag if profile.tag is not None else None,
+            required=False,
+            max_length=128,
         )
 
-        def __init__(self, view: ProfileCustomizeView):
-            super().__init__()
-            self._view = view
+        async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+            """
+            Check if the interaction is from the user who invoked the command.
+            """
+            return interaction.user == ctx.author
 
         async def on_submit(self, interaction: discord.Interaction) -> None:
-            print(self.colour, self.tag)
-            # Disable the modal customize button
-            button = cast(discord.ui.Button[ProfileCustomizeView], self._view.children[1])
-            button.disabled = True
-            # noinspection PyProtectedMember
-            if self._view._original_message is not None:  # type: ignore[reportPrivateUsage]
-                # noinspection PyProtectedMember
-                await self._view._original_message.edit(view=self._view)  # type: ignore[reportPrivateUsage]
+            nonlocal profile, _previous_interaction
+
+            if _previous_interaction is not None:
+                # Delete the previous interaction response if it exists
+                await _previous_interaction.delete_original_response()
+            _previous_interaction = interaction
+
+            to_update: dict[str, Any] = {}
+
+            # Check if colour hex is invalid
+            if self.colour.value and re.match(r"^#?[0-9a-fA-F]{6}$", self.colour.value) is None:
+                await interaction.response.send_message(
+                    await cog.translate(ctx, _("ftl-modal-profile-customize-colour-invalid")),
+                    ephemeral=True,
+                )
+                return
+
+            colour = colour_hex_to_int(self.colour.value) if self.colour.value else None
+            if colour != profile.colour:
+                to_update["colour"] = colour
+                # Update the default value of the modal
+                ProfileCustomizeModal.colour.default = int_to_colour_hex(colour) if colour is not None else None
+
+            tag = self.tag.value if self.tag.value else None
+            if tag != profile.tag:
+                to_update["tag"] = tag
+                # Update the default value of the modal
+                ProfileCustomizeModal.tag.default = tag
+
+            if to_update:
+                new_profile = profile.model_copy(deep=True, update=to_update)
+                await ctx.bot.database_client.update_profile(new_profile)
+                logger.debug("Updated profile %d with %s.", new_profile.profile_id, to_update)
+                profile = new_profile
+
+            await interaction.response.send_message(
+                await cog.translate(ctx, _("ftl-modal-profile-customize-success", name=profile_detail.mention)),
+                ephemeral=True,
+            )
 
     # noinspection PyShadowingNames
     class ProfileCustomizeView(discord.ui.View):
@@ -175,13 +221,17 @@ async def make_profile_customize_view(
         async def level_select(
             self, interaction: discord.Interaction, select: discord.ui.Select[ProfileCustomizeView]
         ) -> None:
-            nonlocal profile
+            nonlocal profile, _previous_interaction
+
+            if _previous_interaction is not None:
+                # Delete the previous interaction response if it exists
+                await _previous_interaction.delete_original_response()
+            _previous_interaction = interaction
 
             selected_option = select.values[0]
             if selected_option == _LEVEL_NONE:
                 selected_level: AccessLevel | None = None
             else:
-                # noinspection PyTypeChecker
                 selected_level = AccessLevel[selected_option]
 
             if profile.access_level != selected_level:
@@ -192,23 +242,21 @@ async def make_profile_customize_view(
             await interaction.response.send_message(
                 await cog.translate(
                     ctx,
-                    _("ftl-view-profile-select-level-success", name=profile_detail.mention, level=selected_level),
+                    _(
+                        "ftl-view-profile-select-level-success",
+                        name=profile_detail.mention,
+                        level=selected_level if selected_level is not None else "None",
+                    ),
                 ),
                 ephemeral=True,
             )
 
-            # Disable the select
-            select = cast(discord.ui.Select[ProfileCustomizeView], self.children[0])
-            select.disabled = True
-            select.placeholder = next(option.label for option in select.options if option.value == selected_option)
-            if self._original_message is not None:
-                await self._original_message.edit(view=self)
-
+        # noinspection PyUnusedLocal
         @discord.ui.button(label=ui_button_label, style=discord.ButtonStyle.primary)
         async def customize_button(
             self, interaction: discord.Interaction, button: discord.ui.Button[ProfileCustomizeView]
         ) -> None:
-            await interaction.response.send_modal(ProfileCustomizeModal(self))
+            await interaction.response.send_modal(ProfileCustomizeModal())
 
     return ProfileCustomizeView
 

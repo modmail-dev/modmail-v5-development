@@ -14,6 +14,8 @@ from discord import app_commands
 from discord.ext import commands
 
 from modmail.backends import Activity
+
+# noinspection PyProtectedMember
 from modmail.core import Bot, _, lazy_hybrid_group, wrap
 from modmail.enum import ActivityType, StatusType
 

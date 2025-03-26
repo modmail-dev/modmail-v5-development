@@ -18,7 +18,6 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-# noinspection PyNestedDecorators
 class MongoDBDatabaseConfig(BaseModel):
     """
     Configuration model for the MongoDB database.

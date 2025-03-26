@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from discord.ext import commands
 
+# noinspection PyProtectedMember
 from modmail.core import Bot, _, lazy_hybrid_group
 
 __all__ = ["about_command"]

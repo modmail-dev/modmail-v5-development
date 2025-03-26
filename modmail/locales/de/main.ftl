@@ -48,13 +48,19 @@ ftl-cmd-profile-fallback-name = anzeigen
 
 ftl-modal-profile-customize-title = Profil anpassen
 ftl-modal-profile-customize-colour = Farbe
+ftl-modal-profile-customize-colour-invalid = Ungültige Farbe. Bitte verwenden Sie einen Farb-Hex-Code (z.B. #FF0000 für Rot).
 ftl-modal-profile-customize-tag = Tag
+# :param $name: the name of the user or role
+ftl-modal-profile-customize-success = Profil von { $name } erfolgreich angepasst.
 ftl-view-profile-button-customize-label = Anpassen
 ftl-view-profile-select-level-placeholder = Wählen Sie eine Zugriffsebene
 ftl-view-profile-select-level-option-none = Keine
-# :param $level: the name of the access level
+# :param $level: the name of the access level ('None' when unsetting)
 # :param $name: the name of the user or role
-ftl-view-profile-select-level-success = Zugriffsebene von { $name } erfolgreich auf { $level } gesetzt.
+ftl-view-profile-select-level-success = { $level ->
+   *[default] Zugriffsebene von { $name } erfolgreich auf { $level } gesetzt.
+    [None]    Zugriffsebene von { $name } erfolgreich entfernt.
+}
 
 ## Subcommand: Utility.profile.add
 

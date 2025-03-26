@@ -14,7 +14,6 @@ __all__ = [
 ]
 
 
-# noinspection PyNestedDecorators
 class SQLDatabaseConfig(BaseModel):
     """
     Configuration model for the SQL database.

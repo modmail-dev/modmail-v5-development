@@ -158,5 +158,4 @@ def create_cog(name: str, all_commands: list[LazyHybridCommand[Any]]) -> type[Co
         methods.update(command.get_commands(name))
 
     cog = type(name, (Cog,), methods, group_auto_locale_strings=False)
-    # noinspection PyTypeChecker
     return cog

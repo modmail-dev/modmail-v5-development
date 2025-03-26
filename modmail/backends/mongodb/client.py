@@ -205,7 +205,6 @@ class MongoDBClient(DBClientBase):
                 value = MongoDBActivityModel(**value)
             setattr(settings_document, key, value)
 
-        # noinspection PyArgumentList
         await settings_document.replace()  # Use .replace() to update the document in place
         self._settings_document = settings_document  # Update the settings model to the new one
 
@@ -240,7 +239,6 @@ class MongoDBClient(DBClientBase):
             for key, value in new_profile_dict.items():
                 setattr(new_profile, key, value)
 
-            # noinspection PyArgumentList
             await new_profile.replace()
             self.__profiles_cache[profile_key] = (new_profile, Profile.model_validate(new_profile))
             logger.debug("Updated profile %s in MongoDB.", profile_key)
