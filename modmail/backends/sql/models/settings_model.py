@@ -28,7 +28,9 @@ class SQLSettingsTable(SQLBase):
 
     bot_id: Mapped[int] = mapped_column(primary_key=True, unique=True)
     last_ran_version: Mapped[str | None] = mapped_column(String(32))
-    slash_last_synced_version: Mapped[str | None] = mapped_column(String(32))
+    last_ran_locale: Mapped[str | None] = mapped_column(String(8))
+    last_slash_synced_version: Mapped[str | None] = mapped_column(String(32))
+    last_slash_minimum_permission_int: Mapped[int | None]
     main_category_id: Mapped[int | None]
     fallback_category_id: Mapped[int | None]
     status: Mapped[StatusType | None]

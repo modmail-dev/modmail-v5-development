@@ -37,10 +37,6 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         """
         self.bot = bot
 
-    async def cog_before_invoke(self, ctx: commands.Context[Bot]) -> None:
-        logger.debug("User %s is running the %s command.", ctx.author, ctx.command)
-        await super().cog_before_invoke(ctx)
-
     async def reply(
         self,
         ctx: commands.Context[Bot],

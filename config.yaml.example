@@ -109,9 +109,20 @@ permission:
   # If set to true, users with the "Administrator" permission will be able to use all non-owner commands.
   discord_admin_bypass: true
 
-  # A mapping of command names to permission levels.
-  # You can use this to override the default permission levels for specific commands.
-  # The permission levels are (use English here):
+  # If set to true, everyone will be able to use commands under the "everyone" access level.
+  default_access_everyone: true
+
+  # The minimum Discord permissions required to access slash commands.
+  # User must also have the "Use Application Commands" permission regardless of this setting.
+  # Default (11264): user needs 'view channel', 'send messages', 'manage messages'.
+  # Input the permissions as a number, calculate it here: https://discordapi.com/permissions.html#11264.
+  # To grant everyone access to slash commands, set this to 0.
+  # Note: This only grants visibility to slash commands, permission access will still be checked.
+  # slash_minimum_permission_int: 11264
+
+  # A mapping of command names to permission access levels.
+  # You can use this to override the default access levels for specific commands.
+  # The possible access levels are:
   #   * everyone
   #   * staff
   #   * manager
@@ -119,10 +130,12 @@ permission:
   #   * owner
   # Command names should be as appears in the code.
   # For example, the `/status clear` command is called "status_clear_command" in the code (cogs/utility/commands/status.py).
-  # So you would use "status_clear" as the command name for the override.
-  # For most cases, the command name is the same as the actual command, but with underscores instead of spaces and dashes.
+  # So you would use "status clear" as the command name for the override.
+  # For most cases, the command name is the same as the actual command.
+  # You can set wildcard (+) to override a command group. For example, "status+" will override all related commands (i.e. `/status clear`).
   overrides:
-    some_command_name: staff
+    some command name: staff
+    some group+: everyone
 
 # Configures the logging outputs of the bot.
 # If you're unsure what to set, leave this section default.

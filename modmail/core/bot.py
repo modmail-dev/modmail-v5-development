@@ -14,13 +14,9 @@ from typing import Any, NoReturn
 import discord
 from discord.ext import commands
 
-from .. import CONFIG, __version__
-from ..backends import Activity, DBClientBase
-from ..enum import (
-    ActivityType,
-    RequiredAccessLevel,
-    StatusType,
-)
+from .. import CONFIG, __version__, utils
+from ..backends import Activity, DBClientBase, Profile
+from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
 from ..errors import DatabaseError
 from .translator import Translator
 
@@ -86,7 +82,9 @@ class Bot(commands.Bot):
 
             self.database_client: DBClientBase = MongoDBClient(CONFIG)
 
-        self.add_check(self._global_check)
+        self.add_check(self._bot_can_run_check)
+        self.add_check(self._permission_check)
+        self.before_invoke(self.on_before_invoke)
 
     async def setup_hook(self) -> None:
         """
@@ -116,7 +114,10 @@ class Bot(commands.Bot):
         # Set the translator for the command tree. Should be done before syncing.
         await self.tree.set_translator(self.translator)
 
+        slash_synced = False
+
         if CONFIG.bot.force_sync_commands:
+            slash_synced = True
             if CONFIG.bot.use_slash_commands:
                 logger.info("Force syncing slash commands.")
                 logger.warning(
@@ -135,12 +136,40 @@ class Bot(commands.Bot):
         else:
             if CONFIG.bot.use_slash_commands:
                 # Sync slash commands if last synced in a different version.
-                if self.database_client.settings_model.slash_last_synced_version != self.version:
+                if self.database_client.settings_model.last_slash_synced_version != self.version:
+                    slash_synced = True
                     await self._sync_slash_commands()
             else:
                 # Un-sync slash commands if last synced is not None (it's un-synced when None).
-                if self.database_client.settings_model.slash_last_synced_version is not None:
+                if self.database_client.settings_model.last_slash_synced_version is not None:
+                    slash_synced = True
                     await self._unsync_slash_commands()
+
+        # Update the last ran locale in the database.
+        last_ran_locale = self.database_client.settings_model.last_ran_locale
+        if last_ran_locale != CONFIG.default_locale:
+            if last_ran_locale is not None:  # The locale was changed, need to resync the commands.
+                logger.info("Locale changed from %s to %s", last_ran_locale, CONFIG.default_locale)
+                if CONFIG.bot.use_slash_commands and not slash_synced:
+                    slash_synced = True
+                    await self._sync_slash_commands()
+
+            await self.database_client.update_settings(last_ran_locale=CONFIG.default_locale)
+
+        last_slash_minimum_permission_int = self.database_client.settings_model.last_slash_minimum_permission_int
+        if last_slash_minimum_permission_int != CONFIG.permission.slash_minimum_permission_int:
+            if last_slash_minimum_permission_int is not None:
+                logger.info(
+                    "Slash minimum permission changed from %s to %s",
+                    last_slash_minimum_permission_int,
+                    CONFIG.permission.slash_minimum_permission_int,
+                )
+                if CONFIG.bot.use_slash_commands and not slash_synced:
+                    slash_synced = True
+                    await self._sync_slash_commands()
+            await self.database_client.update_settings(
+                last_slash_minimum_permission_int=CONFIG.permission.slash_minimum_permission_int
+            )
 
         # Update the last ran version in the database.
         last_ran_version = self.database_client.settings_model.last_ran_version
@@ -152,20 +181,20 @@ class Bot(commands.Bot):
         """
         Sync the slash commands.
         """
-        logger.debug("Syncing slash commands.")
+        logger.debug("Syncing slash commands (this may take a while).")
         await self.tree.sync()
         logger.debug("Slash commands synced.")
-        await self.database_client.update_settings(slash_last_synced_version=self.version)
+        await self.database_client.update_settings(last_slash_synced_version=self.version)
 
     async def _unsync_slash_commands(self) -> None:
         """
         Unsync the slash commands.
         """
-        logger.debug("Un-syncing slash commands.")
+        logger.debug("Un-syncing slash commands (this may take a while).")
         self.tree.clear_commands(guild=None)
-        logger.debug("Slash commands un-synced.")
         await self.tree.sync()
-        await self.database_client.update_settings(slash_last_synced_version=None)
+        logger.debug("Slash commands un-synced.")
+        await self.database_client.update_settings(last_slash_synced_version=None)
 
     def run(self, *args: Any, **kwargs: Any) -> NoReturn:
         """
@@ -315,49 +344,164 @@ class Bot(commands.Bot):
         await self.database_client.update_settings(activity=None, status=None)
         await self.set_bot_presence()
 
+    async def on_command_error(self, context: commands.Context[Bot], exception: commands.CommandError, /) -> None:
+        """
+        This is called when a command raises an error.
+        """
+        # Ignore command not found errors
+        if isinstance(exception, commands.CommandNotFound):
+            return
+
+        # Ignore command check failure errors
+        if isinstance(exception, commands.CheckFailure):
+            if hasattr(context, "_perm_check_reason"):  # This gets injected by the permission check
+                # noinspection PyProtectedMember
+                logger.debug("%s is not allowed to run %s: %s", context.author, context.command, context._perm_check_reason)  # type: ignore[reportUnknownMemberType,reportUnknownArgumentType,reportAttributeAccessIssue]
+            return
+        return await super().on_command_error(context, exception)
+
     @staticmethod
-    def get_command_access_level(ctx: commands.Context[Bot]) -> RequiredAccessLevel:
+    async def on_before_invoke(ctx: commands.Context[Bot]) -> None:
+        """
+        This is called before a command is invoked.
+        """
+        if hasattr(ctx, "_perm_check_reason"):  # This gets injected by the permission check
+            # noinspection PyProtectedMember
+            logger.debug("%s is running %s, allowed reason: %s", ctx.author, ctx.command, ctx._perm_check_reason)  # type: ignore[reportUnknownMemberType,reportUnknownArgumentType,reportAttributeAccessIssue]
+        else:
+            logger.debug("User %s is running the %s command.", ctx.author, ctx.command)
+
+    @staticmethod
+    def get_command_access_level(base_command: commands.Command[Any, Any, Any]) -> RequiredAccessLevel:
         """
         Get the access level of the command.
         Returns "everyone" if no access level is set.
 
-        :param ctx: The context of the command.
+        :param base_command: The command to get the access level for.
         :return: The access level of the command.
         """
-        if ctx.command is None:  # When would this happen?
-            logger.debug("The context command is None? %s", ctx)
-            return RequiredAccessLevel.everyone
-
         default_access_level: RequiredAccessLevel | None = None
 
-        # If the command is a subcommand, if so, add the parents of the command (in reverse order).
-        commands_to_check = [ctx.command] + ctx.command.parents
+        # If the command is a subcommand, if so, add the parents of the command (in reverse order)
+        # and check for most significant access level.
+        commands_to_check = [base_command] + base_command.parents
 
-        for command in commands_to_check:
-            if default_access_level is None:
-                # Check if the command has an access level set.
-                if hasattr(ctx.command.callback, "__permission__"):
-                    # See: modmail/core/permission.py
-                    default_access_level = ctx.command.callback.__permission__  # type: ignore[reportFunctionMemberAccess]
+        # Check if the command has an override set in the config.
+        for i, command in enumerate(commands_to_check):
+            command_name = utils.get_command_name(command)
 
-            command_name: str = command.callback.__name__.casefold()
-            if command_name.endswith("_command"):
-                command_name = command_name[:-8]
-            else:
-                logger.debug("Command name does not end with _command: %s", command.qualified_name)
+            # If the parent command has a wildcard override. e.g. "profile+" will match "profile add"
+            override = CONFIG.permission.overrides.get(command_name + "+")
 
-            # Check if the command has an override set in the config.
-            for key, value in CONFIG.permission.overrides.items():
-                if key.casefold() == command_name:
-                    return value
+            if i == 0:  # Check for override on the exact command name
+                override = CONFIG.permission.overrides.get(command_name, override)
+
+            if override is not None:
+                return override
+
+            # Set the default access level if the command has an access level set.
+            # Otherwise, propagate the access level lookup to the parent command.
+            if default_access_level is None and hasattr(command.callback, "__permission__"):
+                # See: modmail/core/permission.py
+                default_access_level = command.callback.__permission__  # type: ignore[reportFunctionMemberAccess]
 
         # If no access level is set, then everyone can use the command.
         return default_access_level if default_access_level is not None else RequiredAccessLevel.everyone
 
-    def _global_check(self, ctx: commands.Context[Bot]) -> bool:
+    def get_all_user_profiles(self, user: discord.User | discord.Member) -> list[Profile]:
         """
-        A global check that runs before every command.
-        This can be used to enforce certain conditions globally.
+        Get all profiles for a user.
+        This includes the user profile and all roles in the guild.
+
+        :param user: The user to get the profiles for.
+        :return: A list of profiles for the user (from most to least significant).
+        """
+
+        all_profiles: list[Profile] = []  # All profiles to check for permission overrides
+
+        user_profile = self.database_client.get_profile(user.id, ProfileType.user)
+        if isinstance(user, discord.Member):  # Command invoked in a guild
+            # Loops all roles from @everyone -> top role
+            for role in user.roles:
+                role_profile = self.database_client.get_profile(role.id, ProfileType.role)
+                if role_profile is not None:
+                    all_profiles.insert(0, role_profile)
+        if user_profile is not None:
+            all_profiles.insert(0, user_profile)
+        return all_profiles
+
+    async def _permission_check(self, ctx: commands.Context[Bot]) -> bool:
+        """
+        A permission check to see if the user is allowed to invoke this command.
+        """
+        if ctx.author.bot:  # Ignore commands invoked by bots
+            ctx._perm_check_reason = "bot"  # type: ignore[reportAttributeAccessIssue]
+            return False
+
+        if ctx.command is None:  # When would this happen?
+            logger.warning("The context command is None? %s", ctx)
+            return True
+
+        if await self.is_owner(ctx.author):
+            ctx._perm_check_reason = "owner"  # type: ignore[reportAttributeAccessIssue]
+            return True
+
+        all_profiles = self.get_all_user_profiles(ctx.author)
+        command_access_level = self.get_command_access_level(ctx.command)
+
+        # If the command is a subcommand, if so, add the parents of the command (in reverse order).
+        commands_to_check = [ctx.command] + ctx.command.parents
+
+        for i, command in enumerate(commands_to_check):
+            command_name = utils.get_command_name(command)
+
+            for profile in all_profiles:
+                if i == 0:  # Check for override on the exact command name
+                    if profile.permission_overrides.get(command_name) == PermissionOverrideValue.deny:
+                        ctx._perm_check_reason = f"{profile.profile_id} deny {command_name}"  # type: ignore[reportAttributeAccessIssue]
+                        return False
+                    if profile.permission_overrides.get(command_name) == PermissionOverrideValue.allow:
+                        ctx._perm_check_reason = f"{profile.profile_id} allow {command_name}"  # type: ignore[reportAttributeAccessIssue]
+                        return True
+                elif command_access_level == RequiredAccessLevel.owner:
+                    # Owner-only commands cannot be overridden by wildcard overrides on parent.
+                    # However, when i=0, the wildcard override is checked on the exact command name.
+                    break
+
+                # Check for wildcard override (on parents). e.g. "profile+" will match "profile add"
+                if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.deny:
+                    ctx._perm_check_reason = f"{profile.profile_id} deny {command_name}+"  # type: ignore[reportAttributeAccessIssue]
+                    return False
+
+                if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.allow:
+                    ctx._perm_check_reason = f"{profile.profile_id} allow {command_name}+"  # type: ignore[reportAttributeAccessIssue]
+                    return True
+
+        # Owner check
+        if command_access_level == RequiredAccessLevel.owner:
+            ctx._perm_check_reason = "owner only"  # type: ignore[reportAttributeAccessIssue]
+            return False
+
+        if CONFIG.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
+            # If the command is set to everyone, allow it.
+            ctx._perm_check_reason = "everyone"  # type: ignore[reportAttributeAccessIssue]
+            return True
+
+        for profile in all_profiles:
+            if profile.access_level is None:
+                continue
+
+            # Check if the user has the required access level for the command.
+            if profile.access_level >= command_access_level:
+                ctx._perm_check_reason = f"{profile.profile_id} level {profile.access_level} >= {command_access_level}"  # type: ignore[reportAttributeAccessIssue]
+                return True
+
+        ctx._perm_check_reason = f"no access {command_access_level}"  # type: ignore[reportAttributeAccessIssue]
+        return False
+
+    async def _bot_can_run_check(self, ctx: commands.Context[Bot]) -> bool:
+        """
+        Check if the bot can run the command.
         """
         #     Check if the bot can run the command.
         #     Verify the bot has the following permissions:

@@ -7,14 +7,12 @@ These decorators are used to restrict command usage to users with specific acces
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, TypeAlias, TypeVar
+from typing import Any, Callable, Coroutine, TypeAlias, TypeVar
 
 from discord.ext import commands
 
 from ..enum import RequiredAccessLevel
-
-if TYPE_CHECKING:
-    from .commands import LazyHybridCommand
+from .commands import LazyHybridCommand
 
 Co: TypeAlias = Callable[..., Coroutine[Any, Any, Any]]
 T = TypeVar("T", bound=commands.Command[Any, Any, Any] | LazyHybridCommand[Any] | Co)

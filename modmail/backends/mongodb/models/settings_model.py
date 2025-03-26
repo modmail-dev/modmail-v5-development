@@ -28,7 +28,9 @@ class MongoDBActivityModel(BaseModel):
 class MongoDBSettingsDocument(Document):
     bot_id: Annotated[int, Indexed(unique=True)]  # the bot ID
     last_ran_version: str | None = None  # the last version the bot was run on, None = first run
-    slash_last_synced_version: str | None = None  # the last version the slash commands were synced on
+    last_ran_locale: str | None = None  # the last locale the bot was run on
+    last_slash_synced_version: str | None = None  # the last version the slash commands were synced on
+    last_slash_minimum_permission_int: int | None = None  # the last minimum permission int for slash commands
     main_category_id: int | None = None
     fallback_category_id: int | None = None
     status: StatusType | None = None

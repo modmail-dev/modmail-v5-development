@@ -15,4 +15,5 @@ except ImportError as e:
 
 from .bot import *
 from .commands import *
+from .permission import *
 from .translator import *

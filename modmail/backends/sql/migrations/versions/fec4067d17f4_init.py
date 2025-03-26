@@ -1,8 +1,8 @@
 """init
 
-Revision ID: 30ca1364bc5a
+Revision ID: fec4067d17f4
 Revises:
-Create Date: 2025-03-25 14:56:32.384639
+Create Date: 2025-03-26 11:38:24.535913
 
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "30ca1364bc5a"
+revision: str = "fec4067d17f4"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -37,7 +37,9 @@ def upgrade() -> None:
         "settings",
         sa.Column("bot_id", sa.Integer(), nullable=False),
         sa.Column("last_ran_version", sa.String(length=32), nullable=True),
-        sa.Column("slash_last_synced_version", sa.String(length=32), nullable=True),
+        sa.Column("last_ran_locale", sa.String(length=8), nullable=True),
+        sa.Column("last_slash_synced_version", sa.String(length=32), nullable=True),
+        sa.Column("last_slash_minimum_permission_int", sa.Integer(), nullable=True),
         sa.Column("main_category_id", sa.Integer(), nullable=True),
         sa.Column("fallback_category_id", sa.Integer(), nullable=True),
         sa.Column("status", sa.Enum("online", "idle", "dnd", "offline", name="statustype"), nullable=True),

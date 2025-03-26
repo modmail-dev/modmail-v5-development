@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from typing import Any, Callable, Coroutine, Generic, TypeAlias, TypeVar
 
+import discord
+from discord import app_commands
 from discord.ext import commands
+
+from ... import CONFIG
 
 __all__ = ["LazyHybridCommand", "LazyHybridGroup", "lazy_hybrid_command", "lazy_hybrid_group", "wrap"]
 
@@ -43,6 +47,19 @@ class LazyHybridCommand(Generic[T]):
             self.wrappers: list[tuple[DecoFactory[T], tuple[Any, ...], dict[str, Any]]] = func.__modmail_wrappers__  # type: ignore[reportFunctionMemberAccess]
         else:
             self.wrappers = []
+
+        # Allow the commands should be used in guilds only
+        self.wrappers.append((commands.guild_only, (), {}))
+
+        # Set the default permissions for the slash command
+        if CONFIG.permission.slash_minimum_permission_int != 0:
+            self.wrappers.append(
+                (
+                    app_commands.default_permissions,
+                    (discord.Permissions(CONFIG.permission.slash_minimum_permission_int),),
+                    {},
+                )
+            )
 
     @property
     def name(self) -> str:

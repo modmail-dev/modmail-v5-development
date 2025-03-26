@@ -79,12 +79,12 @@ ftl-cmd-profile-delete-none = Please provide a user, role, or ID.
 # :param $name: the name of the user or role or ID
 ftl-cmd-profile-delete-success = Deleted the profile of { $name }.
 
-## Subcommand: Utility.profile.customize
+## Subcommand: Utility.profile.edit
 
-ftl-cmd-profile-customize-name = customize
-ftl-cmd-profile-customize-description = Customize the profile.
+ftl-cmd-profile-edit-name = edit
+ftl-cmd-profile-edit-description = Customize the profile.
 # :param $name: the name of the user or role
-ftl-cmd-profile-customize-message = Customizing the profile of { $name }.
+ftl-cmd-profile-edit-message = Customizing the profile of { $name }.
 
 ## Subcommand: Utility.profile.allow
 ftl-cmd-profile-allow-name = allow
@@ -92,6 +92,10 @@ ftl-cmd-profile-allow-description = Allow users of this profile to use a command
 # :param $name: the name of the user or role
 # :param $command: the name of the command
 ftl-cmd-profile-allow-success = Allowed { $name } to use { $command }.
+# The following params can be used for the next 2 lines
+# :param $command: the name of the command
+ftl-cmd-profile-override-owner-command = Only bot owners can override this command.
+ftl-cmd-profile-override-command-not-found = Command { $command } not found.
 
 ## Subcommand: Utility.profile.deny
 ftl-cmd-profile-deny-name = deny

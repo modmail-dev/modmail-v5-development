@@ -15,13 +15,12 @@ import discord
 from discord.ext import commands
 
 # noinspection PyProtectedMember
-from modmail import CONFIG
+from modmail import CONFIG, utils
 from modmail.backends import Profile
 
 # noinspection PyProtectedMember
 from modmail.core import Bot, _, lazy_hybrid_group
-from modmail.enum import AccessLevel, PermissionOverrideValue, ProfileType
-from modmail.utils import colour_hex_to_int, int_to_colour_hex
+from modmail.enum import AccessLevel, PermissionOverrideValue, ProfileType, RequiredAccessLevel
 
 __all__ = ["profile_command"]
 
@@ -45,7 +44,7 @@ class ProfileDetail(NamedTuple):
 
 
 def _get_profile_detail(
-    *, user_or_role: discord.User | discord.Role | None = None, id_: int | None = None
+    *, user_or_role: discord.Member | discord.User | discord.Role | None = None, id_: int | None = None
 ) -> ProfileDetail | None:
     """
     Get a sanitized ProfileDetail from the raw user/role/id_ command inputs.
@@ -95,7 +94,13 @@ async def make_profile_customize_view(
     _previous_interaction: discord.Interaction | None = None
 
     ui_button_label = await cog.translate(ctx, _("ftl-view-profile-button-customize-label"))
-    ui_select_level_placeholder = await cog.translate(ctx, _("ftl-view-profile-select-level-placeholder"))
+
+    if profile.access_level is not None:
+        # If the profile has an access level, set the placeholder to the current access level
+        ui_select_level_placeholder = await cog.translate(ctx, profile.access_level.__locale_str__())
+    else:
+        ui_select_level_placeholder = await cog.translate(ctx, _("ftl-view-profile-select-level-placeholder"))
+
     _LEVEL_NONE = "None"
     ui_select_level_options = [
         # An option to remove the access level for this profile
@@ -125,7 +130,7 @@ async def make_profile_customize_view(
         colour: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
             label=ui_colour_label,
             placeholder="#000000",
-            default=int_to_colour_hex(profile.colour) if profile.colour is not None else None,
+            default=utils.int_to_colour_hex(profile.colour) if profile.colour is not None else None,
             required=False,
         )
         tag: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
@@ -159,11 +164,13 @@ async def make_profile_customize_view(
                 )
                 return
 
-            colour = colour_hex_to_int(self.colour.value) if self.colour.value else None
+            colour = utils.colour_hex_to_int(self.colour.value) if self.colour.value else None
             if colour != profile.colour:
                 to_update["colour"] = colour
                 # Update the default value of the modal
-                ProfileCustomizeModal.colour.default = int_to_colour_hex(colour) if colour is not None else None
+                ProfileCustomizeModal.colour.default = (
+                    utils.int_to_colour_hex(colour) if colour is not None else None
+                )
 
             tag = self.tag.value if self.tag.value else None
             if tag != profile.tag:
@@ -275,7 +282,7 @@ async def profile_command(self: Utility, ctx: commands.Context[Bot]) -> None:
 
 @profile_command.command(name=_("ftl-cmd-profile-add-name"), description=_("ftl-cmd-profile-add-description"))
 async def profile_add_command(
-    self: Utility, ctx: commands.Context[Bot], user_or_role: discord.User | discord.Role
+    self: Utility, ctx: commands.Context[Bot], user_or_role: discord.Member | discord.User | discord.Role
 ) -> None:
     """
     Create a new profile for a user/role.
@@ -309,7 +316,7 @@ async def profile_add_command(
 async def profile_delete_command(
     self: Utility,
     ctx: commands.Context[Bot],
-    user_or_role: discord.User | discord.Role,
+    user_or_role: discord.Member | discord.User | discord.Role,
     id_: int | None,  # in case role/user was deleted TODO: auto delete on bot start so this isn't necessary
 ) -> None:
     """
@@ -328,13 +335,11 @@ async def profile_delete_command(
     await self.reply(ctx, _("ftl-cmd-profile-delete-success", name=profile_detail.mention))
 
 
-@profile_command.command(
-    name=_("ftl-cmd-profile-customize-name"), description=_("ftl-cmd-profile-customize-description")
-)
-async def profile_customize_command(
+@profile_command.command(name=_("ftl-cmd-profile-edit-name"), description=_("ftl-cmd-profile-edit-description"))
+async def profile_edit_command(
     self: Utility,
     ctx: commands.Context[Bot],
-    user_or_role: discord.User | discord.Role,
+    user_or_role: discord.Member | discord.User | discord.Role,
 ) -> None:
     """
     Customize a user/role's profile.
@@ -357,85 +362,108 @@ async def profile_customize_command(
         await self.bot.database_client.update_profile(profile)
 
     view = (await make_profile_customize_view(self, ctx, profile_detail, profile))()
-    message = await self.reply(ctx, _("ftl-cmd-profile-customize-message", name=profile_detail.mention), view=view)
+    message = await self.reply(ctx, _("ftl-cmd-profile-edit-message", name=profile_detail.mention), view=view)
     view.set_original_message(message)
+
+
+async def _update_permission_override(
+    self: Utility,
+    ctx: commands.Context[Bot],
+    user_or_role: discord.Member | discord.User | discord.Role,
+    command_name: str,
+    override_value: PermissionOverrideValue,
+) -> None:
+    """
+    Update the permission override for a user/role.
+    This is a helper function for the allow and deny commands.
+    """
+    # Sanitize the command name
+    command_name = utils.sanitize_user_command_name(command_name)
+    command_name_no_wildcard = command_name.split("+")[0].strip()
+
+    # Check if the command name is valid
+    for bot_command in self.bot.walk_commands():
+        bot_command_name = utils.get_command_name(bot_command)
+
+        if bot_command_name == command_name_no_wildcard:
+            if "+" in command_name and not isinstance(bot_command, commands.Group):
+                command_name = command_name_no_wildcard  # Remove the wildcard
+
+            if self.bot.get_command_access_level(bot_command) == RequiredAccessLevel.owner:
+                # Trying to override an owner-only command
+                if not await self.bot.is_owner(ctx.author):
+                    await self.reply(ctx, _("ftl-cmd-profile-override-owner-command", command=command_name))
+                    return
+            break  # Command found, exit the loop
+    else:
+        # Command not found
+        await self.reply(ctx, _("ftl-cmd-profile-override-command-not-found", command=command_name))
+        return
+
+    profile_detail = _get_profile_detail(user_or_role=user_or_role)
+
+    # These can't be None, assert for type checker
+    assert profile_detail is not None
+    assert profile_detail.profile_type is not None
+
+    # Check if the profile exists in the database
+    profile = self.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
+    if profile is None:
+        # Create a new profile if it doesn't exist
+        profile = Profile(
+            bot_id=CONFIG.bot.bot_id,
+            profile_id=profile_detail.profile_id,
+            profile_type=profile_detail.profile_type,
+        )
+
+    # Update the overrides
+    overrides = profile.permission_overrides.copy()
+    overrides[command_name] = override_value
+    new_profile = profile.model_copy(deep=True, update={"permission_overrides": overrides})
+
+    await self.bot.database_client.update_profile(new_profile)
+    if override_value == PermissionOverrideValue.allow:
+        await self.reply(
+            ctx, _("ftl-cmd-profile-allow-success", name=profile_detail.mention, command=command_name)
+        )
+    else:
+        await self.reply(ctx, _("ftl-cmd-profile-deny-success", name=profile_detail.mention, command=command_name))
 
 
 @profile_command.command(name=_("ftl-cmd-profile-allow-name"), description=_("ftl-cmd-profile-allow-description"))
 async def profile_allow_command(
     self: Utility,
     ctx: commands.Context[Bot],
-    user_or_role: discord.User | discord.Role,
+    user_or_role: discord.Member | discord.User | discord.Role,
+    *,
     command_name: str,
 ) -> None:
     """
     Allow a user/role to use a specific command without having the required access level.
     """
-    profile_detail = _get_profile_detail(user_or_role=user_or_role)
-
-    # These can't be None, assert for type checker
-    assert profile_detail is not None
-    assert profile_detail.profile_type is not None
-
-    # Check if the profile exists in the database
-    profile = self.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
-    if profile is None:
-        # Create a new profile if it doesn't exist
-        profile = Profile(
-            bot_id=CONFIG.bot.bot_id,
-            profile_id=profile_detail.profile_id,
-            profile_type=profile_detail.profile_type,
-        )
-
-    # Update the overrides
-    overrides = profile.permission_overrides.copy()
-    overrides[command_name] = PermissionOverrideValue.allow
-    new_profile = profile.model_copy(deep=True, update={"permission_overrides": overrides})
-
-    await self.bot.database_client.update_profile(new_profile)
-    await self.reply(ctx, _("ftl-cmd-profile-allow-success", name=profile_detail.mention, command=command_name))
+    await _update_permission_override(self, ctx, user_or_role, command_name, PermissionOverrideValue.allow)
 
 
 @profile_command.command(name=_("ftl-cmd-profile-deny-name"), description=_("ftl-cmd-profile-deny-description"))
 async def profile_deny_command(
     self: Utility,
     ctx: commands.Context[Bot],
-    user_or_role: discord.User | discord.Role,
+    user_or_role: discord.Member | discord.User | discord.Role,
+    *,
     command_name: str,
 ) -> None:
     """
     Deny a user/role from using a specific command even if they have the required access level.
     """
-    profile_detail = _get_profile_detail(user_or_role=user_or_role)
-
-    # These can't be None, assert for type checker
-    assert profile_detail is not None
-    assert profile_detail.profile_type is not None
-
-    # Check if the profile exists in the database
-    profile = self.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
-    if profile is None:
-        # Create a new profile if it doesn't exist
-        profile = Profile(
-            bot_id=CONFIG.bot.bot_id,
-            profile_id=profile_detail.profile_id,
-            profile_type=profile_detail.profile_type,
-        )
-
-    # Update the overrides
-    overrides = profile.permission_overrides.copy()
-    overrides[command_name] = PermissionOverrideValue.deny
-    new_profile = profile.model_copy(deep=True, update={"permission_overrides": overrides})
-
-    await self.bot.database_client.update_profile(new_profile)
-    await self.reply(ctx, _("ftl-cmd-profile-deny-success", name=profile_detail.mention, command=command_name))
+    await _update_permission_override(self, ctx, user_or_role, command_name, PermissionOverrideValue.deny)
 
 
 @profile_command.command(name=_("ftl-cmd-profile-unset-name"), description=_("ftl-cmd-profile-unset-description"))
 async def profile_unset_command(
     self: Utility,
     ctx: commands.Context[Bot],
-    user_or_role: discord.User | discord.Role,
+    user_or_role: discord.Member | discord.User | discord.Role,
+    *,
     command_name: str | None,
 ) -> None:
     """
@@ -455,6 +483,9 @@ async def profile_unset_command(
         return
 
     if command_name is not None:
+        # Sanitize the command name
+        command_name = utils.sanitize_user_command_name(command_name)
+
         # Check if the command override exists
         if command_name not in profile.permission_overrides:
             await self.reply(

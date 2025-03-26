@@ -16,7 +16,7 @@ from discord.ext import commands
 from modmail.backends import Activity
 
 # noinspection PyProtectedMember
-from modmail.core import Bot, _, lazy_hybrid_group, wrap
+from modmail.core import Bot, _, admin_only, lazy_hybrid_group, wrap
 from modmail.enum import ActivityType, StatusType
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 __all__ = ["status_command"]
 
 
-@wrap(commands.guild_only)
+@admin_only
 @wrap(app_commands.describe, status=_("ftl-cmd-status-param-status-description"))
 @lazy_hybrid_group(
     name=_("ftl-cmd-status-name"),
