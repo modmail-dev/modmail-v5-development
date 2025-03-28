@@ -27,9 +27,11 @@ class TestErrors:
 class TestEnums:
     def test_profile_key(self) -> None:
         """Test that ProfileKey namedtuple correctly stores and retrieves profile identifiers."""
-        key = ProfileKey(profile_id=123, profile_type=ProfileType.user)
-        assert key.profile_id == 123
-        assert key.profile_type == ProfileType.user
+        profile_id = 123
+        profile_type = ProfileType.user
+        key = ProfileKey(profile_id=profile_id, profile_type=profile_type)
+        assert key.profile_id == profile_id
+        assert key.profile_type == profile_type
 
 
 class TestEnumLocalization:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 import yaml
@@ -12,7 +12,7 @@ from modmail.config.models import Config
 
 
 @pytest.fixture
-def valid_config_dict() -> Dict[str, Any]:
+def valid_config_dict() -> dict[str, Any]:
     """Return a valid configuration dictionary for testing."""
     return {
         "version": "1.0",
@@ -26,10 +26,10 @@ def valid_config_dict() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def config_file_path(tmp_path: Path, valid_config_dict: Dict[str, Any]) -> Path:
+def config_file_path(tmp_path: Path, valid_config_dict: dict[str, Any]) -> Path:
     """Create a temporary config file with valid content."""
     config_path = tmp_path / "config.yaml"
-    with open(config_path, "w") as f:
+    with config_path.open("w") as f:
         yaml.dump(valid_config_dict, f)
     return config_path
 
@@ -64,7 +64,7 @@ def test_load_config_invalid_yaml(tmp_path: Path) -> None:
     """Test that load_config returns None when given invalid YAML content."""
     # Create an invalid YAML file
     config_path = tmp_path / "invalid_config.yaml"
-    with open(config_path, "w") as f:
+    with config_path.open("w") as f:
         f.write("This is not valid YAML")
 
     result = load_config(str(config_path))
@@ -78,7 +78,7 @@ def test_load_config_validation_error(mocker: MockerFixture, tmp_path: Path) -> 
 
     # Create a config with valid YAML but invalid values
     config_path = tmp_path / "invalid_values.yaml"
-    with open(config_path, "w") as f:
+    with config_path.open("w") as f:
         yaml.dump(
             {"version": "invalid_version", "bot": {"token": "invalid_token"}, "database_type": "unknown_db_type"},
             f,

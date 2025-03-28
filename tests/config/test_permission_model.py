@@ -71,5 +71,5 @@ def test_permission_config_none_overrides() -> None:
 
 def test_permission_config_negative_slash_permission() -> None:
     """Test that negative values for slash_minimum_permission_int are rejected."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"Input should be greater than or equal to 0"):
         PermissionConfig(slash_minimum_permission_int=-1)

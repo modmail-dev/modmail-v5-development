@@ -7,9 +7,9 @@ This module defines custom exceptions used throughout the Modmail project.
 from __future__ import annotations
 
 __all__ = [
-    "ModmailError",
-    "DatabaseError",
     "DatabaseConnectionError",
+    "DatabaseError",
+    "ModmailError",
 ]
 
 

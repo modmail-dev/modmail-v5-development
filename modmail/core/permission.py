@@ -7,17 +7,18 @@ These decorators are used to restrict command usage to users with specific acces
 
 from __future__ import annotations
 
-from typing import Any, Callable, Coroutine, TypeAlias, TypeVar
+from collections.abc import Callable, Coroutine
+from typing import Any, TypeVar
 
 from discord.ext import commands
 
 from ..enum import RequiredAccessLevel
 from .internals import LazyHybridCommand
 
-Co: TypeAlias = Callable[..., Coroutine[Any, Any, Any]]
+type Co = Callable[..., Coroutine[Any, Any, Any]]
 T = TypeVar("T", bound=commands.Command[Any, Any, Any] | LazyHybridCommand[Any] | Co)
 
-__all__ = ["staff_only", "manager_only", "admin_only", "owner_only"]
+__all__ = ["admin_only", "manager_only", "owner_only", "staff_only"]
 
 
 def _set_access_level(func: T, access_level: RequiredAccessLevel) -> T:
@@ -31,9 +32,7 @@ def _set_access_level(func: T, access_level: RequiredAccessLevel) -> T:
     """
     # Lots of type ignore here because we are using function injection to set the access level.
     if isinstance(func, commands.Command | LazyHybridCommand):  # Inject into the command callback
-        func.callback.__permission__ = (
-            access_level  # pyright: ignore [reportUnknownMemberType, reportFunctionMemberAccess]
-        )
+        func.callback.__permission__ = access_level  # pyright: ignore [reportUnknownMemberType, reportFunctionMemberAccess]
     else:  # Inject into the function itself
         func.__permission__ = access_level  # pyright: ignore [reportFunctionMemberAccess]
     return func  # pyright: ignore [reportUnknownVariableType, reportReturnType]

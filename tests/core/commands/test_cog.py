@@ -75,8 +75,7 @@ async def ctx() -> MockContext:
 async def interaction_ctx() -> MockContext:
     """Fixture to provide a mock context with interaction."""
     interaction = MockInteraction()
-    ctx = MockContext(interaction=interaction)
-    return ctx
+    return MockContext(interaction=interaction)
 
 
 @pytest.fixture
@@ -90,8 +89,7 @@ async def cog(mocker: MockerFixture) -> Cog:
     mock_config.default_locale = "en-US"
     mocker.patch("modmail.core.internals.cog.CONFIG", mock_config)
 
-    cog_instance = Cog(mock_bot)
-    return cog_instance
+    return Cog(mock_bot)
 
 
 @pytest.mark.asyncio
@@ -286,7 +284,7 @@ def test_create_cog() -> None:
         pass
 
     # Create cog using factory function
-    TestCog = create_cog("TestCog", [cmd1, cmd2])
+    TestCog = create_cog("TestCog", [cmd1, cmd2])  # noqa: N806
 
     # Check that cog was created correctly
     assert issubclass(TestCog, Cog)

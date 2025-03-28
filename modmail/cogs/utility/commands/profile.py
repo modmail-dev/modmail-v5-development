@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, NamedTuple, Type
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import discord
 from discord.ext import commands
@@ -79,7 +79,7 @@ def _get_profile_detail(
 
 async def make_profile_customize_view(
     cog: Utility, ctx: commands.Context[Bot], profile_detail: ProfileDetail, profile: Profile
-) -> Type[ProfileCustomizeView]:
+) -> type[ProfileCustomizeView]:
     """
     Create a view for customizing profiles.
     This view contains a "Customize" button and a select menu for choosing a permission access level.
@@ -101,7 +101,7 @@ async def make_profile_customize_view(
     else:
         ui_select_level_placeholder = await cog.translate(ctx, _("ftl-view-profile-select-level-placeholder"))
 
-    _LEVEL_NONE = "None"
+    _LEVEL_NONE = "None"  # noqa: N806
     ui_select_level_options = [
         # An option to remove the access level for this profile
         discord.SelectOption(
@@ -195,7 +195,7 @@ async def make_profile_customize_view(
         A view for customizing the profile.
         """
 
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self._original_message: discord.Message | None = None
 

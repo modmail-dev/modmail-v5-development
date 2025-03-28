@@ -83,7 +83,7 @@ async def status_command(self: Utility, ctx: commands.Context[Bot], *, status: s
         (await self.translate(ctx, _("ftl-model-status-invisible-name"))).casefold(): StatusType.offline,
     }
 
-    if status.casefold() in status_name_mapping.keys():
+    if status.casefold() in status_name_mapping:
         # Setting status
         status_type = status_name_mapping[status.casefold()]
         await self.bot.set_bot_presence(status=status_type)

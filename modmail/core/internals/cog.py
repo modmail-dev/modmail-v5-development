@@ -56,8 +56,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         # Same reply logic as ctx.send()
         if ctx.interaction is None:
             return await self.send(ctx, content, auto_embed=auto_embed, reference=ctx.message, **kwargs)
-        else:
-            return await self.send(ctx, content, auto_embed=auto_embed, **kwargs)
+        return await self.send(ctx, content, auto_embed=auto_embed, **kwargs)
 
     async def send(
         self,
@@ -153,5 +152,4 @@ def create_cog(name: str, all_commands: list[LazyHybridCommand[Any]]) -> type[Co
     for command in all_commands:
         methods.update(command.get_commands(name))
 
-    cog = type(name, (Cog,), methods, group_auto_locale_strings=False)
-    return cog
+    return type(name, (Cog,), methods, group_auto_locale_strings=False)

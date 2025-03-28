@@ -8,6 +8,7 @@ It reads the configuration from a YAML file and parses it into Pydantic models f
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pydantic
 import yaml
@@ -22,15 +23,18 @@ __all__ = [
 ]
 
 
-def load_config(file_path: str) -> Config | None:
+def load_config(file_path: str | Path) -> Config | None:
     """
     Loads the yaml config from the given file path.
 
     :param file_path: The path to the yaml config file.
     :return: The Config object. None if the file was not found or couldn't be parsed.
     """
+    if not isinstance(file_path, Path):
+        file_path = Path(file_path)
+
     try:
-        with open(file_path, "r") as f:
+        with file_path.open("r") as f:
             config_data = yaml.safe_load(f)
     except FileNotFoundError:
         logger.critical("Config file not found at %s.", file_path)
@@ -47,8 +51,7 @@ def load_config(file_path: str) -> Config | None:
         return None
 
     try:
-        config = Config(**config_data)  # pyright: ignore [reportUnknownArgumentType]
-        return config
+        return Config(**config_data)  # pyright: ignore [reportUnknownArgumentType]
     except pydantic.ValidationError as e:
         logger.critical("Invalid config file at %s:\n%s", file_path, e)
         return None

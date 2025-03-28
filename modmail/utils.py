@@ -13,7 +13,7 @@ from typing import Any
 
 from discord.ext import commands
 
-__all__ = ["strtobool", "int_to_colour_hex", "colour_hex_to_int", "sanitize_user_command_name", "get_command_name"]
+__all__ = ["colour_hex_to_int", "get_command_name", "int_to_colour_hex", "sanitize_user_command_name", "strtobool"]
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,9 @@ def strtobool(val: str) -> int:
     val = val.lower()
     if val in ("y", "yes", "t", "true", "on", "1"):
         return 1
-    elif val in ("n", "no", "f", "false", "off", "0"):
+    if val in ("n", "no", "f", "false", "off", "0"):
         return 0
-    else:
-        raise ValueError(f"invalid truth value {val!r}")
+    raise ValueError(f"invalid truth value {val!r}")
 
 
 def int_to_colour_hex(value: int) -> str:

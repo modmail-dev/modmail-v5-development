@@ -32,7 +32,7 @@ class MockTranslator:
         return string
 
 
-@pytest.fixture()
+@pytest.fixture
 async def translator() -> MockTranslator:
     """Fixture to provide a mock translator."""
     return MockTranslator()
@@ -46,7 +46,7 @@ async def test_embed_proxy_basic_initialization() -> None:
         description="Test Description",
         colour=discord.Colour.blue(),
         url="https://example.com",
-        timestamp=datetime.datetime(2023, 1, 1, 12, 0),
+        timestamp=datetime.datetime(2023, 1, 1, 12, 0, tzinfo=datetime.UTC),
     )
 
     assert embed_proxy.title == "Test Title"

@@ -40,7 +40,7 @@ class SQLClient(DBClientBase):
     and provides methods to get and update the last ran version.
     """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config) -> None:
         super().__init__(config)
         self.engine: AsyncEngine | None = None
         self._async_session: async_sessionmaker[AsyncSession] | None = None
@@ -150,10 +150,8 @@ class SQLClient(DBClientBase):
     async def update_settings(self, **kwargs: Any) -> None:
         # Validate the kwargs, by creating a new Settings object with the provided kwargs.
         # Uses a new Settings model to avoid modifying the original settings and validate the new settings.
-        new_settings = Settings(
-            **self.settings_model.model_dump(exclude={key: True for key in kwargs.keys()}), **kwargs
-        )
-        settings_dict = new_settings.model_dump(include={key: True for key in kwargs.keys()} | {"bot_id": True})
+        new_settings = Settings(**self.settings_model.model_dump(exclude={key: True for key in kwargs}), **kwargs)
+        settings_dict = new_settings.model_dump(include={key: True for key in kwargs} | {"bot_id": True})
         logger.debug("Updating settings in SQL database: %s", settings_dict)
 
         assert self._async_session is not None, "Session is not initialized."
@@ -197,7 +195,7 @@ class SQLClient(DBClientBase):
         """
         attributes = {
             field: getattr(profile_row, field)
-            for field in SQLProfileTable.__table__.columns.keys()
+            for field in SQLProfileTable.__table__.columns.keys()  # noqa: SIM118
             if field != "permission_overrides"
         }
         attributes["permission_overrides"] = {
@@ -278,7 +276,7 @@ class SQLClient(DBClientBase):
             else:
                 # Create a new profile
 
-                # Convert overrides: {command_name: override_type, ...} to a list of SQLPermissionOverrideTable objects
+                # Convert overrides: {command_name: override_type, ...} to a list of SQLPermissionOverrideTable
                 overrides = [
                     SQLPermissionOverrideTable(
                         bot_id=self._config.bot.bot_id,

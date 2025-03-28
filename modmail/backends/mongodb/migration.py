@@ -12,7 +12,7 @@ See: https://beanie-odm.dev/tutorial/migrations/.
 from __future__ import annotations
 
 import asyncio
-import os
+from pathlib import Path
 
 __all__ = ["do_migration"]
 
@@ -29,7 +29,7 @@ def do_migration(uri: str, db_name: str) -> None:
     from beanie.executors import migrate
     from beanie.migrations.models import RunningDirections
 
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
+    path = Path(__file__).absolute().parent / "migrations"
     settings = migrate.MigrationSettings(
         distance=0,  # Run all migrations
         direction=RunningDirections.FORWARD,

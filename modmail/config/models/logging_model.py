@@ -9,6 +9,7 @@ and checks for write permissions on the logfile.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from pydantic import BaseModel, NonNegativeInt, field_validator
 
@@ -70,7 +71,6 @@ class LoggingConfig(BaseModel):
             "CRITICAL": logging.CRITICAL,
             "FATAL": logging.FATAL,
             "ERROR": logging.ERROR,
-            "WARN": logging.WARN,
             "WARNING": logging.WARNING,
             "INFO": logging.INFO,
             "DEBUG": logging.DEBUG,
@@ -93,7 +93,7 @@ class LoggingConfig(BaseModel):
         try:
             logging.Formatter(v)
         except ValueError as e:
-            raise ValueError(f"Invalid formatting specifiers: {e}.")
+            raise ValueError(f"Invalid formatting specifiers: {e}.") from e
         return v
 
     @field_validator("logfile")
@@ -105,17 +105,16 @@ class LoggingConfig(BaseModel):
         if not v:
             return None
         try:
-            with open(v, "a"):
+            with Path(v).open("a"):
                 pass
-        except IsADirectoryError:
+        except IsADirectoryError as e:
             raise ValueError(
-                "Logfile path is referencing a directory, please specify a "
-                "valid file location (e.g. modmail.log)."
-            )
-        except PermissionError:
-            raise ValueError(f"No permissions to open the file at {v} (or the path is invalid).")
+                "Logfile path is referencing a directory, please specify a valid file location (e.g. modmail.log)."
+            ) from e
+        except PermissionError as e:
+            raise ValueError(f"No permissions to open the file at {v} (or the path is invalid).") from e
         except OSError as e:
-            raise ValueError(f"Logfile cannot be written to: {e}.")
+            raise ValueError(f"Logfile cannot be written to: {e}.") from e
         return v
 
     def is_logfile_enabled(self) -> bool:

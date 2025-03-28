@@ -3,14 +3,15 @@ modmail.backends.sql.migration
 ==============================
 This module handles the migration of the SQL database using Alembic.
 
-To create a new migration, use the following command (must set database_type to sql and supply connection uri in configs first):
+To create a new migration, use the following command:
     alembic -c modmail/backends/sql/migrations/alembic.ini revision --autogenerate -m "migration_name"
+Note: Must set database_type to sql and supply connection uri in configs first.
 Then manually edit the migration file to add the necessary changes.
 """
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 __all__ = ["do_migration"]
 
@@ -25,7 +26,7 @@ def do_migration(uri: str) -> None:
     from alembic.config import Config
 
     # Determine the absolute path to the .ini file.
-    ini_location = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations", "alembic.ini")
+    ini_location = Path(__file__).absolute().parent / "migrations" / "alembic.ini"
 
     # Create an Alembic configuration instance.
     alembic_cfg = Config(file_=ini_location)

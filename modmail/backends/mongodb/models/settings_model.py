@@ -14,8 +14,8 @@ from pydantic import BaseModel
 from modmail.enum import ActivityType, StatusType
 
 __all__ = [
-    "MongoDBSettingsDocument",
     "MongoDBActivityModel",
+    "MongoDBSettingsDocument",
 ]
 
 

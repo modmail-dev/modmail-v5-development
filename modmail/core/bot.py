@@ -31,7 +31,6 @@ class Bot(commands.Bot):
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-
         if CONFIG.bot.prefix is not None:  # Prefix is enabled
             intents = discord.Intents(
                 guilds=True, messages=True, reactions=True, typing=True, message_content=True, expressions=True
@@ -355,10 +354,13 @@ class Bot(commands.Bot):
             if hasattr(context, "_perm_check_reason"):  # This gets injected by the permission check
                 # noinspection PyProtectedMember
                 logger.debug(
-                    "%s is not allowed to run %s: %s", context.author, context.command, context._perm_check_reason
-                )  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
+                    "%s is not allowed to run %s: %s",
+                    context.author,
+                    context.command,
+                    context._perm_check_reason,  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
+                )
             return
-        return await super().on_command_error(context, exception)
+        await super().on_command_error(context, exception)
 
     @staticmethod
     async def on_before_invoke(ctx: commands.Context[Bot]) -> None:
@@ -367,9 +369,7 @@ class Bot(commands.Bot):
         """
         if hasattr(ctx, "_perm_check_reason"):  # This gets injected by the permission check
             # noinspection PyProtectedMember
-            logger.debug(
-                "%s is running %s, allowed reason: %s", ctx.author, ctx.command, ctx._perm_check_reason
-            )  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
+            logger.debug("%s is running %s, allowed reason: %s", ctx.author, ctx.command, ctx._perm_check_reason)  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
         else:
             logger.debug("User %s is running the %s command.", ctx.author, ctx.command)
 
@@ -386,7 +386,7 @@ class Bot(commands.Bot):
 
         # If the command is a subcommand, if so, add the parents of the command (in reverse order)
         # and check for most significant access level.
-        commands_to_check = [base_command] + base_command.parents
+        commands_to_check = [base_command, *base_command.parents]
 
         # Check if the command has an override set in the config.
         for i, command in enumerate(commands_to_check):
@@ -405,9 +405,7 @@ class Bot(commands.Bot):
             # Otherwise, propagate the access level lookup to the parent command.
             if default_access_level is None and hasattr(command.callback, "__permission__"):
                 # See: modmail/core/permission.py
-                default_access_level = (
-                    command.callback.__permission__
-                )  # pyright: ignore [reportFunctionMemberAccess]
+                default_access_level = command.callback.__permission__  # pyright: ignore [reportFunctionMemberAccess]
 
         # If no access level is set, then everyone can use the command.
         return default_access_level if default_access_level is not None else RequiredAccessLevel.everyone
@@ -454,7 +452,7 @@ class Bot(commands.Bot):
         command_access_level = self.get_command_access_level(ctx.command)
 
         # If the command is a subcommand, if so, add the parents of the command (in reverse order).
-        commands_to_check = [ctx.command] + ctx.command.parents
+        commands_to_check = [ctx.command, *ctx.command.parents]
 
         for i, command in enumerate(commands_to_check):
             command_name = utils.get_command_name(command)
@@ -497,12 +495,12 @@ class Bot(commands.Bot):
 
             # Check if the user has the required access level for the command.
             if profile.access_level >= command_access_level:
-                ctx._perm_check_reason = f"{profile.profile_id} level {profile.access_level} >= {command_access_level}"  # pyright: ignore [reportAttributeAccessIssue]
+                ctx._perm_check_reason = (  # pyright: ignore [reportAttributeAccessIssue]
+                    f"{profile.profile_id} level {profile.access_level} >= {command_access_level}"
+                )
                 return True
 
-        ctx._perm_check_reason = (
-            f"no access {command_access_level}"  # pyright: ignore [reportAttributeAccessIssue]
-        )
+        ctx._perm_check_reason = f"no access {command_access_level}"  # pyright: ignore [reportAttributeAccessIssue]
         return False
 
     async def _bot_can_run_check(self, ctx: commands.Context[Bot]) -> bool:

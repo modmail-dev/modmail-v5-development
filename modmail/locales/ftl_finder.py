@@ -3,6 +3,7 @@
 Script to find missing FTL strings in locale files.
 Displays file locations for each missing string.
 """
+
 from __future__ import annotations
 
 import ast
@@ -13,10 +14,10 @@ from pathlib import Path
 class FTLStringFinder(ast.NodeVisitor):
     """AST visitor that finds all string literals starting with 'ftl-'."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.ftl_strings: dict[str, list[tuple[int, int]]] = {}  # string -> [(line, col)]
 
-    def visit_Call(self, node: ast.Call) -> None:
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
         """Visit function calls to catch _("ftl-...") and _(f"ftl-...") patterns."""
         if isinstance(node.func, ast.Name) and node.func.id == "_" and len(node.args) > 0:
             # Handle regular string constant: _("ftl-...")
@@ -49,7 +50,7 @@ class FTLStringFinder(ast.NodeVisitor):
 def find_ftl_strings_in_file(file_path: Path) -> dict[str, list[tuple[int, int]]]:
     """Find all ftl strings in a single Python file with their locations."""
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with file_path.open("r", encoding="utf-8") as f:
             source = f.read()
 
         tree = ast.parse(source, filename=str(file_path))
@@ -88,7 +89,7 @@ def extract_locale_strings(locale_file: Path) -> set[str]:
     pattern = re.compile(r"^(ftl-[a-zA-Z0-9-]+)\s*=")
 
     try:
-        with open(locale_file, "r", encoding="utf-8") as f:
+        with locale_file.open("r", encoding="utf-8") as f:
             for line in f:
                 match = pattern.match(line.strip())
                 if match:
@@ -99,7 +100,7 @@ def extract_locale_strings(locale_file: Path) -> set[str]:
     return locale_strings
 
 
-def main():
+def main() -> None:
     # Use the script's location to determine the project root
     script_path = Path(__file__).absolute()
     project_root = script_path.parent.parent

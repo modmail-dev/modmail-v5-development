@@ -59,7 +59,7 @@ def test_staff_only_command() -> None:
 
     @staff_only
     @commands.command()
-    async def test_cmd(_: Any) -> None:
+    async def test_cmd(ctx: commands.Context[Any]) -> None:
         pass
 
     assert hasattr(test_cmd.callback, "__permission__")
@@ -71,7 +71,7 @@ def test_manager_only_command() -> None:
 
     @manager_only
     @commands.command()
-    async def test_cmd(_: Any) -> None:
+    async def test_cmd(ctx: commands.Context[Any]) -> None:
         pass
 
     assert hasattr(test_cmd.callback, "__permission__")
@@ -83,7 +83,7 @@ def test_admin_only_command() -> None:
 
     @admin_only
     @commands.command()
-    async def test_cmd(_: Any) -> None:
+    async def test_cmd(ctx: commands.Context[Any]) -> None:
         pass
 
     assert hasattr(test_cmd.callback, "__permission__")
@@ -95,7 +95,7 @@ def test_owner_only_command() -> None:
 
     @owner_only
     @commands.command()
-    async def test_cmd(_: Any) -> None:
+    async def test_cmd(ctx: commands.Context[Any]) -> None:
         pass
 
     assert hasattr(test_cmd.callback, "__permission__")
@@ -105,7 +105,7 @@ def test_owner_only_command() -> None:
 def test_permission_with_lazy_hybrid_command(mocker: MockFixture) -> None:
     """Test that permission decorators work with LazyHybridCommand objects."""
 
-    async def callback(self: Any, _: Any) -> None:
+    async def callback(self: Any, ctx: commands.Context[Any]) -> None:
         pass
 
     lazy_cmd = mocker.MagicMock(spec=LazyHybridCommand)
@@ -122,7 +122,7 @@ def test_decorator_order() -> None:
 
     @commands.command()
     @admin_only
-    async def after_order(_: Any) -> None:
+    async def after_order(ctx: commands.Context[Any]) -> None:
         pass
 
     assert hasattr(after_order.callback, "__permission__")
@@ -130,7 +130,7 @@ def test_decorator_order() -> None:
 
     @admin_only
     @commands.command()
-    async def before_order(_: Any) -> None:
+    async def before_order(ctx: commands.Context[Any]) -> None:
         pass
 
     assert hasattr(before_order.callback, "__permission__")

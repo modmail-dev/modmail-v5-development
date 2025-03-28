@@ -22,8 +22,10 @@ class PermissionConfig(BaseModel):
     Configuration model for the permission system.
 
     Attributes:
-        discord_admin_bypass (bool): Whether users with Discord administrator permission should be given Modmail admin access level.
-        default_access_everyone (bool): Whether everyone should have access to commands with "everyone" access level by default.
+        discord_admin_bypass (bool): Whether users with Discord administrator permission
+                                     should be given Modmail admin access level.
+        default_access_everyone (bool): Whether everyone should have access to commands
+                                        with "everyone" access level by default.
         slash_minimum_permission_int (int): Minimum Discord permissions to see slash commands.
         overrides (dict[str, RequiredAccessLevel]): Override a command's required access level.
     """
@@ -50,8 +52,8 @@ class PermissionConfig(BaseModel):
             if isinstance(value, str):
                 try:
                     new_v[key] = RequiredAccessLevel[value.casefold()]
-                except KeyError:
-                    raise ValueError(f"Invalid permission access level: {value}")
+                except KeyError as e:
+                    raise ValueError(f"Invalid permission access level: {value}") from e
             else:
                 new_v[key] = value
         return new_v

@@ -111,7 +111,7 @@ class TestBotConfig:
 
         def mock_import(name: str, *args: Any, **kwargs: Any) -> Any:
             if name == "jishaku":
-                return
+                return None
             return original_import(name, *args, **kwargs)
 
         mocker.patch("builtins.__import__", mock_import)

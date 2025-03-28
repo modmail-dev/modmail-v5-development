@@ -27,7 +27,7 @@ async def test_lazy_hybrid_command_creation() -> None:
     """Test creation of a LazyHybridCommand and conversion to a real command."""
 
     @lazy_hybrid_command()
-    async def test_command(self: Any, _: Any) -> None:
+    async def test_command(self: Any, ctx: Any) -> None:
         pass
 
     assert isinstance(test_command, LazyHybridCommand)
@@ -45,7 +45,7 @@ async def test_lazy_hybrid_group_creation() -> None:
     """Test creation of a LazyHybridGroup and conversion to a real command group."""
 
     @lazy_hybrid_group()
-    async def test_group(self: Any, _: Any) -> None:
+    async def test_group(self: Any, ctx: Any) -> None:
         pass
 
     assert isinstance(test_group, LazyHybridGroup)
@@ -66,19 +66,19 @@ async def test_lazy_hybrid_group_with_children() -> None:
     """Test that LazyHybridGroup properly manages child commands and nested groups."""
 
     @lazy_hybrid_group()
-    async def parent_group(self: Any, _: Any) -> None:
+    async def parent_group(self: Any, ctx: Any) -> None:
         pass
 
     @parent_group.command()
-    async def child_command(self: Any, _: Any) -> None:  # pyright: ignore [reportUnusedFunction]
+    async def child_command(self: Any, ctx: Any) -> None:  # pyright: ignore [reportUnusedFunction]
         pass
 
     @parent_group.group()
-    async def child_group(self: Any, _: Any) -> None:
+    async def child_group(self: Any, ctx: Any) -> None:
         pass
 
     @child_group.command()
-    async def grandchild_command(self: Any, _: Any) -> None:  # pyright: ignore [reportUnusedFunction]
+    async def grandchild_command(self: Any, ctx: Any) -> None:  # pyright: ignore [reportUnusedFunction]
         pass
 
     assert isinstance(parent_group, LazyHybridGroup)
@@ -116,7 +116,7 @@ async def test_wrap_decorator() -> None:
 
     @wrap(commands.check, has_permission)
     @lazy_hybrid_command()
-    async def test_command(self: Any, _: Any) -> None:
+    async def test_command(self: Any, ctx: Any) -> None:
         pass
 
     # Verify wrapper metadata was stored
@@ -132,7 +132,7 @@ async def test_wrap_decorator_on_regular_function() -> None:
     """Test wrap decorator stores metadata when applied to non-command functions."""
 
     @wrap(commands.has_permissions, administrator=True)
-    async def regular_function(self: Any, _: Any) -> None:
+    async def regular_function(self: Any, ctx: Any) -> None:
         pass
 
     # Verify metadata storage mechanism for regular functions
@@ -150,7 +150,7 @@ async def test_multiple_wrappers() -> None:
     @wrap(commands.has_permissions, manage_messages=True)
     @wrap(commands.cooldown, 1, 5.0)
     @lazy_hybrid_command()
-    async def test_command(self: Any, _: Any) -> None:
+    async def test_command(self: Any, ctx: Any) -> None:
         pass
 
     # Verify both wrappers were stored
@@ -170,7 +170,7 @@ async def test_qualname_injection(mocker: MockerFixture) -> None:
     """Test that cog name is injected into callback's __qualname__ for proper command registration."""
 
     @lazy_hybrid_command()
-    async def test_command(self: Any, _: Any) -> None:
+    async def test_command(self: Any, ctx: Any) -> None:
         pass
 
     # Trigger qualname injection by generating commands
@@ -185,7 +185,7 @@ async def test_lazy_hybrid_command_with_args_and_kwargs() -> None:
     """Test command arguments and parameters are properly passed to the real command."""
 
     @lazy_hybrid_command(name="custom_name", description="Custom description")
-    async def test_command(self: Any, _: Any) -> None:
+    async def test_command(self: Any, ctx: Any) -> None:
         pass
 
     cog = MockCog()
@@ -202,18 +202,18 @@ async def test_lazy_hybrid_group_command_and_group_methods() -> None:
     """Test that LazyHybridGroup properly handles child command and group creation methods."""
 
     @lazy_hybrid_group()
-    async def test_group(self: Any, _: Any) -> None:
+    async def test_group(self: Any, ctx: Any) -> None:
         """Test group docstring."""
         pass
 
     # Add command with custom parameters
     @test_group.command("cmd", description="Command description")
-    async def group_command(self: Any, _: Any, param: str) -> None:  # pyright: ignore [reportUnusedFunction]
+    async def group_command(self: Any, ctx: Any, param: str) -> None:  # pyright: ignore [reportUnusedFunction]
         pass
 
     # Add subgroup with custom parameters
     @test_group.group("sub", description="Subgroup description")
-    async def group_subgroup(self: Any, _: Any) -> None:  # pyright: ignore [reportUnusedFunction]
+    async def group_subgroup(self: Any, ctx: Any) -> None:  # pyright: ignore [reportUnusedFunction]
         pass
 
     assert len(test_group.children) == 2
@@ -223,9 +223,7 @@ async def test_lazy_hybrid_group_command_and_group_methods() -> None:
     group_child = None
 
     for child in test_group.children:
-        if isinstance(child, LazyHybridCommand) and not isinstance(
-            child, LazyHybridGroup
-        ):  # pyright: ignore [reportUnnecessaryIsInstance]
+        if isinstance(child, LazyHybridCommand) and not isinstance(child, LazyHybridGroup):  # pyright: ignore [reportUnnecessaryIsInstance]
             command_child = child
         elif isinstance(child, LazyHybridGroup):  # pyright: ignore [reportUnnecessaryIsInstance]
             group_child = child
@@ -248,7 +246,7 @@ async def test_wrap_decorator_with_lazy_hybrid_command() -> None:
 
     @lazy_hybrid_command()
     @wrap(commands.has_permissions, administrator=True)
-    async def test_command(self: Any, _: Any) -> None:
+    async def test_command(self: Any, ctx: Any) -> None:
         pass
 
     assert isinstance(test_command, LazyHybridCommand)
@@ -267,6 +265,6 @@ async def test_wrap_decorator_with_lazy_hybrid_command() -> None:
     commands_dict = test_command.get_commands("TestCog")
     command = commands_dict["test_command"]
 
-    assert any(
-        check.__qualname__.startswith("has_permissions") for check in command.checks
-    ), "has_permissions check was not found in the final command"
+    assert any(check.__qualname__.startswith("has_permissions") for check in command.checks), (
+        "has_permissions check was not found in the final command"
+    )

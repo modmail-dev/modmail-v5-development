@@ -21,7 +21,7 @@ __all__ = [
 
 
 class DBClientBase(ABC):  # pragma: no cover
-    def __init__(self, config: Config):
+    def __init__(self, config: Config) -> None:
         """
         Initialize the database client with the given configuration.
 

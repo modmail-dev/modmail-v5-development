@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -14,7 +14,7 @@ from modmail.core.translator import HasLocaleStr, Translator, _
 
 
 class MockFluentLocalization:
-    def __init__(self, locales: list[str]):
+    def __init__(self, locales: list[str]) -> None:
         self.locales = locales
         self._translations = {
             "test.greeting": {
@@ -57,7 +57,7 @@ class MockFluentLocalization:
 
 
 class MockLocaleStr(HasLocaleStr):
-    def __init__(self, message: str):
+    def __init__(self, message: str) -> None:
         self._message = message
 
     def __locale_str__(self) -> locale_str:
@@ -212,16 +212,16 @@ def test_underscore_with_various_types(mock_fluent_setup: None) -> None:
         name="World",
         number=42,
         decimal=Decimal("3.14"),
-        dt=datetime(2023, 1, 1, 12, 0),
-        today=date(2023, 1, 1),
+        dt=datetime.datetime(2023, 1, 1, 12, 0, tzinfo=datetime.UTC),
+        today=datetime.date(2023, 1, 1),
         none_val=None,
     )
 
     assert result.extras.get("name") == "World"
     assert result.extras.get("number") == 42
     assert result.extras.get("decimal") == Decimal("3.14")
-    assert isinstance(result.extras.get("dt"), datetime)
-    assert isinstance(result.extras.get("today"), date)
+    assert isinstance(result.extras.get("dt"), datetime.datetime)
+    assert isinstance(result.extras.get("today"), datetime.date)
     assert result.extras.get("none_val", -1) is None
 
 

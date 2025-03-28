@@ -6,7 +6,8 @@ This module contains a custom implementation of a lazy hybrid command decorator 
 
 from __future__ import annotations
 
-from typing import Any, Callable, Coroutine, Generic, TypeAlias, TypeVar
+from collections.abc import Callable, Coroutine
+from typing import Any, Generic, TypeVar
 
 import discord
 from discord import app_commands
@@ -17,13 +18,13 @@ from ... import CONFIG
 __all__ = ["LazyHybridCommand", "LazyHybridGroup", "lazy_hybrid_command", "lazy_hybrid_group", "wrap"]
 
 
-Co: TypeAlias = Callable[..., Coroutine[Any, Any, Any]]
+type Co = Callable[..., Coroutine[Any, Any, Any]]
 T = TypeVar("T", bound=Co)  # A 'Co' that takes any parameters and returns any type
 U = TypeVar("U", bound=Co)
 A = TypeVar("A")
-Deco: TypeAlias = Callable[[T], T]  # A decorator that takes a 'Co' and returns a 'Co'
-DecoFactory: TypeAlias = Callable[..., Deco[T]]  # A deco factory that takes any arguments and returns a 'Deco'
-HcHg: TypeAlias = commands.HybridCommand[Any, Any, Any] | commands.HybridGroup[Any, Any, Any]
+type Deco[T: Co] = Callable[[T], T]  # A decorator that takes a 'Co' and returns a 'Co'
+type DecoFactory[T: Co] = Callable[..., Deco[T]]  # A deco factory that takes any arguments and returns a 'Deco'
+type HcHg = commands.HybridCommand[Any, Any, Any] | commands.HybridGroup[Any, Any, Any]
 
 
 class LazyHybridCommand(Generic[T]):
@@ -33,9 +34,9 @@ class LazyHybridCommand(Generic[T]):
     Allows the injection of the cog name into the __qualname__ of the callback function.
     """
 
-    __slots__ = ("base_func", "callback", "args", "kwargs", "wrappers")
+    __slots__ = ("args", "base_func", "callback", "kwargs", "wrappers")
 
-    def __init__(self, func: T, args: Any, kwargs: Any):
+    def __init__(self, func: T, args: Any, kwargs: Any) -> None:
         self.base_func: Callable[..., Callable[[T], HcHg]] = staticmethod(commands.hybrid_command)
         self.callback = func
         self.args = args
@@ -43,9 +44,7 @@ class LazyHybridCommand(Generic[T]):
 
         # Store the wrappers for the command (discord.py's command decorators)
         if hasattr(func, "__modmail_wrappers__"):
-            self.wrappers: list[tuple[DecoFactory[T], tuple[Any, ...], dict[str, Any]]] = (
-                func.__modmail_wrappers__
-            )  # pyright: ignore [reportFunctionMemberAccess]
+            self.wrappers: list[tuple[DecoFactory[T], tuple[Any, ...], dict[str, Any]]] = func.__modmail_wrappers__  # pyright: ignore [reportFunctionMemberAccess]
         else:
             self.wrappers = []
 
@@ -100,7 +99,7 @@ class LazyHybridGroup(LazyHybridCommand[T]):
 
     __slots__ = ("children",)
 
-    def __init__(self, func: T, args: Any, kwargs: Any):
+    def __init__(self, func: T, args: Any, kwargs: Any) -> None:
         super().__init__(func, args, kwargs)
         self.base_func: Callable[..., Callable[[T], HcHg]] = staticmethod(commands.hybrid_group)
         self.children: list[LazyHybridCommand[Any]] = []
@@ -191,9 +190,7 @@ def wrap(dpy_func: Any, *args: Any, **kwargs: Any) -> Callable[[A], A]:
             # Otherwise, add the wrapper to the function directly
             if not hasattr(func, "__modmail_wrappers__"):
                 func.__modmail_wrappers__ = []  # pyright: ignore [reportAttributeAccessIssue]
-            func.__modmail_wrappers__.append(
-                (dpy_func, args, kwargs)
-            )  # pyright: ignore [reportAttributeAccessIssue, reportUnknownMemberType]
+            func.__modmail_wrappers__.append((dpy_func, args, kwargs))  # pyright: ignore [reportAttributeAccessIssue, reportUnknownMemberType]
         return func  # pyright: ignore [reportUnknownVariableType]
 
     return decorator

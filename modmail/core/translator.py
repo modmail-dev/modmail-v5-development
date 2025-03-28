@@ -8,11 +8,11 @@ Loads locale files from the modmail/locales directory based on configuration set
 from __future__ import annotations
 
 import logging
-import os
 import warnings
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Protocol, TypeAlias
+from pathlib import Path
+from typing import Protocol
 
 import discord
 from discord import app_commands
@@ -26,7 +26,7 @@ __all__ = ["Translator", "_"]
 logger = logging.getLogger(__name__)
 
 # Fluent supported types (see: fluent.runtime.utils.native_to_fluent)
-FluentTypes: TypeAlias = str | int | float | Decimal | datetime | date | None
+FluentTypes = str | int | float | Decimal | datetime | date | None
 
 
 class HasLocaleStr(Protocol):
@@ -34,9 +34,7 @@ class HasLocaleStr(Protocol):
 
 
 # locales files are located in ../locales/{locale}/main.ftl
-locale_loader = FluentResourceLoader(
-    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "locales", "{locale}")
-)
+locale_loader = FluentResourceLoader(str(Path(__file__).absolute().parent.parent / "locales" / "{locale}"))
 
 all_l10n: dict[str, FluentLocalization] = {}
 for allowed_locale in CONFIG.allowed_locales:
@@ -110,9 +108,7 @@ def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr) -> locale_str:
 
     for key, value in kwargs.items():
         if hasattr(value, "__locale_str__"):  # If the value is a locale_str, use the default message
-            temp_kwargs[key] = (
-                value.__locale_str__().message
-            )  # pyright: ignore [reportUnknownMemberType, reportOptionalMemberAccess, reportAttributeAccessIssue]
+            temp_kwargs[key] = value.__locale_str__().message  # pyright: ignore [reportUnknownMemberType, reportOptionalMemberAccess, reportAttributeAccessIssue]
         elif isinstance(value, FluentTypes):
             temp_kwargs[key] = value
         else:

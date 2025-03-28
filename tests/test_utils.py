@@ -17,7 +17,7 @@ from modmail.utils import (
 
 class TestStrtobool:
     @pytest.mark.parametrize(
-        "input_val,expected",
+        ("input_val", "expected"),
         [
             ("y", 1),
             ("yes", 1),
@@ -45,7 +45,7 @@ class TestStrtobool:
 
 class TestColorConversion:
     @pytest.mark.parametrize(
-        "input_int,expected_hex",
+        ("input_int", "expected_hex"),
         [
             (0x000000, "#000000"),
             (0xFF0000, "#FF0000"),  # Red
@@ -58,7 +58,7 @@ class TestColorConversion:
         assert int_to_colour_hex(input_int) == expected_hex
 
     @pytest.mark.parametrize(
-        "input_hex,expected_int",
+        ("input_hex", "expected_int"),
         [
             ("#000000", 0x000000),
             ("#FF0000", 0xFF0000),  # Red
@@ -73,7 +73,7 @@ class TestColorConversion:
 
 class TestSanitizeUserCommandName:
     @pytest.mark.parametrize(
-        "input_name,expected",
+        ("input_name", "expected"),
         [
             ("command", "command"),
             ("command_name", "command name"),

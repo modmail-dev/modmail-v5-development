@@ -56,14 +56,14 @@ class BotConfig(BaseModel):
         Checks if the bot token is valid (very basic check).
         """
         token = v.get_secret_value()
-        if token.count(".") != 2:
+        if token.count(".") != 2:  # noqa: PLR2004
             raise ValueError("Invalid bot token.")
         try:
             bot_id = int(b64decode(token.split(".")[0] + "=="))
         except Exception as e:
-            logger.debug(f"Invalid bot token: {e}", exc_info=True)
-            raise ValueError("Invalid bot token.")
-        if len(str(bot_id)) < 15 or len(str(bot_id)) > 20:
+            logger.debug("Invalid bot token: %s", e, exc_info=True)
+            raise ValueError("Invalid bot token.") from e
+        if len(str(bot_id)) < 15 or len(str(bot_id)) > 20:  # noqa: PLR2004
             raise ValueError("Invalid bot token.")
         return v
 
@@ -111,7 +111,7 @@ class BotConfig(BaseModel):
                 return False
         return v
 
-    def is_using_prefix(self):
+    def is_using_prefix(self) -> bool:
         """
         Checks if the bot is using a prefix.
 

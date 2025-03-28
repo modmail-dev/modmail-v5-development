@@ -17,7 +17,7 @@ from typing import NoReturn
 
 from .config import Config, load_config
 
-__all__ = ["init", "run_bot", "__version__"]
+__all__ = ["__version__", "init", "run_bot"]
 
 logger = _logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ if sys.platform == "win32":
     except AttributeError:
         import warnings
 
-        warnings.warn("Failed to use WindowsProactorEventLoopPolicy.", RuntimeWarning)
+        warnings.warn("Failed to use WindowsProactorEventLoopPolicy.", RuntimeWarning, stacklevel=1)
 
 
 # Global variable to store the loaded configuration.
@@ -45,8 +45,8 @@ def init(config_file_path: str = "config.yaml") -> None:
 
     :param config_file_path: Path to the configuration file.
     """
-    global CONFIG
-    _CONFIG = load_config(config_file_path)
+    global CONFIG  # noqa: PLW0603
+    _CONFIG = load_config(config_file_path)  # noqa: N806
     if _CONFIG is None:
         logger.critical("Failed to load config. Exiting.")
         sys.exit(1)
@@ -80,9 +80,7 @@ def run_bot() -> NoReturn:
         \_|  |_/\___/ \__,_|_| |_| |_|\__,_|_|_|
         """
     )
-    current_time_text = (
-        datetime.datetime.now(tz=datetime.timezone.utc).astimezone().strftime("%B %d, %Y %H:%M:%S %Z")
-    )
+    current_time_text = datetime.datetime.now(tz=datetime.UTC).astimezone().strftime("%B %d, %Y %H:%M:%S %Z")
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     allowed_locale = CONFIG.allowed_locales
     enabled_locales = ", ".join(
@@ -102,7 +100,8 @@ def run_bot() -> NoReturn:
     modmail_text_width = len(max(modmail_text_lines, key=len)) + 10
 
     logger.info(
-        "[bold bright_magenta]" + "\n".join([line.center(modmail_text_width) for line in modmail_text_lines]),
+        "[bold bright_magenta] %s",
+        "\n".join([line.center(modmail_text_width) for line in modmail_text_lines]),
         extra={"markup": True, "highlighter": None},
     )
 

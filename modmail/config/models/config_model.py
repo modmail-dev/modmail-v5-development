@@ -9,7 +9,7 @@ that the configuration is correctly loaded and validated from various sources.
 from __future__ import annotations
 
 import sys
-from typing import Literal, TypeAlias, TypeVar
+from typing import Literal, TypeVar
 
 from packaging.version import Version
 from pydantic import Field, ValidationInfo, field_validator
@@ -23,8 +23,8 @@ from .sql_database_model import SQLDatabaseConfig
 
 __all__ = ["Config"]
 
-SupportedLocales: TypeAlias = Literal["en", "de"]
-SupportedDatabases: TypeAlias = Literal["sql", "mongodb"]
+type SupportedLocales = Literal["en", "de"]
+type SupportedDatabases = Literal["sql", "mongodb"]
 
 
 class Config(BaseSettings):
@@ -91,8 +91,8 @@ class Config(BaseSettings):
             version = str(Version(v))
             if version not in valid_versions:
                 raise ValueError(f"Invalid config version. Valid versions are: {', '.join(valid_versions)}")
-        except Exception:
-            raise ValueError(f"Invalid config version. Valid versions are: {', '.join(valid_versions)}")
+        except Exception as e:
+            raise ValueError(f"Invalid config version. Valid versions are: {', '.join(valid_versions)}") from e
 
         # Do version migrations here?
 

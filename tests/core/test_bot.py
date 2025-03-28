@@ -3,11 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any, cast
+from unittest.mock import Mock
 
 import discord
 import pytest
 from discord.ext import commands
-from mock import Mock
 from pydantic import SecretStr
 from pytest_mock import MockerFixture
 
@@ -64,7 +64,7 @@ def context(mock_bot: Bot, mocker: MockerFixture) -> Context:
 
     @admin_only
     @commands.command()
-    async def test_func(_: Context) -> None:
+    async def test_func(ctx: Context) -> None:
         pass
 
     ctx.command = test_func
@@ -259,7 +259,7 @@ async def test_permission_check_with_different_access_levels(
     # Create a test command with admin access level
     @admin_only  # This sets access level to admin
     @commands.command()
-    async def admin_command(_: Context) -> None:
+    async def admin_command(ctx: Context) -> None:
         pass
 
     context.command = admin_command
@@ -283,7 +283,7 @@ async def test_permission_check_with_different_access_levels(
 
     # Create a test command with everyone access level
     @commands.command()
-    async def everyone_command(_: Context) -> None:
+    async def everyone_command(ctx: Context) -> None:
         pass
 
     context.command = everyone_command
@@ -302,7 +302,7 @@ async def test_permission_check_with_different_access_levels(
     # Create a test command with owner access level
     @owner_only
     @commands.command()
-    async def owner_command(_: Context) -> None:
+    async def owner_command(ctx: Context) -> None:
         pass
 
     context.command = owner_command
@@ -319,7 +319,7 @@ async def test_permission_check_with_profile_overrides(
     # Create a test command
     @admin_only
     @commands.command()
-    async def test_command(_: Context) -> None:
+    async def test_command(ctx: Context) -> None:
         pass
 
     context.command = test_command
@@ -350,12 +350,12 @@ async def test_permission_check_with_wildcard_overrides(
 
     # Create a parent command and subcommand
     @commands.group(name="parent")
-    async def parent_command(_: Context) -> None:
+    async def parent_command(ctx: Context) -> None:
         pass
 
     @admin_only
     @parent_command.command()
-    async def parent_child_command(_: Context) -> None:
+    async def parent_child_command(ctx: Context) -> None:
         pass
 
     # Set the command and its parent
@@ -388,7 +388,7 @@ async def test_permission_check_with_wildcard_overrides(
 
     @owner_only
     @parent_command.command()
-    async def parent_child2_command(_: Context) -> None:
+    async def parent_child2_command(ctx: Context) -> None:
         pass
 
     # Set the command and its parent
@@ -409,7 +409,7 @@ async def test_permission_check_with_multiple_profiles(
     # Create a test command with admin access level
     @admin_only
     @commands.command(name="test")
-    async def test_command(_: Context) -> None:
+    async def test_command(ctx: Context) -> None:
         pass
 
     context.command = test_command
@@ -466,14 +466,14 @@ def test_get_command_access_level(mock_bot: Bot, mocker: MockerFixture) -> None:
     # Test case 1: Command with explicit access level
     @admin_only
     @commands.command()
-    async def admin_command(_: Context) -> None:
+    async def admin_command(ctx: Context) -> None:
         pass
 
     assert mock_bot.get_command_access_level(admin_command) == RequiredAccessLevel.admin
 
     # Test case 2: Command with no access level
     @commands.command()
-    async def everyone_command(_: Context) -> None:
+    async def everyone_command(ctx: Context) -> None:
         pass
 
     assert mock_bot.get_command_access_level(everyone_command) == RequiredAccessLevel.everyone
@@ -486,12 +486,12 @@ def test_get_command_access_level(mock_bot: Bot, mocker: MockerFixture) -> None:
 
     # Test case 4: Subcommand with parent wildcard override
     @commands.group()
-    async def parent_command(_: Context) -> None:
+    async def parent_command(ctx: Context) -> None:
         pass
 
     @admin_only
     @parent_command.command()
-    async def child_command(_: Context) -> None:
+    async def child_command(ctx: Context) -> None:
         pass
 
     overrides = {"parent+": RequiredAccessLevel.staff}
@@ -537,9 +537,9 @@ def test_get_all_user_profiles(mock_bot: Bot, mocker: MockerFixture) -> None:
     def mock_get_profile(profile_id: int, profile_type: ProfileType) -> Profile | None:
         if profile_id == 123456789012345 and profile_type == ProfileType.user:
             return user_profile
-        elif profile_id == 111111111111111 and profile_type == ProfileType.role:
+        if profile_id == 111111111111111 and profile_type == ProfileType.role:
             return role1_profile
-        elif profile_id == 222222222222222 and profile_type == ProfileType.role:
+        if profile_id == 222222222222222 and profile_type == ProfileType.role:
             return role2_profile
         return None
 

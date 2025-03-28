@@ -41,7 +41,7 @@ class MongoDBClient(DBClientBase):
     basic operations.
     """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config) -> None:
         super().__init__(config)
         self.db_name = self._mongodb_config.database
         self._client: AsyncIOMotorClient[dict[str, Any]] | None = None
@@ -86,7 +86,8 @@ class MongoDBClient(DBClientBase):
             logger.debug("Failed to connect to MongoDB.", exc_info=True)
             if "Connection refused" in str(e):
                 logger.critical(
-                    "Failed to connect to MongoDB. Is it running? Make sure your MongoDB connection URI is correct."
+                    "Failed to connect to MongoDB. Is it running? "
+                    "Make sure your MongoDB connection URI is correct."
                 )
             elif "connection closed" in str(e):
                 logger.critical(
@@ -114,8 +115,8 @@ class MongoDBClient(DBClientBase):
                     )
             else:
                 logger.critical(
-                    "An unknown error occurred while connecting to MongoDB. Check your MongoDB server is reachable. "
-                    "Please report this error to the Modmail team."
+                    "An unknown error occurred while connecting to MongoDB. Check your MongoDB server "
+                    "is reachable. Please report this error to the Modmail team."
                 )
                 logger.critical("Error: %s", e)
             raise DatabaseConnectionError from e
@@ -129,8 +130,8 @@ class MongoDBClient(DBClientBase):
                 )
             else:
                 logger.critical(
-                    "An unknown error occurred while connecting to MongoDB. Check your MongoDB server is reachable. "
-                    "Please report this error to the Modmail team."
+                    "An unknown error occurred while connecting to MongoDB. Check your MongoDB server "
+                    "is reachable. Please report this error to the Modmail team."
                 )
                 logger.critical("Error: %s", e)
             raise DatabaseConnectionError from e
@@ -189,11 +190,9 @@ class MongoDBClient(DBClientBase):
         # Validate the kwargs, by creating a new Settings object with the provided kwargs.
         # Uses a new Settings model to avoid modifying the original settings and validate the new settings.
         new_settings_model = Settings(
-            **self.settings_model.model_dump(exclude={key: True for key in kwargs.keys()}), **kwargs
+            **self.settings_model.model_dump(exclude={key: True for key in kwargs}), **kwargs
         )
-        settings_dict = new_settings_model.model_dump(
-            include={key: True for key in kwargs.keys()} | {"bot_id": True}
-        )
+        settings_dict = new_settings_model.model_dump(include={key: True for key in kwargs} | {"bot_id": True})
 
         logger.debug("Updating settings in MongoDB: %s", settings_dict)
         assert settings_dict.pop("bot_id") == self._config.bot.bot_id, "Bot ID mismatch."
@@ -243,7 +242,6 @@ class MongoDBClient(DBClientBase):
             self.__profiles_cache[profile_key] = (new_profile, Profile.model_validate(new_profile))
             logger.debug("Updated profile %s in MongoDB.", profile_key)
         else:
-
             # Create a new profile
             new_profile = MongoDBProfileDocument(
                 bot_id=self._config.bot.bot_id,

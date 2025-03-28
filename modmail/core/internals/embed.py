@@ -7,7 +7,7 @@ A module providing a custom embed proxy system that supports lazy translation of
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Self, TypeAlias
+from typing import TYPE_CHECKING, Self
 
 import discord
 from discord.app_commands import locale_str
@@ -17,7 +17,7 @@ __all__ = ["EmbedProxy"]
 if TYPE_CHECKING:
     from .. import Translator
 
-AnyStr: TypeAlias = str | locale_str
+type AnyStr = str | locale_str
 
 
 class EmbedProxy:
@@ -26,20 +26,20 @@ class EmbedProxy:
     """
 
     __slots__ = (
-        "color",
-        "colour",
-        "title",
-        "url",
-        "description",
-        "timestamp",
-        "footer_text",
-        "footer_icon_url",
-        "image_url",
-        "thumbnail_url",
+        "author_icon_url",
         "author_name",
         "author_url",
-        "author_icon_url",
+        "color",
+        "colour",
+        "description",
         "fields",
+        "footer_icon_url",
+        "footer_text",
+        "image_url",
+        "thumbnail_url",
+        "timestamp",
+        "title",
+        "url",
     )
 
     def __init__(
@@ -51,7 +51,7 @@ class EmbedProxy:
         url: AnyStr | None = None,
         description: AnyStr | None = None,
         timestamp: datetime.datetime | None = None,
-    ):
+    ) -> None:
         """
         Initialize the EmbedProxy with optional parameters.
         All parameters are the same as discord.Embed(...).
@@ -92,8 +92,7 @@ class EmbedProxy:
                 translated_string = await translator.translate(string, locale)
                 if translated_string is not None:
                     return translated_string
-                else:
-                    return string.message
+                return string.message
             return string
 
         embed = discord.Embed(

@@ -52,7 +52,7 @@ class MongoDBDatabaseConfig(BaseModel):
             #         "Invalid MongoDB connection URI: The DNS query name does not exist. "
             #         "Did you copy your MongoDB connection URI correctly?"
             #     )
-            raise ValueError(f"Invalid MongoDB connection URI: {e}.")
+            raise ValueError(f"Invalid MongoDB connection URI: {e}.") from e
 
         if parsed_uri["password"] and parsed_uri["password"][0] == "<" and parsed_uri["password"][-1] == ">":
             raise ValueError(
@@ -76,8 +76,8 @@ class MongoDBDatabaseConfig(BaseModel):
         try:
             # Check if the URI contains a database name.
             parsed_uri = uri_parser.parse_uri(info.data["uri"].get_secret_value())
-        except KeyError:
-            raise ValueError("URI not found in the database config.")
+        except KeyError as e:
+            raise ValueError("URI not found in the database config.") from e
 
         if parsed_uri["database"]:
             return parsed_uri["database"]
