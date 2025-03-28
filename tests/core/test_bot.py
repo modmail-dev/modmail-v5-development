@@ -11,13 +11,20 @@ from mock import Mock
 from pydantic import SecretStr
 from pytest_mock import MockerFixture
 
-from modmail.backends import *
+from modmail.backends import Activity, DBClientBase, Profile, Settings
 from modmail.backends.mongodb import MongoDBClient
 from modmail.backends.sql import SQLClient
 from modmail.config.models import MongoDBDatabaseConfig, SQLDatabaseConfig
 from modmail.core import Bot
-from modmail.core.permission import *
-from modmail.enum import *
+from modmail.core.permission import admin_only, owner_only
+from modmail.enum import (
+    AccessLevel,
+    ActivityType,
+    PermissionOverrideValue,
+    ProfileType,
+    RequiredAccessLevel,
+    StatusType,
+)
 from modmail.errors import DatabaseError
 
 
@@ -68,7 +75,7 @@ def test_bot_init_no_prefix(mocker: MockerFixture) -> None:
     """Test bot initializes with default command prefix when not configured."""
     mocker.patch("modmail.core.bot.CONFIG.bot.prefix", None)
     bot = Bot()
-    assert "?" not in bot.command_prefix  # type: ignore[reportOperatorIssue]
+    assert "?" not in bot.command_prefix  # pyright: ignore [reportUnknownMemberType, reportOperatorIssue]
 
 
 def test_bot_init_database_clients(mocker: MockerFixture) -> None:

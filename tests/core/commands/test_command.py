@@ -6,7 +6,13 @@ import pytest
 from discord.ext import commands
 from pytest_mock import MockerFixture
 
-from modmail.core.internals.command import *
+from modmail.core.internals.command import (
+    LazyHybridCommand,
+    LazyHybridGroup,
+    lazy_hybrid_command,
+    lazy_hybrid_group,
+    wrap,
+)
 
 
 class MockCog:
@@ -64,7 +70,7 @@ async def test_lazy_hybrid_group_with_children() -> None:
         pass
 
     @parent_group.command()
-    async def child_command(self: Any, _: Any) -> None:  # type: ignore[reportUnusedFunction]
+    async def child_command(self: Any, _: Any) -> None:  # pyright: ignore [reportUnusedFunction]
         pass
 
     @parent_group.group()
@@ -72,7 +78,7 @@ async def test_lazy_hybrid_group_with_children() -> None:
         pass
 
     @child_group.command()
-    async def grandchild_command(self: Any, _: Any) -> None:  # type: ignore[reportUnusedFunction]
+    async def grandchild_command(self: Any, _: Any) -> None:  # pyright: ignore [reportUnusedFunction]
         pass
 
     assert isinstance(parent_group, LazyHybridGroup)
@@ -202,12 +208,12 @@ async def test_lazy_hybrid_group_command_and_group_methods() -> None:
 
     # Add command with custom parameters
     @test_group.command("cmd", description="Command description")
-    async def group_command(self: Any, _: Any, param: str) -> None:  # type: ignore[reportUnusedFunction]
+    async def group_command(self: Any, _: Any, param: str) -> None:  # pyright: ignore [reportUnusedFunction]
         pass
 
     # Add subgroup with custom parameters
     @test_group.group("sub", description="Subgroup description")
-    async def group_subgroup(self: Any, _: Any) -> None:  # type: ignore[reportUnusedFunction]
+    async def group_subgroup(self: Any, _: Any) -> None:  # pyright: ignore [reportUnusedFunction]
         pass
 
     assert len(test_group.children) == 2
@@ -217,9 +223,11 @@ async def test_lazy_hybrid_group_command_and_group_methods() -> None:
     group_child = None
 
     for child in test_group.children:
-        if isinstance(child, LazyHybridCommand) and not isinstance(child, LazyHybridGroup):  # type: ignore[reportUnnecessaryIsInstance]
+        if isinstance(child, LazyHybridCommand) and not isinstance(
+            child, LazyHybridGroup
+        ):  # pyright: ignore [reportUnnecessaryIsInstance]
             command_child = child
-        elif isinstance(child, LazyHybridGroup):  # type: ignore[reportUnnecessaryIsInstance]
+        elif isinstance(child, LazyHybridGroup):  # pyright: ignore [reportUnnecessaryIsInstance]
             group_child = child
 
     assert command_child is not None, "Command child not found"

@@ -110,7 +110,9 @@ def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr) -> locale_str:
 
     for key, value in kwargs.items():
         if hasattr(value, "__locale_str__"):  # If the value is a locale_str, use the default message
-            temp_kwargs[key] = value.__locale_str__().message  # type: ignore[reportUnknownMemberType]
+            temp_kwargs[key] = (
+                value.__locale_str__().message
+            )  # pyright: ignore [reportUnknownMemberType, reportOptionalMemberAccess, reportAttributeAccessIssue]
         elif isinstance(value, FluentTypes):
             temp_kwargs[key] = value
         else:

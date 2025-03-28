@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .about import *
-from .profile import *
-from .status import *
+from .about import about_command
+from .profile import profile_command
+from .status import status_command
 
 if TYPE_CHECKING:
     from modmail.core import LazyHybridCommand

@@ -105,7 +105,7 @@ class BotConfig(BaseModel):
         """
         if v:
             try:
-                import jishaku  # type: ignore[import]
+                import jishaku  # pyright: ignore [reportUnusedImport]  # noqa: F401
             except ImportError:
                 logger.error("Jishaku is not installed, but is enabled in configs.")
                 return False

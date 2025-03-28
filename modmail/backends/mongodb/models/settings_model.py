@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from beanie import Document, Indexed, Link  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
+from beanie import Document, Indexed  # pyright: ignore [reportUnknownVariableType]  # beanie is not fully typed
 from pydantic import BaseModel
 
 from modmail.enum import ActivityType, StatusType

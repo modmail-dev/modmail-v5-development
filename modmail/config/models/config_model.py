@@ -105,7 +105,7 @@ class Config(BaseSettings):
         Checks if the default locale is valid.
         """
         if v not in info.data.get("allowed_locales", set()):
-            raise ValueError(f"The default locale must be in allowed_locales.")
+            raise ValueError("The default locale must be in allowed_locales.")
         return v
 
     _T = TypeVar("_T")
@@ -119,7 +119,7 @@ class Config(BaseSettings):
         if info.data.get("database_type") == "sql":
             if not v:
                 # This may error since it could be missing required fields.
-                v = SQLDatabaseConfig()  # type: ignore[reportCallIssue, reportAssignmentType]
+                v = SQLDatabaseConfig()  # pyright: ignore [reportCallIssue, reportAssignmentType]
             return v
         return None
 
@@ -132,7 +132,7 @@ class Config(BaseSettings):
         if info.data.get("database_type") == "mongodb":
             if not v:
                 # This may error since it could be missing required fields.
-                v = MongoDBDatabaseConfig()  # type: ignore[reportCallIssue, reportAssignmentType]
+                v = MongoDBDatabaseConfig()  # pyright: ignore [reportCallIssue, reportAssignmentType]
             return v
         return None
 

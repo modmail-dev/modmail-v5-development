@@ -50,7 +50,7 @@ def init(config_file_path: str = "config.yaml") -> None:
     if _CONFIG is None:
         logger.critical("Failed to load config. Exiting.")
         sys.exit(1)
-    CONFIG = _CONFIG  # type: ignore[reportConstantRedefinition]
+    CONFIG = _CONFIG  # pyright: ignore [reportConstantRedefinition]
 
     if CONFIG.logging.enabled:
         from .logging import setup_logging

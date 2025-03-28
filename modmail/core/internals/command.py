@@ -43,7 +43,9 @@ class LazyHybridCommand(Generic[T]):
 
         # Store the wrappers for the command (discord.py's command decorators)
         if hasattr(func, "__modmail_wrappers__"):
-            self.wrappers: list[tuple[DecoFactory[T], tuple[Any, ...], dict[str, Any]]] = func.__modmail_wrappers__  # type: ignore[reportFunctionMemberAccess]
+            self.wrappers: list[tuple[DecoFactory[T], tuple[Any, ...], dict[str, Any]]] = (
+                func.__modmail_wrappers__
+            )  # pyright: ignore [reportFunctionMemberAccess]
         else:
             self.wrappers = []
 
@@ -113,7 +115,7 @@ class LazyHybridGroup(LazyHybridCommand[T]):
             # Change the base_func of the child to the group's
             if isinstance(child, LazyHybridGroup):
                 child.base_func = group.group
-            elif isinstance(child, LazyHybridCommand):  # type: ignore[reportUnnecessaryIsInstance]
+            elif isinstance(child, LazyHybridCommand):  # pyright: ignore [reportUnnecessaryIsInstance]
                 child.base_func = group.command
             else:
                 raise TypeError(f"Unexpected child type: {type(child)}")  # pragma: no cover
@@ -184,12 +186,14 @@ def wrap(dpy_func: Any, *args: Any, **kwargs: Any) -> Callable[[A], A]:
     def decorator(func: A) -> A:
         # If the function is already a lazy class
         if isinstance(func, LazyHybridCommand):
-            func.wrappers.append((dpy_func, args, kwargs))  # type: ignore[reportUnknownMemberType]
+            func.wrappers.append((dpy_func, args, kwargs))  # pyright: ignore [reportUnknownMemberType]
         else:
             # Otherwise, add the wrapper to the function directly
             if not hasattr(func, "__modmail_wrappers__"):
-                func.__modmail_wrappers__ = []  # type: ignore[reportFunctionMemberAccess]
-            func.__modmail_wrappers__.append((dpy_func, args, kwargs))  # type: ignore[reportUnknownMemberType]
-        return func  # type: ignore[reportUnknownVariableType]
+                func.__modmail_wrappers__ = []  # pyright: ignore [reportAttributeAccessIssue]
+            func.__modmail_wrappers__.append(
+                (dpy_func, args, kwargs)
+            )  # pyright: ignore [reportAttributeAccessIssue, reportUnknownMemberType]
+        return func  # pyright: ignore [reportUnknownVariableType]
 
     return decorator

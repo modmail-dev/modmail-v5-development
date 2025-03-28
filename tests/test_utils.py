@@ -6,7 +6,13 @@ import pytest
 from discord.ext import commands
 from pytest_mock import MockerFixture
 
-from modmail.utils import *
+from modmail.utils import (
+    colour_hex_to_int,
+    get_command_name,
+    int_to_colour_hex,
+    sanitize_user_command_name,
+    strtobool,
+)
 
 
 class TestStrtobool:

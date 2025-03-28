@@ -6,7 +6,7 @@ from discord.ext import commands
 from pytest_mock import MockFixture
 
 from modmail.core.internals import LazyHybridCommand
-from modmail.core.permission import *
+from modmail.core.permission import admin_only, manager_only, owner_only, staff_only
 from modmail.enum import RequiredAccessLevel
 
 

@@ -104,6 +104,12 @@ line-length = 115
 target-version = ['py312']
 include = '\.pyi?$'
 
+[tool.ruff]
+line-length = 115
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F403"]  # F403: 'from module import *' used; unable to detect undefined names
+
 [tool.pyright]
 exclude = [
     "**/__pycache__",

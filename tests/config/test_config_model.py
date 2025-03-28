@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from modmail.config.models import *
+from modmail.config.models import Config, LoggingConfig, PermissionConfig
 
 
 class TestConfig:

@@ -21,7 +21,7 @@ from modmail.enum import ProfileKey, ProfileType
 from modmail.errors import DatabaseConnectionError
 
 from .migration import do_migration
-from .models import *
+from .models import SQLActivityTable, SQLPermissionOverrideTable, SQLProfileTable, SQLSettingsTable
 
 if TYPE_CHECKING:
     from sqlalchemy.engine.interfaces import DBAPIConnection

@@ -219,7 +219,7 @@ async def make_profile_customize_view(
             """
             for children in self.children:
                 if hasattr(children, "disabled"):
-                    children.disabled = True  # type: ignore[reportAttributeAccessIssue]
+                    children.disabled = True  # pyright: ignore [reportAttributeAccessIssue]
 
             if self._original_message is not None:
                 await self._original_message.edit(view=self)

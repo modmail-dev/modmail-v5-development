@@ -248,6 +248,6 @@ def test_underscore_with_unsupported_type(mock_fluent_setup: None) -> None:
 
     # Should issue a warning and convert to string
     with pytest.warns(UserWarning, match="Unsupported type for translation"):
-        result = _("test.greeting", name=custom_obj)  # type: ignore[reportArgumentType]
+        result = _("test.greeting", name=custom_obj)  # pyright: ignore [reportArgumentType]
 
     assert result.extras.get("name") == custom_obj

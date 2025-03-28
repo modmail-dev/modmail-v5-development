@@ -14,7 +14,7 @@ from concurrent.futures import ProcessPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 import pymongo.errors
-from beanie import init_beanie  # type: ignore[reportUnknownVariableType]  # beanie is not fully typed
+from beanie import init_beanie  # pyright: ignore [reportUnknownVariableType]  # beanie is not fully typed
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from modmail.backends import DBClientBase, Profile, Settings
@@ -22,7 +22,7 @@ from modmail.enum import ProfileKey, ProfileType
 from modmail.errors import DatabaseConnectionError
 
 from .migration import do_migration
-from .models import *
+from .models import MongoDBActivityModel, MongoDBProfileDocument, MongoDBSettingsDocument
 
 if TYPE_CHECKING:
     from modmail.config.models import Config, MongoDBDatabaseConfig

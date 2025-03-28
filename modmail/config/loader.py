@@ -47,7 +47,7 @@ def load_config(file_path: str) -> Config | None:
         return None
 
     try:
-        config = Config(**config_data)  # type: ignore[reportUnknownArgumentType]
+        config = Config(**config_data)  # pyright: ignore [reportUnknownArgumentType]
         return config
     except pydantic.ValidationError as e:
         logger.critical("Invalid config file at %s:\n%s", file_path, e)

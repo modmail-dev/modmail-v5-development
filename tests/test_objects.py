@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from discord import app_commands
 
-from modmail.enum import *
-from modmail.errors import *
+from modmail.enum import AccessLevel, ActivityType, ProfileKey, ProfileType, RequiredAccessLevel, StatusType
+from modmail.errors import DatabaseConnectionError, DatabaseError, ModmailError
 
 
 class TestErrors:

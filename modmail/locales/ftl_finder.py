@@ -139,7 +139,7 @@ def main():
             print(f"\nMissing FTL strings in {locale_name}/main.ftl ({len(missing_strings)}):")
             for string in sorted(missing_strings):
                 print(f"\n  {string}")
-                print(f"    Found in:")
+                print("    Found in:")
                 for file_path, locations in code_strings_with_locations[string].items():
                     rel_path = file_path.relative_to(project_root)
                     for line, col in locations:

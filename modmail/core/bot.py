@@ -228,7 +228,7 @@ class Bot(commands.Bot):
         try:
             try:
                 # noinspection PyUnresolvedReferences
-                import uvloop  # type: ignore[reportMissingImports,reportUnnecessaryTypeIgnoreComment]
+                import uvloop  # pyright: ignore
             except ImportError as e:
                 # uvloop is not available on Windows
                 if e.name == "uvloop" and sys.platform != "win32":
@@ -236,7 +236,7 @@ class Bot(commands.Bot):
                 uvloop = asyncio  # Use the default asyncio loop.
 
             # Start the bot with uvloop.run or asyncio.run
-            uvloop.run(bot_runner())  # type: ignore[reportUnknownMemberType,reportUnnecessaryTypeIgnoreComment]
+            uvloop.run(bot_runner())  # pyright: ignore
         except KeyboardInterrupt:
             logger.debug("Keyboard interrupt.")
             logger.info("[yellow]Shutting down Modmail.", extra={"markup": True})
@@ -354,7 +354,9 @@ class Bot(commands.Bot):
         if isinstance(exception, commands.CheckFailure):
             if hasattr(context, "_perm_check_reason"):  # This gets injected by the permission check
                 # noinspection PyProtectedMember
-                logger.debug("%s is not allowed to run %s: %s", context.author, context.command, context._perm_check_reason)  # type: ignore[reportUnknownMemberType,reportUnknownArgumentType,reportAttributeAccessIssue]
+                logger.debug(
+                    "%s is not allowed to run %s: %s", context.author, context.command, context._perm_check_reason
+                )  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
             return
         return await super().on_command_error(context, exception)
 
@@ -365,7 +367,9 @@ class Bot(commands.Bot):
         """
         if hasattr(ctx, "_perm_check_reason"):  # This gets injected by the permission check
             # noinspection PyProtectedMember
-            logger.debug("%s is running %s, allowed reason: %s", ctx.author, ctx.command, ctx._perm_check_reason)  # type: ignore[reportUnknownMemberType,reportUnknownArgumentType,reportAttributeAccessIssue]
+            logger.debug(
+                "%s is running %s, allowed reason: %s", ctx.author, ctx.command, ctx._perm_check_reason
+            )  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
         else:
             logger.debug("User %s is running the %s command.", ctx.author, ctx.command)
 
@@ -401,7 +405,9 @@ class Bot(commands.Bot):
             # Otherwise, propagate the access level lookup to the parent command.
             if default_access_level is None and hasattr(command.callback, "__permission__"):
                 # See: modmail/core/permission.py
-                default_access_level = command.callback.__permission__  # type: ignore[reportFunctionMemberAccess]
+                default_access_level = (
+                    command.callback.__permission__
+                )  # pyright: ignore [reportFunctionMemberAccess]
 
         # If no access level is set, then everyone can use the command.
         return default_access_level if default_access_level is not None else RequiredAccessLevel.everyone
@@ -433,7 +439,7 @@ class Bot(commands.Bot):
         A permission check to see if the user is allowed to invoke this command.
         """
         if ctx.author.bot:  # Ignore commands invoked by bots
-            ctx._perm_check_reason = "bot"  # type: ignore[reportAttributeAccessIssue]
+            ctx._perm_check_reason = "bot"  # pyright: ignore [reportAttributeAccessIssue]
             return False
 
         if ctx.command is None:  # pragma: nocover ; When would this happen?
@@ -441,7 +447,7 @@ class Bot(commands.Bot):
             return True
 
         if await self.is_owner(ctx.author):
-            ctx._perm_check_reason = "owner"  # type: ignore[reportAttributeAccessIssue]
+            ctx._perm_check_reason = "owner"  # pyright: ignore [reportAttributeAccessIssue]
             return True
 
         all_profiles = self.get_all_user_profiles(ctx.author)
@@ -456,10 +462,10 @@ class Bot(commands.Bot):
             for profile in all_profiles:
                 if i == 0:  # Check for override on the exact command name
                     if profile.permission_overrides.get(command_name) == PermissionOverrideValue.deny:
-                        ctx._perm_check_reason = f"{profile.profile_id} deny {command_name}"  # type: ignore[reportAttributeAccessIssue]
+                        ctx._perm_check_reason = f"{profile.profile_id} deny {command_name}"  # pyright: ignore [reportAttributeAccessIssue]
                         return False
                     if profile.permission_overrides.get(command_name) == PermissionOverrideValue.allow:
-                        ctx._perm_check_reason = f"{profile.profile_id} allow {command_name}"  # type: ignore[reportAttributeAccessIssue]
+                        ctx._perm_check_reason = f"{profile.profile_id} allow {command_name}"  # pyright: ignore [reportAttributeAccessIssue]
                         return True
                 elif command_access_level == RequiredAccessLevel.owner:
                     # Owner-only commands cannot be overridden by wildcard overrides on parent.
@@ -468,21 +474,21 @@ class Bot(commands.Bot):
 
                 # Check for wildcard override (on parents). e.g. "profile+" will match "profile add"
                 if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.deny:
-                    ctx._perm_check_reason = f"{profile.profile_id} deny {command_name}+"  # type: ignore[reportAttributeAccessIssue]
+                    ctx._perm_check_reason = f"{profile.profile_id} deny {command_name}+"  # pyright: ignore [reportAttributeAccessIssue]
                     return False
 
                 if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.allow:
-                    ctx._perm_check_reason = f"{profile.profile_id} allow {command_name}+"  # type: ignore[reportAttributeAccessIssue]
+                    ctx._perm_check_reason = f"{profile.profile_id} allow {command_name}+"  # pyright: ignore [reportAttributeAccessIssue]
                     return True
 
         # Owner check
         if command_access_level == RequiredAccessLevel.owner:
-            ctx._perm_check_reason = "owner only"  # type: ignore[reportAttributeAccessIssue]
+            ctx._perm_check_reason = "owner only"  # pyright: ignore [reportAttributeAccessIssue]
             return False
 
         if CONFIG.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
             # If the command is set to everyone, allow it.
-            ctx._perm_check_reason = "everyone"  # type: ignore[reportAttributeAccessIssue]
+            ctx._perm_check_reason = "everyone"  # pyright: ignore [reportAttributeAccessIssue]
             return True
 
         for profile in all_profiles:
@@ -491,10 +497,12 @@ class Bot(commands.Bot):
 
             # Check if the user has the required access level for the command.
             if profile.access_level >= command_access_level:
-                ctx._perm_check_reason = f"{profile.profile_id} level {profile.access_level} >= {command_access_level}"  # type: ignore[reportAttributeAccessIssue]
+                ctx._perm_check_reason = f"{profile.profile_id} level {profile.access_level} >= {command_access_level}"  # pyright: ignore [reportAttributeAccessIssue]
                 return True
 
-        ctx._perm_check_reason = f"no access {command_access_level}"  # type: ignore[reportAttributeAccessIssue]
+        ctx._perm_check_reason = (
+            f"no access {command_access_level}"  # pyright: ignore [reportAttributeAccessIssue]
+        )
         return False
 
     async def _bot_can_run_check(self, ctx: commands.Context[Bot]) -> bool:

@@ -31,10 +31,12 @@ def _set_access_level(func: T, access_level: RequiredAccessLevel) -> T:
     """
     # Lots of type ignore here because we are using function injection to set the access level.
     if isinstance(func, commands.Command | LazyHybridCommand):  # Inject into the command callback
-        func.callback.__permission__ = access_level  # type: ignore[reportUnknownMemberType,reportFunctionMemberAccess]
+        func.callback.__permission__ = (
+            access_level  # pyright: ignore [reportUnknownMemberType, reportFunctionMemberAccess]
+        )
     else:  # Inject into the function itself
-        func.__permission__ = access_level  # type: ignore[reportUnknownMemberType]
-    return func  # type: ignore[reportUnknownVariableType,reportReturnType]
+        func.__permission__ = access_level  # pyright: ignore [reportFunctionMemberAccess]
+    return func  # pyright: ignore [reportUnknownVariableType, reportReturnType]
 
 
 def staff_only(func: T) -> T:

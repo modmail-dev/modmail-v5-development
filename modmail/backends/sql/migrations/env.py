@@ -19,8 +19,8 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from modmail.backends.sql.models import *
-from modmail.backends.sql.models.base import SQLBase
+from modmail.backends.sql.models import *  # noqa: E402, F403
+from modmail.backends.sql.models.base import SQLBase  # noqa: E402
 
 target_metadata = SQLBase.metadata
 
