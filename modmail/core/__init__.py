@@ -10,10 +10,10 @@ try:  # Check if modmail is initialized
     from .. import CONFIG
 
     del CONFIG
-except ImportError as e:
+except ImportError as e:  # pragma: no cover
     raise RuntimeError("Did you forget to first run modmail.init()?") from e
 
 from .bot import *
-from .commands import *
+from .internals import *
 from .permission import *
 from .translator import *

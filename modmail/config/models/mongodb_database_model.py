@@ -29,7 +29,7 @@ class MongoDBDatabaseConfig(BaseModel):
     """
 
     uri: SecretStr  # the MongoDB connection URI
-    database: str = Field("", validate_default=True)  # default is 'modmail'
+    database: str = Field(default="", validate_default=True)  # default is 'modmail'
     tls_allow_invalid_certificates: bool = False
 
     @field_validator("uri")
@@ -46,11 +46,12 @@ class MongoDBDatabaseConfig(BaseModel):
         try:
             parsed_uri = uri_parser.parse_uri(uri)
         except pymongo.errors.ConfigurationError as e:
-            if "The DNS query name does not exist" in str(e):
-                raise ValueError(
-                    "Invalid MongoDB connection URI: The DNS query name does not exist. "
-                    "Did you copy your MongoDB connection URI correctly?"
-                )
+            # TODO: where is this error raised? (not here I think)
+            # if "The DNS query name does not exist" in str(e):
+            #     raise ValueError(
+            #         "Invalid MongoDB connection URI: The DNS query name does not exist. "
+            #         "Did you copy your MongoDB connection URI correctly?"
+            #     )
             raise ValueError(f"Invalid MongoDB connection URI: {e}.")
 
         if parsed_uri["password"] and parsed_uri["password"][0] == "<" and parsed_uri["password"][-1] == ">":

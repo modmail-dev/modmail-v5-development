@@ -1,6 +1,6 @@
 """
-modmail.core.commands.command
-=============================
+modmail.core.internals.command
+==============================
 This module contains a custom implementation of a lazy hybrid command decorator for Modmail's cogs.
 """
 
@@ -33,11 +33,10 @@ class LazyHybridCommand(Generic[T]):
     Allows the injection of the cog name into the __qualname__ of the callback function.
     """
 
-    __slot__ = ("callback", "args", "kwargs", "wrappers")
-
-    base_func: Callable[..., Callable[[T], HcHg]] = staticmethod(commands.hybrid_command)
+    __slots__ = ("base_func", "callback", "args", "kwargs", "wrappers")
 
     def __init__(self, func: T, args: Any, kwargs: Any):
+        self.base_func: Callable[..., Callable[[T], HcHg]] = staticmethod(commands.hybrid_command)
         self.callback = func
         self.args = args
         self.kwargs = kwargs
@@ -62,7 +61,7 @@ class LazyHybridCommand(Generic[T]):
             )
 
     @property
-    def name(self) -> str:
+    def _callback_name(self) -> str:
         """
         The name of the command.
         """
@@ -77,7 +76,7 @@ class LazyHybridCommand(Generic[T]):
         """
         # Set the __qualname__ of the function to include the cog name
         if not self.callback.__qualname__.startswith(f"{cog_name}."):
-            self.callback.__qualname__ = f"{cog_name}.{self.name}"
+            self.callback.__qualname__ = f"{cog_name}.{self._callback_name}"
 
         # Apply the wrappers to the function directly (app_command decorators does not work on command)
         func = self.callback
@@ -87,7 +86,7 @@ class LazyHybridCommand(Generic[T]):
         # Create the command using the base function (hybrid_command/hybrid_group)
         command = self.base_func(*self.args, **self.kwargs)(func)
 
-        return {self.name: command}
+        return {self._callback_name: command}
 
 
 class LazyHybridGroup(LazyHybridCommand[T]):
@@ -97,16 +96,17 @@ class LazyHybridGroup(LazyHybridCommand[T]):
     Allows the injection of the cog name into the __qualname__ of the callback function.
     """
 
-    base_func: Callable[..., Callable[[T], HcHg]] = staticmethod(commands.hybrid_group)
+    __slots__ = ("children",)
 
     def __init__(self, func: T, args: Any, kwargs: Any):
         super().__init__(func, args, kwargs)
+        self.base_func: Callable[..., Callable[[T], HcHg]] = staticmethod(commands.hybrid_group)
         self.children: list[LazyHybridCommand[Any]] = []
 
     def get_commands(self, cog_name: str) -> dict[str, HcHg]:
         # Get the hybrid group of the func
         command_mapping = super().get_commands(cog_name)
-        group = command_mapping[self.name]
+        group = command_mapping[self._callback_name]
         assert isinstance(group, commands.HybridGroup), "Expected a HybridGroup"
 
         for child in self.children:
@@ -116,7 +116,7 @@ class LazyHybridGroup(LazyHybridCommand[T]):
             elif isinstance(child, LazyHybridCommand):  # type: ignore[reportUnnecessaryIsInstance]
                 child.base_func = group.command
             else:
-                raise TypeError(f"Unexpected child type: {type(child)}")
+                raise TypeError(f"Unexpected child type: {type(child)}")  # pragma: no cover
             # Add the child to the command mapping
             child_command_mapping = child.get_commands(cog_name)
             command_mapping.update(child_command_mapping)

@@ -45,7 +45,7 @@ class BotConfig(BaseModel):
     respond_bot_mention: bool = True
     owner_ids: set[IDType] = set()
     use_slash_commands: bool = True
-    force_sync_commands: bool = Field(False, validate_default=True)
+    force_sync_commands: bool = False
     enable_jishaku: bool = False
     bypass_public_bot_check: bool = False
 

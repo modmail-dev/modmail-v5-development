@@ -316,7 +316,7 @@ async def profile_add_command(
 async def profile_delete_command(
     self: Utility,
     ctx: commands.Context[Bot],
-    user_or_role: discord.Member | discord.User | discord.Role,
+    user_or_role: discord.Member | discord.User | discord.Role | None,
     id_: int | None,  # in case role/user was deleted TODO: auto delete on bot start so this isn't necessary
 ) -> None:
     """

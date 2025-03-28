@@ -228,19 +228,15 @@ class Bot(commands.Bot):
         try:
             try:
                 # noinspection PyUnresolvedReferences
-                import uvloop
-
-                # Start the bot with uvloop if available.
-                with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
-                    runner.run(bot_runner())
+                import uvloop  # type: ignore[reportMissingImports,reportUnnecessaryTypeIgnoreComment]
             except ImportError as e:
                 # uvloop is not available on Windows
                 if e.name == "uvloop" and sys.platform != "win32":
                     logger.warning("uvloop not installed, consider installing with the -G speed option.")
-                    # Start the bot with the default asyncio loop.
-                    asyncio.run(bot_runner())
-                else:
-                    raise  # re-raise the exception if it's not about uvloop
+                uvloop = asyncio  # Use the default asyncio loop.
+
+            # Start the bot with uvloop.run or asyncio.run
+            uvloop.run(bot_runner())  # type: ignore[reportUnknownMemberType,reportUnnecessaryTypeIgnoreComment]
         except KeyboardInterrupt:
             logger.debug("Keyboard interrupt.")
             logger.info("[yellow]Shutting down Modmail.", extra={"markup": True})
@@ -326,9 +322,11 @@ class Bot(commands.Bot):
         await self.wait_until_ready()  # Wait until the bot is ready
 
         # Update the database settings
-        if activity is not None:
+        if activity is not None and status is not None:
+            await self.database_client.update_settings(activity=activity, status=status)
+        elif activity is not None:
             await self.database_client.update_settings(activity=activity)
-        if status is not None:
+        elif status is not None:
             await self.database_client.update_settings(status=status)
 
         dc_activity, dc_status = self._get_discord_presence_from_settings()
@@ -438,7 +436,7 @@ class Bot(commands.Bot):
             ctx._perm_check_reason = "bot"  # type: ignore[reportAttributeAccessIssue]
             return False
 
-        if ctx.command is None:  # When would this happen?
+        if ctx.command is None:  # pragma: nocover ; When would this happen?
             logger.warning("The context command is None? %s", ctx)
             return True
 
@@ -511,4 +509,4 @@ class Bot(commands.Bot):
         #     - TODO: Add more permissions
         #     """
         #     return True
-        return True
+        return True  # pragma: nocover ; TODO: Implement this check

@@ -17,7 +17,7 @@ from rich.text import Text
 
 try:
     from . import CONFIG
-except ImportError as e:
+except ImportError as e:  # pragma: no cover
     raise RuntimeError("Did you forget to first run modmail.init()?") from e
 
 __all__ = ["setup_logging"]

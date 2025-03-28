@@ -20,7 +20,7 @@ __all__ = [
 ]
 
 
-class DBClientBase(ABC):
+class DBClientBase(ABC):  # pragma: no cover
     def __init__(self, config: Config):
         """
         Initialize the database client with the given configuration.

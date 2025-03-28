@@ -119,6 +119,9 @@ reportPropertyTypeMismatch = "error"
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "strict"
+executionEnvironments = [
+  { root = "tests", reportPrivateUsage = "none", reportFunctionMemberAccess = "none", reportWildcardImportFromLibrary = "none" },
+]
 
 [tool.pytest.ini_options]
 mock_use_standalone_module = true
@@ -127,6 +130,9 @@ asyncio_default_fixture_loop_scope = "function"
 addopts = "--cov=modmail --cov-report html"
 testpaths = ["tests"]
 required_plugins = ["pytest-mock<4,>=3.14.0", "pytest-asyncio<1,>=0.25.3", "pytest-cov<7,>=6.0.0"]
+filterwarnings = [
+    "ignore:.*'audioop' is deprecated.*:DeprecationWarning", # discord.py uses audioop, which is deprecated
+]
 
 [tool.coverage.report]
 exclude_also = [

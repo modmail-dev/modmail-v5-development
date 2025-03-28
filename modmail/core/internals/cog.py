@@ -1,6 +1,6 @@
 """
-modmail.core.commands.cog
-=========================
+modmail.core.internals.cog
+==========================
 A subclass of discord.py's command.ext.Cog.
 """
 

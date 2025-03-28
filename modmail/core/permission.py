@@ -12,7 +12,7 @@ from typing import Any, Callable, Coroutine, TypeAlias, TypeVar
 from discord.ext import commands
 
 from ..enum import RequiredAccessLevel
-from .commands import LazyHybridCommand
+from .internals import LazyHybridCommand
 
 Co: TypeAlias = Callable[..., Coroutine[Any, Any, Any]]
 T = TypeVar("T", bound=commands.Command[Any, Any, Any] | LazyHybridCommand[Any] | Co)

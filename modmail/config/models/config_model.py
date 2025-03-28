@@ -87,8 +87,11 @@ class Config(BaseSettings):
         """
         valid_versions = ("1.0",)  # a tuple of valid versions
 
-        version = str(Version(v))
-        if version not in valid_versions:
+        try:
+            version = str(Version(v))
+            if version not in valid_versions:
+                raise ValueError(f"Invalid config version. Valid versions are: {', '.join(valid_versions)}")
+        except Exception:
             raise ValueError(f"Invalid config version. Valid versions are: {', '.join(valid_versions)}")
 
         # Do version migrations here?
@@ -101,7 +104,7 @@ class Config(BaseSettings):
         """
         Checks if the default locale is valid.
         """
-        if v not in info.data["allowed_locales"]:
+        if v not in info.data.get("allowed_locales", set()):
             raise ValueError(f"The default locale must be in allowed_locales.")
         return v
 
@@ -113,7 +116,7 @@ class Config(BaseSettings):
         """
         This parses SQL configs when the database type is sql.
         """
-        if info.data["database_type"] == "sql":
+        if info.data.get("database_type") == "sql":
             if not v:
                 # This may error since it could be missing required fields.
                 v = SQLDatabaseConfig()  # type: ignore[reportCallIssue, reportAssignmentType]
@@ -126,7 +129,7 @@ class Config(BaseSettings):
         """
         This parses MongoDB configs when the database type is mongodb.
         """
-        if info.data["database_type"] == "mongodb":
+        if info.data.get("database_type") == "mongodb":
             if not v:
                 # This may error since it could be missing required fields.
                 v = MongoDBDatabaseConfig()  # type: ignore[reportCallIssue, reportAssignmentType]

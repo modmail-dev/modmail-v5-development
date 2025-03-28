@@ -1,3 +1,9 @@
+"""
+modmail.core.internals.embed
+============================
+A module providing a custom embed proxy system that supports lazy translation of embed content.
+"""
+
 from __future__ import annotations
 
 import datetime

@@ -35,24 +35,15 @@ class PermissionConfig(BaseModel):
 
     @field_validator("overrides", mode="before")
     @classmethod
-    def set_default_overrides_config(
-        cls, v: dict[str, RequiredAccessLevel] | None
-    ) -> dict[str, RequiredAccessLevel]:
-        """
-        Sets the default overrides if not provided.
-        """
-        if v is None:
-            return {}
-        return v
-
-    @field_validator("overrides", mode="before")
-    @classmethod
     def sanitize_overrides_values_config(
-        cls, v: dict[str, RequiredAccessLevel | str]
+        cls, v: dict[str, RequiredAccessLevel | str] | None
     ) -> dict[str, RequiredAccessLevel]:
         """
         Sanitizes the overrides command names and parses the access levels.
         """
+        if v is None:
+            return {}
+
         new_v: dict[str, RequiredAccessLevel] = {}
         for key, value in v.items():
             key = utils.sanitize_user_command_name(key)
