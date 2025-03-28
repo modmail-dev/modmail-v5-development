@@ -1,6 +1,5 @@
-"""
-modmail.util
-============
+"""Utility functions module.
+
 This module contains utility functions that provide common, reusable functionality
 for the project. These functions are designed to be used across different parts
 of the codebase to avoid redundancy and promote code reuse.
@@ -18,28 +17,38 @@ __all__ = ["colour_hex_to_int", "get_command_name", "int_to_colour_hex", "saniti
 logger = logging.getLogger(__name__)
 
 
-def strtobool(val: str) -> int:
-    """Convert a string representation of truth to true (1) or false (0).
+def strtobool(val: str) -> bool:
+    """Convert a string representation of truth to True or False.
 
-    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
-    are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
-    'val' is anything else.
+    Args:
+        val: The string value to convert.
 
-    This is a copy of the `distutils.util.strtobool` function.
+    Returns:
+        True for true values, False for false values.
+
+    Raises:
+        ValueError: If the input string is not a recognized truth value.
+
+    Note:
+        True values are 'y', 'yes', 't', 'true', 'on', and '1'.
+        False values are 'n', 'no', 'f', 'false', 'off', and '0'.
     """
-    val = val.lower()
-    if val in ("y", "yes", "t", "true", "on", "1"):
-        return 1
-    if val in ("n", "no", "f", "false", "off", "0"):
-        return 0
+    val = val.casefold()
+    if val in {"y", "yes", "t", "true", "on", "1"}:
+        return True
+    if val in {"n", "no", "f", "false", "off", "0"}:
+        return False
     raise ValueError(f"invalid truth value {val!r}")
 
 
 def int_to_colour_hex(value: int) -> str:
     """Convert an integer to a hex color string.
 
-    :param value: The integer value to convert.
-    :return: A hex color string in the format '#RRGGBB'.
+    Args:
+        value: The hex-integer value to convert.
+
+    Returns:
+        A hex color string in the format '#RRGGBB'.
     """
     return f"#{value:06X}"
 
@@ -47,18 +56,30 @@ def int_to_colour_hex(value: int) -> str:
 def colour_hex_to_int(value: str) -> int:
     """Convert a hex color string to an integer.
 
-    :param value: The hex color string in the format '#RRGGBB'.
-    :return: The integer value of the color.
+    Args:
+        value: The hex color string in the format '#RRGGBB' or 'RRGGBB'.
+
+    Returns:
+        The hex-integer value of the color.
     """
     return int(value.lstrip("#"), 16)
 
 
 def sanitize_user_command_name(command_name: str) -> str:
-    """
-    Sanitize a user-provided command name.
+    """Sanitize a user-provided command name.
 
-    :param command_name: The command name to sanitize.
-    :return: The sanitized command name.
+    Performs the following operations:
+    - Converts to lowercase.
+    - Strips whitespace.
+    - Replaces underscores with spaces.
+    - Replaces asterisks with plus signs.
+    - Ensures wildcards are properly formatted.
+
+    Args:
+        command_name: The command name to sanitize.
+
+    Returns:
+        The sanitized command name.
     """
     # "_" -> " ", "*" -> "+", casefold, strip
     command_name = command_name.casefold().strip().replace("_", " ").replace("*", "+")
@@ -69,11 +90,16 @@ def sanitize_user_command_name(command_name: str) -> str:
 
 
 def get_command_name(command: commands.Command[Any, Any, Any]) -> str:
-    """
-    Get the command name from a command.
+    """Get the command name from a command object.
 
-    :param command: The discord.py command.
-    :return: The command name.
+    Extracts the command name from the callback function name,
+    removing "_command" suffix and replacing underscores with spaces.
+
+    Args:
+        command: The discord.py command object.
+
+    Returns:
+        The formatted command name.
     """
     # Check if the command has an override set in the config.
     command_name = command.callback.__name__.casefold()

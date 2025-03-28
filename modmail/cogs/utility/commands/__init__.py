@@ -1,3 +1,8 @@
+"""Command collection for the utility cog.
+
+This module imports and collects all command functions from the utility cog submodules.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

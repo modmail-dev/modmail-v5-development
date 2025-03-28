@@ -89,13 +89,13 @@ class TestConfig:
         config_data = minimal_valid_config_data.copy()
         config_data["database_type"] = "sql"
         config_data["sql_config"] = None  # No SQL config provided
-        with pytest.raises(ValidationError, match="sql_config.uri"):
+        with pytest.raises(ValidationError, match=r"sql_config.uri"):
             Config(**config_data)
 
         config_data = minimal_valid_config_data.copy()
         config_data["database_type"] = "mongodb"
         config_data["mongodb_config"] = None  # No MongoDB config provided
-        with pytest.raises(ValidationError, match="mongodb_config.uri"):
+        with pytest.raises(ValidationError, match=r"mongodb_config.uri"):
             Config(**config_data)
 
     def test_default_configs(self, minimal_valid_config_data: dict[str, Any]) -> None:

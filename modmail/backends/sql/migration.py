@@ -1,12 +1,13 @@
-"""
-modmail.backends.sql.migration
-==============================
+"""SQL database migration handling using Alembic.
+
 This module handles the migration of the SQL database using Alembic.
 
 To create a new migration, use the following command:
     alembic -c modmail/backends/sql/migrations/alembic.ini revision --autogenerate -m "migration_name"
-Note: Must set database_type to sql and supply connection uri in configs first.
-Then manually edit the migration file to add the necessary changes.
+
+Note:
+    Must set database_type to sql and supply connection uri in configs first.
+    Then manually edit the migration file to add the necessary changes.
 """
 
 from __future__ import annotations
@@ -17,10 +18,10 @@ __all__ = ["do_migration"]
 
 
 def do_migration(uri: str) -> None:
-    """
-    Performs the migration of the SQL database using Alembic.
+    """Perform SQL database migration using Alembic.
 
-    :param uri: The SQL database connection URI.
+    Args:
+        uri: The SQL database connection URI.
     """
     from alembic import command
     from alembic.config import Config

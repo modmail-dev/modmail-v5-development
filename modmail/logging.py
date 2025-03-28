@@ -1,8 +1,8 @@
-"""
-modmail.logging
-===============
-This module configures the logging for the bot and discord.py internals.
-It sets up logging handlers, formatters, and log levels based on the configuration provided.
+"""Configuration for the bot's logging system.
+
+This module sets up the logging infrastructure for both the Modmail bot and
+discord.py internals. It configures log handlers, formatters, log rotation,
+and establishes appropriate log levels based on the application configuration.
 """
 
 from __future__ import annotations
@@ -24,7 +24,20 @@ __all__ = ["setup_logging"]
 
 
 class FileFormatter(logging.Formatter):
+    """Custom formatter for log files.
+
+    Removes rich markup syntax from log messages when writing to files.
+    """
+
     def format(self, record: logging.LogRecord) -> str:
+        """Format a log record by removing rich markup if present.
+
+        Args:
+            record: The log record to format.
+
+        Returns:
+            The formatted log string with markup removed if applicable.
+        """
         formatted_str = super().format(record)
         if record.__dict__.get("markup", False):
             # Remove the "[some markup] text [/some markup]" markup for rich.
@@ -33,9 +46,12 @@ class FileFormatter(logging.Formatter):
 
 
 def setup_logging() -> None:
-    """
-    Set up logging for the bot and discord.py internals.
-    This function configures the logging handlers, formatters, and log levels based on the provided configuration.
+    """Set up logging for the bot and discord.py library.
+
+    Configures both console and file logging with appropriate formatters and handlers.
+    Log levels, rotation settings, and formatting are based on the application config.
+    Console output uses rich formatting with traceback support, while file output
+    uses a plain text format with configurable rotation.
     """
     # Configure root logging level.
     project_root_logger = logging.getLogger("modmail")

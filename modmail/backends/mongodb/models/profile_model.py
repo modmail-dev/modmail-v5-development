@@ -1,8 +1,6 @@
-"""
-modmail.backends.mongodb.models.profile_model
-=============================================
-This module defines the MongoDBProfileDocument, which represents a permission group in the MongoDB database.
-The model includes fields for bot ID, group ID, group type, permission level, and command overrides.
+"""Defines the MongoDB profile document.
+
+This module contains the MongoDBProfileDocument class.
 """
 
 from __future__ import annotations
@@ -16,6 +14,22 @@ __all__ = ["MongoDBProfileDocument"]
 
 
 class MongoDBProfileDocument(Document):
+    """Represents a MongoDB profile document for a permission group.
+
+    A profile defines permission settings and appearance attributes for different
+    user groups within the bot system.
+
+    Attributes:
+        bot_id: The unique identifier of the bot.
+        profile_id: The unique identifier for the profile.
+        profile_type: The type of the profile (user, role).
+        access_level: The profile's access level that defines default permissions.
+        permission_overrides: Command-specific permission overrides in format
+            {command_name: allow/deny, ...}.
+        tag: An optional tag.
+        colour: An optional colour value.
+    """
+
     bot_id: int
     profile_id: int
     profile_type: ProfileType
@@ -27,6 +41,8 @@ class MongoDBProfileDocument(Document):
     colour: int | None = None
 
     class Settings:
+        """Settings for the MongoDB profile document."""
+
         name = "Profile"
         validate_on_save = True
         indexes = [

@@ -1,7 +1,7 @@
-"""
-modmail.cogs.utility.commands.about
-===================================
-This module contains the about command for the Modmail bot.
+"""About command implementation for the Modmail bot.
+
+This module contains commands that display information about the Modmail bot,
+including the main about command and its subcommands.
 """
 
 from __future__ import annotations
@@ -25,8 +25,11 @@ if TYPE_CHECKING:
     description=_("ftl-cmd-about-description"),
 )
 async def about_command(self: Utility, ctx: commands.Context[Bot]) -> None:
-    """
-    Show information about the Modmail bot.
+    """Show information about the Modmail bot.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
     """
     await self.reply(ctx, "Modmail!")
 
@@ -37,7 +40,10 @@ async def about_command(self: Utility, ctx: commands.Context[Bot]) -> None:
     with_app_command=False,
 )
 async def about_version_command(self: Utility, ctx: commands.Context[Bot]) -> None:
-    """
-    Show the version of the Modmail bot.
+    """Show the version of the Modmail bot.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
     """
     await self.reply(ctx, _("ftl-cmd-about-version-message", version=self.bot.version), auto_embed=True)

@@ -1,8 +1,8 @@
-"""
-modmail
-=======
-This module initializes the bot by loading the configuration and setting up the necessary environment.
-It handles platform-specific configurations and ensures that logging is properly configured.
+"""Modmail initialization module.
+
+This module initializes the bot by loading the configuration and setting up the
+necessary environment. It handles platform-specific configurations and ensures
+that logging is properly configured.
 """
 
 from __future__ import annotations
@@ -40,17 +40,18 @@ CONFIG: Config
 
 
 def init(config_file_path: str = "config.yaml") -> None:
-    """
-    Initialize the bot by loading the configuration from the specified file path.
+    """Initialize the bot by loading the configuration.
 
-    :param config_file_path: Path to the configuration file.
+    Args:
+        config_file_path: Path to the configuration file. Defaults to "config.yaml".
     """
     global CONFIG  # noqa: PLW0603
-    _CONFIG = load_config(config_file_path)  # noqa: N806
-    if _CONFIG is None:
+    # noinspection PyPep8Naming
+    CONFIG_ = load_config(config_file_path)  # noqa: N806
+    if CONFIG_ is None:
         logger.critical("Failed to load config. Exiting.")
         sys.exit(1)
-    CONFIG = _CONFIG  # pyright: ignore [reportConstantRedefinition]
+    CONFIG = CONFIG_  # pyright: ignore [reportConstantRedefinition]
 
     if CONFIG.logging.enabled:
         from .logging import setup_logging
@@ -61,10 +62,13 @@ def init(config_file_path: str = "config.yaml") -> None:
 
 
 def run_bot() -> NoReturn:
-    """
-    Run the bot.
-    This function is a wrapper around the Bot class's run method.
-    It handles the event loop and database connection.
+    """Run the Modmail bot.
+
+    This function initializes the Bot class and starts its operation.
+    It handles the event loop and database connection, displaying
+    startup information including bot version and configuration details.
+
+    This function does not return as it runs the bot until termination.
     """
     if "CONFIG" not in globals():
         logger.warning("init() was not called. Calling init() with the default args.")
@@ -88,7 +92,7 @@ def run_bot() -> NoReturn:
     )
 
     modmail_text_lines: list[str] = []
-    modmail_text_lines += [line for line in modmail_ascii_art.split("\n")]
+    modmail_text_lines += modmail_ascii_art.split("\n")
     modmail_text_lines += ["https://github.com/modmail-dev/modmail"]
     modmail_text_lines += [""]
     modmail_text_lines += [f"Starting at {current_time_text}"]

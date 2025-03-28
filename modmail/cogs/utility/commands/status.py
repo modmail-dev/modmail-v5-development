@@ -1,8 +1,7 @@
-"""
-modmail.cogs.utility.commands.status
-====================================
-This module contains the status command for the Modmail bot.
-This command allows you to set the bot's status and activity message.
+"""Status command for setting the Modmail bot presence.
+
+This module contains commands that allow administrators to set the bot's
+status and activity message on Discord.
 """
 
 from __future__ import annotations
@@ -33,8 +32,7 @@ __all__ = ["status_command"]
     description=_("ftl-cmd-status-description"),
 )
 async def status_command(self: Utility, ctx: commands.Context[Bot], *, status: str | None = None) -> None:
-    """
-    Set the bot's status or activity message.
+    """Set the bot's status or activity message.
 
     Possible statuses:
     - online (green)
@@ -50,9 +48,11 @@ async def status_command(self: Utility, ctx: commands.Context[Bot], *, status: s
     - streaming <activity> https://www.twitch.tv/your-channel (Twitch URL at the end)
     - <activity> (custom activity)
 
-    Run `status clear` to clear the bot's status and activity.
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
+        status: The status or activity to set. Use "clear" to remove.
     """
-
     if not status:  # No status provided, show the current status
         current_status = self.bot.database_client.settings_model.status
         current_activity = self.bot.database_client.settings_model.activity
@@ -139,8 +139,11 @@ async def status_command(self: Utility, ctx: commands.Context[Bot], *, status: s
 @wrap(commands.guild_only)
 @status_command.command(name=_("ftl-cmd-status-clear-name"), description=_("ftl-cmd-status-clear-description"))
 async def status_clear_command(self: Utility, ctx: commands.Context[Bot]) -> None:
-    """
-    Clear the bot's status and activity.
+    """Clear the bot's status and activity.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
     """
     await self.bot.clear_bot_presence()
     await self.reply(ctx, _("ftl-msg-status-clear-status"), ephemeral=True)

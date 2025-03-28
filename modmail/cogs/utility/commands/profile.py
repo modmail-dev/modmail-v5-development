@@ -1,15 +1,17 @@
-"""
-modmail.cogs.utility.commands.profile
-=====================================
-This file implements profile management commands for the modmail bot. It defines
-several commands for adding, removing, customizing profiles and interface for overriding permission access levels.
+"""Profile management commands for the Modmail bot.
+
+This module implements commands for managing user and role profiles including:
+- Adding and removing profiles.
+- Customizing profile appearance (color, tag).
+- Managing permission overrides for commands.
+- Setting access levels for users and roles.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, Final, NamedTuple
 
 import discord
 from discord.ext import commands
@@ -38,6 +40,14 @@ logger = logging.getLogger(__name__)
 
 
 class ProfileDetail(NamedTuple):
+    """Container for profile information.
+
+    Attributes:
+        mention: String representation/mention of the profile entity.
+        profile_id: Unique identifier for the profile.
+        profile_type: Type of profile (user or role).
+    """
+
     mention: str
     profile_id: int
     profile_type: ProfileType | None
@@ -46,12 +56,14 @@ class ProfileDetail(NamedTuple):
 def _get_profile_detail(
     *, user_or_role: discord.Member | discord.User | discord.Role | None = None, id_: int | None = None
 ) -> ProfileDetail | None:
-    """
-    Get a sanitized ProfileDetail from the raw user/role/id_ command inputs.
+    """Get sanitized profile details from raw user/role/id inputs.
 
-    :param user_or_role: The discord User or Role when the type is known.
-    :param id_: The profile's ID if type is unknown.
-    :return: A ProfileDetail of the user/role/id_, None if no input was provided.
+    Args:
+        user_or_role: The Discord User or Role when the type is known.
+        id_: The profile's ID if type is unknown.
+
+    Returns:
+        A ProfileDetail of the user/role/id_, or None if no valid input was provided.
     """
     profile_mention: str
     profile_id: int
@@ -80,18 +92,20 @@ def _get_profile_detail(
 async def make_profile_customize_view(
     cog: Utility, ctx: commands.Context[Bot], profile_detail: ProfileDetail, profile: Profile
 ) -> type[ProfileCustomizeView]:
-    """
-    Create a view for customizing profiles.
-    This view contains a "Customize" button and a select menu for choosing a permission access level.
+    """Create a UI view for customizing profiles.
 
-    :param cog: The Utility cog instance.
-    :param ctx: The context of the command.
-    :param profile_detail: The profile detail of the profile.
-    :param profile: The profile to customize.
-    :return: A Discord.py UI view for customizing the profile.
+    Args:
+        cog: The Utility cog instance.
+        ctx: The context of the command.
+        profile_detail: The profile detail containing ID, mention and type.
+        profile: The profile to customize.
+
+    Returns:
+        A Discord.py UI view class for customizing the profile with buttons and selects
+        for managing appearance and access level.
     """
     # Stores the previous interaction so we can delete the response later
-    _previous_interaction: discord.Interaction | None = None
+    previous_interaction: discord.Interaction | None = None
 
     ui_button_label = await cog.translate(ctx, _("ftl-view-profile-button-customize-label"))
 
@@ -101,11 +115,12 @@ async def make_profile_customize_view(
     else:
         ui_select_level_placeholder = await cog.translate(ctx, _("ftl-view-profile-select-level-placeholder"))
 
-    _LEVEL_NONE = "None"  # noqa: N806
+    # noinspection PyPep8Naming
+    LEVEL_NONE: Final[str] = "None"  # noqa: N806
     ui_select_level_options = [
         # An option to remove the access level for this profile
         discord.SelectOption(
-            label=await cog.translate(ctx, _("ftl-view-profile-select-level-option-none")), value=_LEVEL_NONE
+            label=await cog.translate(ctx, _("ftl-view-profile-select-level-option-none")), value=LEVEL_NONE
         ),
         discord.SelectOption(
             label=await cog.translate(ctx, _("ftl-access-level-everyone")), value=AccessLevel.everyone.name
@@ -126,7 +141,8 @@ async def make_profile_customize_view(
     ui_tag_label = await cog.translate(ctx, _("ftl-modal-profile-customize-tag"))
 
     class ProfileCustomizeModal(discord.ui.Modal, title=ui_title):
-        # TODO: Use default from current profile
+        """Modal for customizing profile appearance."""
+
         colour: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
             label=ui_colour_label,
             placeholder="#000000",
@@ -141,18 +157,21 @@ async def make_profile_customize_view(
         )
 
         async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
-            """
-            Check if the interaction is from the user who invoked the command.
+            """Check if the interaction is from the user who invoked the command.
+
+            Returns:
+                True if the interaction is from the user who invoked the command, False otherwise.
             """
             return interaction.user == ctx.author
 
         async def on_submit(self, interaction: discord.Interaction) -> None:
-            nonlocal profile, _previous_interaction
+            """Handle submission of the modal."""
+            nonlocal profile, previous_interaction
 
-            if _previous_interaction is not None:
+            if previous_interaction is not None:
                 # Delete the previous interaction response if it exists
-                await _previous_interaction.delete_original_response()
-            _previous_interaction = interaction
+                await previous_interaction.delete_original_response()
+            previous_interaction = interaction
 
             to_update: dict[str, Any] = {}
 
@@ -191,32 +210,30 @@ async def make_profile_customize_view(
 
     # noinspection PyShadowingNames
     class ProfileCustomizeView(discord.ui.View):
-        """
-        A view for customizing the profile.
-        """
+        """A view for customizing the profile."""
 
         def __init__(self) -> None:
             super().__init__()
             self._original_message: discord.Message | None = None
 
         def set_original_message(self, message: discord.Message) -> None:
-            """
-            Set the original message that sent this view.
+            """Set the original message that sent this view.
 
-            :param message: The Discord.py message from the original .send().
+            Args:
+                message: The Discord.py message from the original .send().
             """
             self._original_message = message
 
         async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
-            """
-            Check if the interaction is from the user who invoked the command.
+            """Check if the interaction is from the user who invoked the command.
+
+            Returns:
+                True if the interaction is from the user who invoked the command, False otherwise.
             """
             return interaction.user == ctx.author
 
         async def on_timeout(self) -> None:
-            """
-            Disable all components of this view when timed out.
-            """
+            """Disable all components of this view when timed out."""
             for children in self.children:
                 if hasattr(children, "disabled"):
                     children.disabled = True  # pyright: ignore [reportAttributeAccessIssue]
@@ -228,15 +245,16 @@ async def make_profile_customize_view(
         async def level_select(
             self, interaction: discord.Interaction, select: discord.ui.Select[ProfileCustomizeView]
         ) -> None:
-            nonlocal profile, _previous_interaction
+            """Handle selection of access level."""
+            nonlocal profile, previous_interaction
 
-            if _previous_interaction is not None:
+            if previous_interaction is not None:
                 # Delete the previous interaction response if it exists
-                await _previous_interaction.delete_original_response()
-            _previous_interaction = interaction
+                await previous_interaction.delete_original_response()
+            previous_interaction = interaction
 
             selected_option = select.values[0]
-            if selected_option == _LEVEL_NONE:
+            if selected_option == LEVEL_NONE:
                 selected_level: AccessLevel | None = None
             else:
                 selected_level = AccessLevel[selected_option]
@@ -258,11 +276,11 @@ async def make_profile_customize_view(
                 ephemeral=True,
             )
 
-        # noinspection PyUnusedLocal
         @discord.ui.button(label=ui_button_label, style=discord.ButtonStyle.primary)
         async def customize_button(
             self, interaction: discord.Interaction, button: discord.ui.Button[ProfileCustomizeView]
         ) -> None:
+            """Open the modal for profile customization."""
             await interaction.response.send_modal(ProfileCustomizeModal())
 
     return ProfileCustomizeView
@@ -274,20 +292,32 @@ async def make_profile_customize_view(
     description=_("ftl-cmd-profile-description"),
 )
 async def profile_command(self: Utility, ctx: commands.Context[Bot]) -> None:
+    """View and manage profile settings.
+
+    This group command provides access to all profile management functionality
+    including creating, editing, and deleting profiles, as well as managing
+    permission overrides.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
     """
-    View every profile.
-    """
-    ...
 
 
 @profile_command.command(name=_("ftl-cmd-profile-add-name"), description=_("ftl-cmd-profile-add-description"))
 async def profile_add_command(
     self: Utility, ctx: commands.Context[Bot], user_or_role: discord.Member | discord.User | discord.Role
 ) -> None:
-    """
-    Create a new profile for a user/role.
-    """
+    """Create a new profile for a user or role.
 
+    Creates a profile in the database and immediately provides customization options
+    through an interactive view.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
+        user_or_role: The user or role to create a profile for.
+    """
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
 
     # These can't be None, assert for type checker
@@ -319,8 +349,16 @@ async def profile_delete_command(
     user_or_role: discord.Member | discord.User | discord.Role | None,
     id_: int | None,  # in case role/user was deleted TODO: auto delete on bot start so this isn't necessary
 ) -> None:
-    """
-    Delete a profile associated with a user/role.
+    """Delete a profile associated with a user or role.
+
+    Removes the profile and all associated customizations and permission overrides
+    from the database.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
+        user_or_role: The user or role whose profile should be deleted.
+        id_: The profile ID to delete if the user/role is no longer accessible.
     """
     if user_or_role is not None and id_ is not None:
         await self.reply(ctx, _("ftl-cmd-profile-delete-both"))
@@ -341,8 +379,15 @@ async def profile_edit_command(
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
 ) -> None:
-    """
-    Customize a user/role's profile.
+    """Customize a user or role's profile.
+
+    Opens an interactive view for editing a profile's appearance settings and
+    access level. Creates a new profile if one doesn't exist.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
+        user_or_role: The user or role whose profile should be edited.
     """
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
 
@@ -373,9 +418,17 @@ async def _update_permission_override(
     command_name: str,
     override_value: PermissionOverrideValue,
 ) -> None:
-    """
-    Update the permission override for a user/role.
-    This is a helper function for the allow and deny commands.
+    """Update the permission override for a user or role.
+
+    Helper function for the allow and deny commands that modifies command access
+    permissions for specific users or roles.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
+        user_or_role: The user or role to update permissions for.
+        command_name: The command name to override permissions for.
+        override_value: The permission value to set (allow or deny).
     """
     # Sanitize the command name
     command_name = utils.sanitize_user_command_name(command_name)
@@ -438,8 +491,17 @@ async def profile_allow_command(
     *,
     command_name: str,
 ) -> None:
-    """
-    Allow a user/role to use a specific command without having the required access level.
+    """Allow a user or role to use a specific command.
+
+    Grants permission to use a command without having the normally required
+    access level. Particularly useful for allowing lower-level users to access
+    specific higher-level commands.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
+        user_or_role: The user or role to grant permission to.
+        command_name: The command to allow access to. Can include wildcards with "+" for command groups.
     """
     await _update_permission_override(self, ctx, user_or_role, command_name, PermissionOverrideValue.allow)
 
@@ -452,8 +514,16 @@ async def profile_deny_command(
     *,
     command_name: str,
 ) -> None:
-    """
-    Deny a user/role from using a specific command even if they have the required access level.
+    """Deny a user or role from using a specific command.
+
+    Prevents the use of a command even if the user or role would normally have
+    the required access level to use it.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
+        user_or_role: The user or role to deny permission to.
+        command_name: The command to deny access to. Can include wildcards with "+" for command groups.
     """
     await _update_permission_override(self, ctx, user_or_role, command_name, PermissionOverrideValue.deny)
 
@@ -466,9 +536,16 @@ async def profile_unset_command(
     *,
     command_name: str | None,
 ) -> None:
-    """
-    Remove a command override for a user/role.
-    If no command is specified, remove all overrides.
+    """Remove command permission overrides for a user or role.
+
+    Removes specific or all command permission overrides, returning the commands
+    to their default access level requirements for the specified user or role.
+
+    Args:
+        self: The Utility cog instance.
+        ctx: The command context.
+        user_or_role: The user or role to remove overrides for.
+        command_name: The specific command override to remove, or None to remove all overrides.
     """
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
 

@@ -6,6 +6,8 @@ Create Date: 2025-03-26 11:38:24.535913
 
 """
 
+from __future__ import annotations
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa

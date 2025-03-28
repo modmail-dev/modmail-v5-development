@@ -1,6 +1,5 @@
-"""
-modmail.backends.sql.client
-===========================
+"""SQL database client module for Modmail.
+
 This module provides the SQL database client using SQLAlchemy for connecting to a SQL database,
 handling initialization and settings management for the Modmail bot.
 """
@@ -34,13 +33,18 @@ logger = logging.getLogger(__name__)
 
 
 class SQLClient(DBClientBase):
-    """
-    SQLClient is a wrapper around a SQL database using SQLAlchemy.
-    It connects to the database, loads or creates the bot settings,
-    and provides methods to get and update the last ran version.
+    """SQL database client using SQLAlchemy.
+
+    A wrapper around a SQL database connection that handles initialization,
+    settings management, and profile operations for the Modmail bot.
     """
 
     def __init__(self, config: Config) -> None:
+        """Initialize the SQL client.
+
+        Args:
+            config: Bot configuration containing database connection details.
+        """
         super().__init__(config)
         self.engine: AsyncEngine | None = None
         self._async_session: async_sessionmaker[AsyncSession] | None = None
@@ -52,33 +56,65 @@ class SQLClient(DBClientBase):
 
     @property
     def _settings_table(self) -> SQLSettingsTable:
+        """Get the settings table object.
+
+        Returns:
+            The SQLAlchemy settings table object.
+        """
         assert self.__settings_table is not None, "Settings not loaded."
         return self.__settings_table
 
     @_settings_table.setter
     def _settings_table(self, settings_table: SQLSettingsTable) -> None:
+        """Set the settings table and update the settings model.
+
+        Args:
+            settings_table: The SQLAlchemy settings table object.
+        """
         self.__settings_table = settings_table
         self.__settings_model = Settings.model_validate(settings_table)
 
     @property
     def settings_model(self) -> Settings:
+        """Get the settings model.
+
+        Returns:
+            The settings model object.
+        """
         assert self.__settings_model is not None, "Settings model not loaded."
         return self.__settings_model
 
     @property
     def _sql_config(self) -> SQLDatabaseConfig:
+        """Get the SQL database configuration.
+
+        Returns:
+            The SQL database configuration.
+        """
         assert self._config.sql_config is not None, "SQL config is not set."
         return self._config.sql_config
 
     async def connect(self) -> None:
+        """Connect to the SQL database and initialize settings.
+
+        Establishes a connection to the SQL database, runs migrations,
+        and loads or creates settings for the bot.
+
+        Raises:
+            DatabaseConnectionError: If unable to connect to the database.
+        """
         self.engine = engine = create_async_engine(self._sql_config.uri.get_secret_value())
 
         # noinspection PyUnusedLocal
         @event.listens_for(self.engine.sync_engine, "connect")
         def set_sqlite_pragma(dbapi_connection: DBAPIConnection, connection_record: ConnectionPoolEntry) -> None:
-            """
-            Set the SQLite PRAGMA foreign_keys to ON for the connection.
+            """Set the SQLite PRAGMA foreign_keys to ON for the connection.
+
             This is required to enforce foreign key constraints in SQLite.
+
+            Args:
+                dbapi_connection: The database connection.
+                connection_record: The connection pool entry.
             """
             if engine.dialect.name.casefold() == "sqlite":
                 cursor = dbapi_connection.cursor()
@@ -129,15 +165,19 @@ class SQLClient(DBClientBase):
         await self._sync_profiles()
 
     async def disconnect(self) -> None:
+        """Disconnect from the SQL database.
+
+        Closes all connections to the database and disposes of the engine.
+        """
         if self.engine:
             await self.engine.dispose()
             self.engine = None
             logger.debug("Disconnected from SQL database.")
 
     async def sync_settings(self) -> None:
-        """
-        Sync the settings from the SQL database.
-        This is used to ensure that the settings are up-to-date with the database.
+        """Sync the settings from the SQL database.
+
+        Refreshes the local settings from the database to ensure they are up-to-date.
         """
         assert self._async_session is not None, "Session is not initialized."
         async with self._async_session() as session:
@@ -148,10 +188,20 @@ class SQLClient(DBClientBase):
             self._settings_table = settings_table
 
     async def update_settings(self, **kwargs: Any) -> None:
+        """Update bot settings in the database.
+
+        Updates the specified settings in the database and refreshes the local settings.
+
+        Args:
+            **kwargs: Settings key-value pairs to update.
+
+        Raises:
+            DatabaseConnectionError: If an error occurs while updating settings.
+        """
         # Validate the kwargs, by creating a new Settings object with the provided kwargs.
         # Uses a new Settings model to avoid modifying the original settings and validate the new settings.
-        new_settings = Settings(**self.settings_model.model_dump(exclude={key: True for key in kwargs}), **kwargs)
-        settings_dict = new_settings.model_dump(include={key: True for key in kwargs} | {"bot_id": True})
+        new_settings = Settings(**self.settings_model.model_dump(exclude=dict.fromkeys(kwargs, True)), **kwargs)
+        settings_dict = new_settings.model_dump(include=dict.fromkeys(kwargs, True) | {"bot_id": True})
         logger.debug("Updating settings in SQL database: %s", settings_dict)
 
         assert self._async_session is not None, "Session is not initialized."
@@ -190,8 +240,13 @@ class SQLClient(DBClientBase):
 
     @staticmethod
     def _make_profile_from_table(profile_row: SQLProfileTable) -> Profile:
-        """
-        Convert a SQLProfileTable object to a Profile object.
+        """Convert a SQLProfileTable object to a Profile object.
+
+        Args:
+            profile_row: Database profile row to convert.
+
+        Returns:
+            A Profile model instance populated with data from the database row.
         """
         attributes = {
             field: getattr(profile_row, field)
@@ -204,8 +259,9 @@ class SQLClient(DBClientBase):
         return Profile(**attributes)
 
     async def _sync_profiles(self) -> None:
-        """
-        Sync the profiles from the database to the local cache.
+        """Sync profiles from the database to the local cache.
+
+        Fetches all profiles from the database and stores them in the local cache.
         """
         assert self._async_session is not None, "Session is not initialized."
         self.__profiles_cache.clear()
@@ -219,12 +275,29 @@ class SQLClient(DBClientBase):
         logger.debug("Synchronized profiles from SQL database.")
 
     def get_profile(self, profile_id: int, profile_type: ProfileType) -> Profile | None:
+        """Get a profile from the cache.
+
+        Args:
+            profile_id: ID of the profile to retrieve.
+            profile_type: Type of the profile to retrieve.
+
+        Returns:
+            The profile if found, None otherwise.
+        """
         profile_key = ProfileKey(profile_id, profile_type)
         if profile_key in self.__profiles_cache:
             return self.__profiles_cache[profile_key][1]
         return None
 
     async def update_profile(self, profile: Profile) -> None:
+        """Update or create a profile in the database.
+
+        If the profile exists, updates its properties. If not, creates a new profile.
+        Also updates the local cache accordingly.
+
+        Args:
+            profile: The profile to update or create.
+        """
         assert self._async_session is not None, "Session is not initialized."
 
         profile_key = ProfileKey(profile.profile_id, profile.profile_type)
@@ -303,6 +376,13 @@ class SQLClient(DBClientBase):
                 logger.debug("Created new profile in SQL database: %s", profile_key)
 
     async def delete_profile(self, profile_id: int) -> None:
+        """Delete a profile from the database.
+
+        Removes the profile from both the database and the local cache.
+
+        Args:
+            profile_id: ID of the profile to delete.
+        """
         assert self._async_session is not None, "Session is not initialized."
 
         async with self._async_session() as session:

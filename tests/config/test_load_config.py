@@ -13,7 +13,12 @@ from modmail.config.models import Config
 
 @pytest.fixture
 def valid_config_dict() -> dict[str, Any]:
-    """Return a valid configuration dictionary for testing."""
+    """Provide a valid configuration dictionary for testing.
+
+    Returns:
+        A dictionary containing valid configuration data with bot token,
+        server ID, database configuration, and other required fields.
+    """
     return {
         "version": "1.0",
         "bot": {
@@ -27,7 +32,15 @@ def valid_config_dict() -> dict[str, Any]:
 
 @pytest.fixture
 def config_file_path(tmp_path: Path, valid_config_dict: dict[str, Any]) -> Path:
-    """Create a temporary config file with valid content."""
+    """Create a temporary config YAML file with valid content.
+
+    Args:
+        tmp_path: Pytest fixture that provides a temporary directory path.
+        valid_config_dict: Fixture providing a valid configuration dictionary.
+
+    Returns:
+        Path to the created temporary YAML configuration file.
+    """
     config_path = tmp_path / "config.yaml"
     with config_path.open("w") as f:
         yaml.dump(valid_config_dict, f)
@@ -42,22 +55,22 @@ def test_load_config_file_not_found() -> None:
 
 def test_load_config_permission_error(mocker: MockerFixture) -> None:
     """Test that load_config returns None when a permission error occurs."""
-    mock_open = mocker.patch("builtins.open", side_effect=PermissionError("Permission denied"))
+    mock_open = mocker.patch("pathlib.Path.open", side_effect=PermissionError("Permission denied"))
 
     result = load_config("config.yaml")
 
     assert result is None
-    mock_open.assert_called_once_with("config.yaml", "r")
+    mock_open.assert_called_once_with("r")
 
 
 def test_load_config_os_error(mocker: MockerFixture) -> None:
     """Test that load_config returns None when an OS error occurs."""
-    mock_open = mocker.patch("builtins.open", side_effect=OSError("Some OS error"))
+    mock_open = mocker.patch("pathlib.Path.open", side_effect=OSError("Some OS error"))
 
     result = load_config("config.yaml")
 
     assert result is None
-    mock_open.assert_called_once_with("config.yaml", "r")
+    mock_open.assert_called_once_with("r")
 
 
 def test_load_config_invalid_yaml(tmp_path: Path) -> None:

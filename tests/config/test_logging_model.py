@@ -83,7 +83,7 @@ def test_logging_config_logfile_directory_error(tmp_path: Path) -> None:
 
 def test_logging_config_logfile_permission_error(mocker: MockerFixture) -> None:
     """Test validation when logfile cannot be opened due to permissions."""
-    mock_open = mocker.patch("builtins.open", side_effect=PermissionError("Permission denied"))
+    mock_open = mocker.patch("pathlib.Path.open", side_effect=PermissionError("Permission denied"))
 
     with pytest.raises(ValueError, match="No permissions to open the file"):
         LoggingConfig(logfile="restricted.log")
@@ -93,7 +93,7 @@ def test_logging_config_logfile_permission_error(mocker: MockerFixture) -> None:
 
 def test_logging_config_logfile_os_error(mocker: MockerFixture) -> None:
     """Test validation when logfile encounters an OS error."""
-    mock_open = mocker.patch("builtins.open", side_effect=OSError("Some OS error"))
+    mock_open = mocker.patch("pathlib.Path.open", side_effect=OSError("Some OS error"))
 
     with pytest.raises(ValueError, match="Logfile cannot be written to"):
         LoggingConfig(logfile="error.log")

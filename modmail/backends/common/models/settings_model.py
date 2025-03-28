@@ -1,7 +1,6 @@
-"""
-modmail.backends.common.models.settings_model
-==============================================
-This module defines a uniform model for exporting settings.
+"""Provides the Settings model for managing bot settings.
+
+This module provides a Pydantic model representing various bot settings.
 """
 
 from __future__ import annotations
@@ -18,13 +17,27 @@ __all__ = [
 
 
 class Settings(BaseModel):
+    """Settings model for bot configuration.
+
+    Attributes:
+        bot_id: Bot identifier.
+        last_ran_version: Last version that the bot was run on; None indicates first run.
+        last_ran_locale: Last locale used when running the bot.
+        last_slash_synced_version: Last version in which slash commands were synced.
+        last_slash_minimum_permission_int: Last minimum permission integer for slash commands.
+        main_category_id: Main category identifier.
+        fallback_category_id: Fallback category identifier.
+        status: The bot's status.
+        activity: The bot's activity.
+    """
+
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     bot_id: int
-    last_ran_version: str | None = None  # the last version the bot was run on, None = first run
-    last_ran_locale: str | None = None  # the last locale the bot was run on
-    last_slash_synced_version: str | None = None  # the last version the slash commands were synced on
-    last_slash_minimum_permission_int: int | None = None  # the last minimum permission int for slash commands
+    last_ran_version: str | None = None  # The last version the bot was run on, None = first run
+    last_ran_locale: str | None = None  # The last locale the bot was run on
+    last_slash_synced_version: str | None = None  # The last version the slash commands were synced on
+    last_slash_minimum_permission_int: int | None = None  # The last minimum permission int for slash commands
     main_category_id: int | None = None
     fallback_category_id: int | None = None
     status: StatusType | None = None

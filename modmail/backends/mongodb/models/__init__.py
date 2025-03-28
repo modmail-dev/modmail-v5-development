@@ -1,9 +1,11 @@
-"""
-modmail.backends.mongodb.models
-===============================
-This module provides the MongoDB models for the MongoDB backend.
+"""Provides MongoDB models.
 
-Modules from this directory should not import from modmail.core.* (circular import issues).
+This module aggregates all MongoDB models used by the backend for data storage
+and retrieval.
+
+Note:
+    Modules from this directory should not import from modmail.core.*
+    to avoid circular import issues.
 """
 
 from __future__ import annotations

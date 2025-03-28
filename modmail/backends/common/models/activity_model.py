@@ -1,7 +1,6 @@
-"""
-modmail.backends.common.models.activity_model
-==============================================
-This module defines the Pydantic models for Activity and enumerated types for ActivityType.
+"""Defines the Pydantic model for Activity.
+
+This module provides a model for representing Discord activities.
 """
 
 from __future__ import annotations
@@ -17,15 +16,25 @@ __all__ = [
 
 
 class Activity(BaseModel):
+    """Represents a Discord activity.
+
+    Attributes:
+        type: The type of activity.
+        name: The activity name.
+        url: The URL for streaming activities. Defaults to None.
+    """
+
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     type: ActivityType
     name: str
-    url: str | None = None  # url for streaming activity, 'None' not enforced for other types
+    url: str | None = None  # URL for streaming activity; not enforced for other types
 
     def __str__(self) -> str:
-        """
-        Returns a string representation of the activity.
+        """Returns a string representation of the activity.
+
+        Returns:
+            A description of the activity.
         """
         match self.type:
             case ActivityType.playing:
@@ -42,10 +51,11 @@ class Activity(BaseModel):
                 return f"Competing in {self.name}"
 
     def __locale_str__(self) -> app_commands.locale_str:
+        """Returns a localized string representation of the activity.
+
+        Returns:
+            The locale-specific string.
         """
-        Returns a locale_str representation of the activity.
-        """
-        # noinspection PyProtectedMember
         from modmail.core import _
 
         return _(

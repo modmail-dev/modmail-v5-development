@@ -1,6 +1,5 @@
-"""
-modmail.config.models.config_model
-==================================
+"""Primary configuration model for the Modmail bot.
+
 This module defines the primary configuration model for the Modmail bot.
 It uses Pydantic for data validation and settings management, ensuring
 that the configuration is correctly loaded and validated from various sources.
@@ -28,18 +27,22 @@ type SupportedDatabases = Literal["sql", "mongodb"]
 
 
 class Config(BaseSettings):
-    """
-    Primary configuration model for the Modmail bot.
+    """Primary configuration model for the Modmail bot.
+
+    This class represents the complete configuration for the Modmail bot,
+    including bot settings, database configurations, logging, permissions,
+    and localization settings.
 
     Attributes:
-        version (str): The config version.
-        bot (BotConfig): The bot configuration.
-        allowed_locales (list[str]): A list of allowed locales for use when converting messages.
-        default_locale (str): The default locale for the bot.
-        database_type (str): The type of database used.
-        sql_config (SQLDatabaseConfig | None): The SQL database configuration.
-        mongodb_config (MongoDBDatabaseConfig | None): The MongoDB configuration.
-        logging (LoggingConfig): The logging configuration.
+        version: The config schema version.
+        bot: The bot configuration settings.
+        allowed_locales: A set of allowed locales for message translations.
+        default_locale: The default locale for the bot.
+        database_type: The type of database being used (sql or mongodb).
+        sql_config: The SQL database configuration if using SQL.
+        mongodb_config: The MongoDB configuration if using MongoDB.
+        permission: The permission configuration settings.
+        logging: The logging configuration settings.
     """
 
     version: str = "1.0"  # the config version
@@ -74,16 +77,35 @@ class Config(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """
-        Prioritize environment variables over config.yaml.
+        """Customizes the settings source priority order.
+
+        Prioritizes environment variables over configuration files.
+
+        Args:
+            settings_cls: The settings class.
+            init_settings: Settings from initialization.
+            env_settings: Settings from environment variables.
+            dotenv_settings: Settings from .env file.
+            file_secret_settings: Settings from file secrets.
+
+        Returns:
+            A tuple of PydanticBaseSettingsSource ordered by priority.
         """
         return env_settings, dotenv_settings, init_settings, file_secret_settings
 
     @field_validator("version")
     @classmethod
     def check_version_valid(cls, v: str) -> str:
-        """
-        Checks if the version is valid.
+        """Validates that the configuration version is supported.
+
+        Args:
+            v: The version string to validate.
+
+        Returns:
+            The validated version string.
+
+        Raises:
+            ValueError: If the version is not supported.
         """
         valid_versions = ("1.0",)  # a tuple of valid versions
 
@@ -101,8 +123,17 @@ class Config(BaseSettings):
     @field_validator("default_locale")
     @classmethod
     def check_default_locale_in_allowed(cls, v: str, info: ValidationInfo) -> str:
-        """
-        Checks if the default locale is valid.
+        """Ensures the default locale is in the set of allowed locales.
+
+        Args:
+            v: The default locale to validate.
+            info: Validation context containing other field values.
+
+        Returns:
+            The validated default locale.
+
+        Raises:
+            ValueError: If the default locale is not in the allowed_locales set.
         """
         if v not in info.data.get("allowed_locales", set()):
             raise ValueError("The default locale must be in allowed_locales.")
@@ -113,8 +144,14 @@ class Config(BaseSettings):
     @field_validator("sql_config", mode="before")
     @classmethod
     def check_using_sql_database_config(cls, v: _T, info: ValidationInfo) -> _T | None:
-        """
-        This parses SQL configs when the database type is sql.
+        """Sets up SQL database configuration when SQL is selected.
+
+        Args:
+            v: The SQL configuration value.
+            info: Validation context containing other field values.
+
+        Returns:
+            SQL configuration if using SQL database, otherwise None.
         """
         if info.data.get("database_type") == "sql":
             if not v:
@@ -126,8 +163,14 @@ class Config(BaseSettings):
     @field_validator("mongodb_config", mode="before")
     @classmethod
     def check_using_mongodb_database_config(cls, v: _T, info: ValidationInfo) -> _T | None:
-        """
-        This parses MongoDB configs when the database type is mongodb.
+        """Sets up MongoDB configuration when MongoDB is selected.
+
+        Args:
+            v: The MongoDB configuration value.
+            info: Validation context containing other field values.
+
+        Returns:
+            MongoDB configuration if using MongoDB, otherwise None.
         """
         if info.data.get("database_type") == "mongodb":
             if not v:
@@ -139,8 +182,13 @@ class Config(BaseSettings):
     @field_validator("logging", mode="before")
     @classmethod
     def set_default_logging_config(cls, v: LoggingConfig | None) -> LoggingConfig:
-        """
-        Sets the default logging config if not provided.
+        """Provides default logging configuration if none is specified.
+
+        Args:
+            v: The logging configuration or None.
+
+        Returns:
+            The provided logging configuration or a default one.
         """
         if v is None:
             return LoggingConfig()
@@ -149,8 +197,13 @@ class Config(BaseSettings):
     @field_validator("permission", mode="before")
     @classmethod
     def set_default_permission_config(cls, v: PermissionConfig | None) -> PermissionConfig:
-        """
-        Sets the default permission config if not provided.
+        """Provides default permission configuration if none is specified.
+
+        Args:
+            v: The permission configuration or None.
+
+        Returns:
+            The provided permission configuration or a default one.
         """
         if v is None:
             return PermissionConfig()

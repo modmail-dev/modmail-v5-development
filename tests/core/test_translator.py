@@ -10,11 +10,28 @@ from discord.app_commands import locale_str
 from pytest_mock import MockerFixture
 
 # noinspection PyProtectedMember
-from modmail.core.translator import HasLocaleStr, Translator, _
+from modmail.core import Translator, _
+
+# noinspection PyProtectedMember
+from modmail.core.translator import HasLocaleStr
 
 
 class MockFluentLocalization:
+    """Mock implementation of FluentLocalization for testing.
+
+    Simulates the behavior of the Fluent localization system with predefined
+    translations and simple string formatting.
+
+    Attributes:
+        locales: List of locale codes in preferred order.
+    """
+
     def __init__(self, locales: list[str]) -> None:
+        """Initialize the mock localization with supported locales.
+
+        Args:
+            locales: List of locale codes in preferred order.
+        """
         self.locales = locales
         self._translations = {
             "test.greeting": {
@@ -30,7 +47,19 @@ class MockFluentLocalization:
         }
 
     def format_value(self, message_id: str, args: dict[str, Any] | None = None) -> str:
-        """Format the message ID with the provided arguments."""
+        """Format the message ID with the provided arguments.
+
+        Applies localization using the predefined translations and formats
+        placeholders based on the provided arguments.
+
+        Args:
+            message_id: The identifier for the message to be translated.
+            args: Dictionary of arguments to format into the translated string.
+
+        Returns:
+            The formatted message in the appropriate locale, or the message_id
+            if no translation is found.
+        """
         args = args or {}
         locale = self.locales[0]
 
@@ -57,10 +86,25 @@ class MockFluentLocalization:
 
 
 class MockLocaleStr(HasLocaleStr):
+    """Mock object that implements the HasLocaleStr protocol.
+
+    Used for testing objects that can be converted to locale_str.
+    """
+
     def __init__(self, message: str) -> None:
+        """Initialize the mock object with a message.
+
+        Args:
+            message: The string message to be converted to locale_str.
+        """
         self._message = message
 
     def __locale_str__(self) -> locale_str:
+        """Convert this object to a locale_str.
+
+        Returns:
+            A locale_str representation of this object.
+        """
         return locale_str(self._message, _string=self._message)
 
 

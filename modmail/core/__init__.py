@@ -1,7 +1,8 @@
-"""
-modmail.core
-============
-The core module contains the core classes and functions that are used throughout the bot.
+"""Core functionality for the Modmail bot.
+
+This module contains the core classes and functions used throughout the bot,
+including the bot implementation, internal utilities, permission management,
+and translation services.
 """
 
 from __future__ import annotations

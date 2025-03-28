@@ -1,7 +1,7 @@
-"""
-modmail.backends.sql.models.activity_model
-==========================================
-This module defines the SQLAlchemy model for the activity table.
+"""SQLAlchemy model for the activity table.
+
+This module defines the database model for storing bot activity information,
+such as the activity type, name, and URL.
 """
 
 from __future__ import annotations
@@ -17,6 +17,18 @@ __all__ = ["SQLActivityTable"]
 
 
 class SQLActivityTable(SQLBase):
+    """SQL model representing bot activity configuration.
+
+    This model stores information about a bot's Discord activity status,
+    including the activity type, name, and optional URL.
+
+    Attributes:
+        bot_id: The ID of the bot this activity belongs to, foreign key to settings table.
+        type: The type of activity (playing, streaming, watching, etc.).
+        name: The displayed activity text (max 128 characters).
+        url: Optional URL for the activity, primarily used for streaming status (max 2048 characters).
+    """
+
     __tablename__ = "activity"
 
     bot_id: Mapped[int] = mapped_column(ForeignKey("settings.bot_id", ondelete="CASCADE"), primary_key=True)

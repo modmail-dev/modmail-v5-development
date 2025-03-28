@@ -1,7 +1,8 @@
-"""
-modmail.core.internals.cog
-==========================
-A subclass of discord.py's command.ext.Cog.
+"""A subclass of discord.py's command.ext.Cog with extended functionality.
+
+This module provides a custom Cog implementation that extends Discord.py's
+standard Cog with additional features such as localization, embedded messages,
+and improved context handling.
 """
 
 from __future__ import annotations
@@ -29,11 +30,13 @@ logger = logging.getLogger(__name__)
 
 
 class Cog(commands.Cog, group_auto_locale_strings=False):
-    def __init__(self, bot: Bot) -> None:
-        """
-        A subclass of discord.py's command.ext.Cog.
+    """A custom Cog class that extends the functionality of discord.py's Cog."""
 
-        :param bot: The bot instance.
+    def __init__(self, bot: Bot) -> None:
+        """Initialize a custom Cog with extended functionality.
+
+        Args:
+            bot: The bot instance this cog will be attached to.
         """
         self.bot = bot
 
@@ -45,13 +48,19 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         auto_embed: bool = False,
         **kwargs: Any,
     ) -> discord.Message:
-        """
-        Reply to a command context with a message.
+        """Reply to a command context with a message.
 
-        :param ctx: The command context.
-        :param content: The message to send.
-        :param auto_embed: Whether to automatically embed the message.
-        :param kwargs: Additional keyword arguments to pass to the reply method.
+        Works with both traditional commands and slash commands, choosing
+        the appropriate reply method based on the context.
+
+        Args:
+            ctx: The command context to reply to.
+            content: The message content to send.
+            auto_embed: Whether to automatically convert the content to an embed.
+            **kwargs: Additional keyword arguments to pass to the reply method.
+
+        Returns:
+            The sent Discord message object.
         """
         # Same reply logic as ctx.send()
         if ctx.interaction is None:
@@ -66,14 +75,20 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         auto_embed: bool = False,
         **kwargs: Any,
     ) -> discord.Message:
-        """
-        Send a message with the command context.
-        :param ctx: The command context.
-        :param content: The message to send.
-        :param auto_embed: Whether to automatically embed the message.
-        :param kwargs: Additional keyword arguments to pass to the .send() method.
-        """
+        """Send a message using the command context.
 
+        Handles translation of locale strings, automatic embedding, and
+        proper context-based sending.
+
+        Args:
+            ctx: The command context to use for sending.
+            content: The message content to send.
+            auto_embed: Whether to automatically convert the content to an embed.
+            **kwargs: Additional keyword arguments to pass to the send method.
+
+        Returns:
+            The sent Discord message object.
+        """
         if ctx.interaction:
             locale: discord.Locale | str = ctx.interaction.locale
         else:
@@ -118,12 +133,16 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
 
     # TODO: implement caching
     async def translate(self, ctx: commands.Context[Bot], string: app_commands.locale_str) -> str:
-        """
-        Translate a message using the bot's Translator.
+        """Translate a message using the bot's Translator.
 
-        :param ctx: The command context.
-        :param string: The string to translate.
-        :return: The translated string or None if translation isn't available.
+        Determines the appropriate locale from the context and translates the string.
+
+        Args:
+            ctx: The command context containing locale information.
+            string: The locale string to translate.
+
+        Returns:
+            The translated string or the original message if translation fails.
         """
         if ctx.interaction:
             locale: discord.Locale | str = ctx.interaction.locale
@@ -139,13 +158,17 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
 
 
 def create_cog(name: str, all_commands: list[LazyHybridCommand[Any]]) -> type[Cog]:
-    """
-    Create a new Cog class with the given name and methods.
-    This is used to create cogs dynamically at runtime.
+    """Create a new Cog class dynamically at runtime.
 
-    :param name: The name of the cog.
-    :param all_commands: A list of all commands to be added to the cog.
-    :return: A new Cog class with the given name and methods.
+    This function allows for programmatic creation of Cogs, which can be useful
+    for modular bot design patterns.
+
+    Args:
+        name: The name to give the created cog.
+        all_commands: A list of LazyHybridCommand objects to add to the cog.
+
+    Returns:
+        A new Cog subclass with the specified name and commands.
     """
     methods: dict[str, commands.HybridCommand[Any, Any, Any] | commands.HybridGroup[Any, Any, Any]] = {}
 

@@ -93,13 +93,20 @@ path = "modmail/__init__.py"
 includes = ["modmail"]
 
 [tool.isort]
-profile = "black"
+profile = "black"  # ruff uses black profile
 line_length = 115
 combine_as_imports = true
 combine_star = true
 
 [tool.ruff]
 line-length = 115
+preview = true
+namespace-packages = ["modmail/cogs"]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 80
+line-ending = "lf"
 
 [tool.ruff.lint]
 select = [
@@ -110,9 +117,11 @@ select = [
     "S",       # flake8-bandit
     "B",       # flake8-bugbear
     "A",       # flake8-builtins
+    "C4",      # flake8-comprehensions
     "DTZ",     # flake8-datetimez
     "LOG",     # flake8-logging
     "G",       # flake8-logging-format
+    "PIE",     # flake8-pie
     "T20",     # flake8-print
     "PT",      # flake8-pytest-style
     "RET",     # flake8-return
@@ -120,31 +129,45 @@ select = [
     "PTH",     # flake8-use-pathlib
     "I",       # isort
     "N",       # pep8-naming
-#    "DOC",    # pydoclint (preview)
-#    "D",      # pydocstyle (TODO: add later + configure, lots of changes)
+    "DOC",     # pydoclint (preview)
+    "D",       # pydocstyle
+    "F",       # pyflakes
     "PL",      # pylint
     "UP",      # pyupgrade
     "RUF",     # Ruff-specific rules
 ]
 
 ignore = [
-    "ANN401",  # disallow Any type
-    "S101",    # use of assert detected
-    "SIM102",  # single if instead of nested if
-    "SIM108",  # use of ternary instead of if else
-    "PLR0915", # too many statements in function
-    "PLR0913", # too many arguments
-    "PLR0912", # too many branches
-    "PLR0911", # too many return statements
-    "PLR5501", # use `elif` instead of `else` then `if`
+    "ANN401",  # Disallow `Any` type
+    "S101",    # Use of assert detected
+    "SIM102",  # Single `if` instead of nested `if`
+    "SIM108",  # Use of ternary instead of `if`-`else`
+    "PLC0415", # `import` should be at the top-level of a file (preview)
+    "PLR0915", # Too many statements in function
+    "PLR0913", # Too many arguments
+    "PLR0912", # Too many branches
+    "PLR0911", # Too many return statements
+    "PLR1702", # Too many nested blocks (preview)
+    "PLR5501", # Use `elif` instead of `else` then `if`
     "PLW2901", # `for` loop variable `value` overwritten by assignment target
-    "RUF012",  # mutable class attributes should be annotated with `typing.ClassVar`
+    "PLR6301", # Method could be a function, class method, or static method (preview)
+    "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F403"]  # F403: 'from module import *' used; unable to detect undefined names
 "ftl_finder.py" = ["T201"]  # T201: Use of print
-"tests/*" = ["D107", "D101", "D100", "D105", "D202", "D102", "D104", "D103", "PLR2004"]  # D*: Missing doc strings, PLR2004: Compare magic number
+"tests/*" = ["D107", "D101", "D100", "D105", "D202", "D102", "D104", "D103", "PLR2004", "PLC2701"]  # D*: Missing doc strings, PLR2004: Compare magic number, PLC2701: Private name import from external module
+"modmail/backends/sql/migrations/versions/*" = ["D415"]  # D415:  First line should end with a period, question mark, or exclamation point
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pylint]
+allow-dunder-method-names = ["__locale_str__"]
 
 [tool.pyright]
 exclude = [

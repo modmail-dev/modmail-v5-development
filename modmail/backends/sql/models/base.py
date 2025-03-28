@@ -1,7 +1,7 @@
-"""
-modmail.backends.sql.models.base
-================================
-This module defines the declarative base class for all SQLAlchemy models.
+"""Declarative base class for all SQLAlchemy models.
+
+This module defines the base class used by all SQLAlchemy models in the application,
+providing common functionality and configuration.
 """
 
 from __future__ import annotations
@@ -14,8 +14,11 @@ __all__ = ["SQLBase"]
 
 
 class SQLBase(DeclarativeBase, AsyncAttrs):
-    """
-    Base class for all SQLAlchemy models.
+    """Base class for all SQLAlchemy models.
+
+    This base class provides common SQLAlchemy functionality and configuration
+    for all database model classes, including naming conventions for database
+    constraints and asynchronous attribute access.
     """
 
     metadata = MetaData(

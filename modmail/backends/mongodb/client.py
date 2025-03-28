@@ -1,8 +1,7 @@
-"""
-modmail.backends.mongodb.client
-===============================
-This module provides the MongoDB client implementation for the Modmail bot.
-It includes functionality to connect to the MongoDB database and handle connection errors.
+"""MongoDB client implementation for the Modmail bot.
+
+This module provides functionality to connect to a MongoDB database, handle connection
+errors, and perform database operations required by the Modmail bot.
 """
 
 from __future__ import annotations
@@ -35,13 +34,19 @@ logger = logging.getLogger(__name__)
 
 
 class MongoDBClient(DBClientBase):
-    """
-    MongoDBClient is a wrapper around the MongoDB client that provides
-    a simple interface for connecting to the database and performing
-    basic operations.
+    """MongoDB client wrapper for Modmail database operations.
+
+    This class provides a simple interface for connecting to a MongoDB database
+    and performing all database operations required by the Modmail bot, including
+    settings management and profile handling.
     """
 
     def __init__(self, config: Config) -> None:
+        """Initialize the MongoDB client.
+
+        Args:
+            config: The bot configuration containing MongoDB connection details.
+        """
         super().__init__(config)
         self.db_name = self._mongodb_config.database
         self._client: AsyncIOMotorClient[dict[str, Any]] | None = None
@@ -55,25 +60,52 @@ class MongoDBClient(DBClientBase):
 
     @property
     def _settings_document(self) -> MongoDBSettingsDocument:
+        """Get the MongoDB settings document.
+
+        Returns:
+            MongoDBSettingsDocument: The current settings document.
+        """
         assert self.__settings_document is not None, "Settings not loaded."
         return self.__settings_document
 
     @_settings_document.setter
     def _settings_document(self, settings_document: MongoDBSettingsDocument) -> None:
+        """Set the MongoDB settings document and update the settings model.
+
+        Args:
+            settings_document: The MongoDB settings document to set.
+        """
         self.__settings_document = settings_document
         self.__settings_model = Settings.model_validate(settings_document)
 
     @property
     def settings_model(self) -> Settings:
+        """Get the current settings model.
+
+        Returns:
+            Settings: The current validated settings model.
+        """
         assert self.__settings_model is not None, "Settings model not loaded."
         return self.__settings_model
 
     @property
     def _mongodb_config(self) -> MongoDBDatabaseConfig:
+        """Get the MongoDB configuration.
+
+        Returns:
+            MongoDBDatabaseConfig: The MongoDB configuration.
+        """
         assert self._config.mongodb_config is not None, "MongoDB config is not set."
         return self._config.mongodb_config
 
     async def connect(self) -> None:
+        """Connect to the MongoDB database.
+
+        Establishes connection to MongoDB and initializes the database client.
+
+        Raises:
+            DatabaseConnectionError: If connection to MongoDB fails for any reason.
+        """
         self._client = AsyncIOMotorClient(
             self._mongodb_config.uri.get_secret_value(),
             connectTimeoutMS=4000,
@@ -152,16 +184,23 @@ class MongoDBClient(DBClientBase):
         await self._startup_setup()
 
     async def disconnect(self) -> None:
+        """Disconnect from the MongoDB database.
+
+        Closes the connection to the MongoDB database if a connection exists.
+        """
         if self._client:
             self._client.close()
             self._client = None
             logger.debug("Disconnected from MongoDB.")
 
     async def _startup_setup(self) -> None:
-        """
-        Perform any startup setup required for the database client (migrations, load settings).
-        """
+        """Perform database startup operations.
 
+        Executes required database operations during startup, including:
+        - Running pending migrations.
+        - Loading or creating bot settings.
+        - Syncing profiles from the database to the local cache.
+        """
         loop = asyncio.get_running_loop()
 
         logger.debug("Running database migrations.")
@@ -187,12 +226,19 @@ class MongoDBClient(DBClientBase):
         await self._sync_profiles()
 
     async def update_settings(self, **kwargs: Any) -> None:
+        """Update bot settings in the database.
+
+        Updates specific settings fields in the database while validating the changes.
+
+        Args:
+            **kwargs: Key-value pairs of settings to update.
+        """
         # Validate the kwargs, by creating a new Settings object with the provided kwargs.
         # Uses a new Settings model to avoid modifying the original settings and validate the new settings.
         new_settings_model = Settings(
-            **self.settings_model.model_dump(exclude={key: True for key in kwargs}), **kwargs
+            **self.settings_model.model_dump(exclude=dict.fromkeys(kwargs, True)), **kwargs
         )
-        settings_dict = new_settings_model.model_dump(include={key: True for key in kwargs} | {"bot_id": True})
+        settings_dict = new_settings_model.model_dump(include=dict.fromkeys(kwargs, True) | {"bot_id": True})
 
         logger.debug("Updating settings in MongoDB: %s", settings_dict)
         assert settings_dict.pop("bot_id") == self._config.bot.bot_id, "Bot ID mismatch."
@@ -208,8 +254,10 @@ class MongoDBClient(DBClientBase):
         self._settings_document = settings_document  # Update the settings model to the new one
 
     async def _sync_profiles(self) -> None:
-        """
-        Sync the profiles from the database to the local cache.
+        """Sync profiles from the database to the local cache.
+
+        Retrieves all profiles from the database for the current bot and
+        stores them in the local cache for faster access.
         """
         self.__profiles_cache.clear()
         # Finds all profiles in the database and adds them to the cache.
@@ -221,12 +269,30 @@ class MongoDBClient(DBClientBase):
         logger.debug("Synced %d profiles from MongoDB.", len(self.__profiles_cache))
 
     def get_profile(self, profile_id: int, profile_type: ProfileType) -> Profile | None:
+        """Get a profile from the cache.
+
+        Retrieves a profile from the local cache based on ID and type.
+
+        Args:
+            profile_id: The ID of the profile to retrieve.
+            profile_type: The type of the profile to retrieve.
+
+        Returns:
+            Profile: The profile if found, None otherwise.
+        """
         profile_key = ProfileKey(profile_id, profile_type)
         if profile_key in self.__profiles_cache:
             return self.__profiles_cache[profile_key][1]
         return None
 
     async def update_profile(self, profile: Profile) -> None:
+        """Update or create a profile in the database.
+
+        Updates an existing profile or creates a new one if it doesn't exist.
+
+        Args:
+            profile: The profile to update or create.
+        """
         profile_key = ProfileKey(profile.profile_id, profile.profile_type)
         new_profile_dict = profile.model_dump(exclude={"profile_id", "profile_type"})
 
@@ -254,6 +320,13 @@ class MongoDBClient(DBClientBase):
             logger.debug("Created new profile %s in MongoDB.", profile_key)
 
     async def delete_profile(self, profile_id: int) -> None:
+        """Delete a profile from the database and cache.
+
+        Removes all profiles with the specified ID from both the database and local cache.
+
+        Args:
+            profile_id: The ID of the profile to delete.
+        """
         # Delete the profile from the database.
         await MongoDBProfileDocument.find(
             MongoDBProfileDocument.bot_id == self._config.bot.bot_id

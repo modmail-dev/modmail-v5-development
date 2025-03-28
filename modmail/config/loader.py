@@ -1,6 +1,5 @@
-"""
-modmail.config.loader
-=====================
+"""Configuration loader for the Modmail bot.
+
 This module provides functionality to load and validate the configuration file for the Modmail bot.
 It reads the configuration from a YAML file and parses it into Pydantic models for further use.
 """
@@ -24,11 +23,14 @@ __all__ = [
 
 
 def load_config(file_path: str | Path) -> Config | None:
-    """
-    Loads the yaml config from the given file path.
+    """Loads the YAML config from the given file path.
 
-    :param file_path: The path to the yaml config file.
-    :return: The Config object. None if the file was not found or couldn't be parsed.
+    Args:
+        file_path: The path to the YAML config file.
+
+    Returns:
+        The parsed Config object if successful, None if the file was not found
+        or couldn't be parsed.
     """
     if not isinstance(file_path, Path):
         file_path = Path(file_path)

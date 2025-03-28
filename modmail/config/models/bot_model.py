@@ -1,6 +1,5 @@
-"""
-modmail.config.models.bot_model
-===============================
+"""Bot configuration model definitions.
+
 This module defines the Pydantic model for the bot configuration settings.
 It includes validation logic to ensure the configuration is correct and
 provides utility methods for handling bot-specific settings.
@@ -24,19 +23,18 @@ IDType = Annotated[int, Field(gt=100000000000000, lt=99999999999999999999)]  # 1
 
 
 class BotConfig(BaseModel):
-    """
-    Configuration model for the bot settings.
+    """Configuration model for the bot settings.
 
     Attributes:
-        token (str): The bot token.
-        staff_server_id (IDType): The ID of the staff server.
-        prefix (str | None): The command prefix for the bot.
-        respond_bot_mention (bool): Whether the bot should respond to mentions.
-        owner_ids (set[IDType]): A set of owner IDs.
-        use_slash_commands (bool): Whether to use slash commands.
-        force_sync_commands (bool): Whether to force sync commands.
-        enable_jishaku (bool): Whether to enable jishaku. Need jishaku installed.
-        bypass_public_bot_check (bool): Whether to bypass the public bot check (not recommended).
+        token: The bot token used for authentication.
+        staff_server_id: The Discord ID of the staff server.
+        prefix: The command prefix for the bot. If None, prefix commands are disabled.
+        respond_bot_mention: Whether the bot should respond to mentions.
+        owner_ids: A set of user IDs that have owner-level permissions.
+        use_slash_commands: Whether to use Discord slash commands.
+        force_sync_commands: Whether to force sync commands with Discord on startup.
+        enable_jishaku: Whether to enable the jishaku debugging extension.
+        bypass_public_bot_check: Whether to bypass the public bot check (not recommended).
     """
 
     token: SecretStr
@@ -52,8 +50,16 @@ class BotConfig(BaseModel):
     @field_validator("token")
     @classmethod
     def check_token_format(cls, v: SecretStr) -> SecretStr:
-        """
-        Checks if the bot token is valid (very basic check).
+        """Validates that the bot token has the correct format.
+
+        Args:
+            v: The token as a SecretStr to validate.
+
+        Returns:
+            The validated token.
+
+        Raises:
+            ValueError: If the token format is invalid.
         """
         token = v.get_secret_value()
         if token.count(".") != 2:  # noqa: PLR2004
@@ -70,8 +76,13 @@ class BotConfig(BaseModel):
     @field_validator("prefix")
     @classmethod
     def check_empty_prefix(cls, v: str | None) -> str | None:
-        """
-        Checks if the prefix is an empty string, and returns None and disable the prefix.
+        """Converts empty prefix strings to None to disable prefix commands.
+
+        Args:
+            v: The prefix string or None.
+
+        Returns:
+            None if empty string, otherwise the original prefix.
         """
         if not v:
             return None  # return None when v is an empty string
@@ -80,8 +91,17 @@ class BotConfig(BaseModel):
     @field_validator("use_slash_commands")
     @classmethod
     def check_any_command_enabled(cls, v: bool, info: ValidationInfo) -> bool:
-        """
-        Checks if either slash commands or prefix command is enabled.
+        """Ensures at least one command type (slash or prefix) is enabled.
+
+        Args:
+            v: Whether slash commands are enabled.
+            info: Validation context containing other field values.
+
+        Returns:
+            The original slash commands setting.
+
+        Raises:
+            ValueError: If both slash commands and prefix commands are disabled.
         """
         if not v and not info.data["prefix"]:
             raise ValueError("Slash commands and prefixed commands cannot be both disabled.")
@@ -90,8 +110,13 @@ class BotConfig(BaseModel):
     @field_validator("owner_ids", mode="before")
     @classmethod
     def handle_empty_owner_ids(cls, v: set[IDType] | None) -> set[IDType]:
-        """
-        Handles the case where owner_ids is null and sets it to None.
+        """Handles empty owner_ids by returning an empty set.
+
+        Args:
+            v: Set of owner IDs or None.
+
+        Returns:
+            Empty set if None, otherwise the original set.
         """
         if not v:
             return set()
@@ -100,8 +125,13 @@ class BotConfig(BaseModel):
     @field_validator("enable_jishaku")
     @classmethod
     def check_jishaku_installed(cls, v: bool) -> bool:
-        """
-        Checks if jishaku is installed.
+        """Verifies jishaku is installed when enabled.
+
+        Args:
+            v: Whether jishaku is enabled in config.
+
+        Returns:
+            False if jishaku is enabled but not installed, otherwise the original setting.
         """
         if v:
             try:
@@ -112,18 +142,18 @@ class BotConfig(BaseModel):
         return v
 
     def is_using_prefix(self) -> bool:
-        """
-        Checks if the bot is using a prefix.
+        """Determines if the bot is using prefix commands.
 
-        :return: True if the bot is using a prefix, False otherwise.
+        Returns:
+            True if the bot is using a prefix, False otherwise.
         """
         return self.prefix is not None
 
     @property
     def bot_id(self) -> int:
-        """
-        Gets the bot's ID from the bot token.
+        """Extracts the bot's ID from the token.
 
-        :return: The bot's ID.
+        Returns:
+            The Discord bot ID as an integer.
         """
         return int(b64decode(self.token.get_secret_value().split(".")[0] + "=="))

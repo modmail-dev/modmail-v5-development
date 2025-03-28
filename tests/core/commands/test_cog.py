@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, cast
 
 import discord
@@ -12,44 +13,89 @@ from modmail.core import Bot, Cog, EmbedProxy, create_cog, lazy_hybrid_command
 
 
 class MockBot:
-    """Mock Bot for testing cog functionality."""
+    """Mock implementation of Bot class for testing cog functionality.
+
+    This class provides a simplified bot with translation capabilities for testing.
+    """
 
     def __init__(self) -> None:
+        """Initialize the mock bot with a translator."""
         self.translator = MockTranslator()
 
 
 class MockTranslator:
-    """Mock translator for testing cog translation functionality."""
+    """Mock translator for testing localization features.
+
+    Simulates the translation process for locale strings.
+    """
 
     @staticmethod
     async def translate(
         string: app_commands.locale_str | str, locale: discord.Locale | str, context: Any = None
     ) -> str | None:
+        """Translate the given string to the specified locale.
+
+        Args:
+            string: The locale string or regular string to translate.
+            locale: The locale to translate to.
+            context: Optional context for translation.
+
+        Returns:
+            Translated string or None if translation failed.
+        """
         if isinstance(string, app_commands.locale_str):
             return f"{string.message}_{locale}"
         return string
 
 
+@dataclass
 class MockMessage:
-    """Mock message for testing context reply."""
+    """Mock message object for testing context replies.
 
-    def __init__(self, content: str | None = "Test message") -> None:
-        self.content = content
+    Simulates a Discord message.
+
+    Attributes:
+        content: The content of the message.
+    """
+
+    content: str | None = "Test message"
 
 
 class MockInteraction:
-    """Mock interaction for testing cog methods that use interaction context."""
+    """Mock interaction object for testing command interactions.
+
+    Simulates a Discord interaction with locale information.
+    """
 
     def __init__(self) -> None:
+        """Initialize the mock interaction with French locale."""
         self.locale = discord.Locale.french
 
 
 class MockContext:
-    """Mock context for testing cog methods."""
+    """Mock context for testing command handling and responses.
+
+    Tracks sent messages and arguments for verification in tests.
+
+    Attributes:
+        bot: The mock bot instance.
+        interaction: Optional interaction object.
+        message: The message associated with this context.
+        send_called: Whether send() has been called.
+        sent_args: Arguments passed to the send method.
+        sent_content: Content sent through the context.
+        kwargs: Additional keyword arguments.
+    """
 
     def __init__(
         self, *, interaction: MockInteraction | None = None, message: discord.Message | None = None
     ) -> None:
+        """Initialize the mock context.
+
+        Args:
+            interaction: Optional interaction object to associate with this context.
+            message: Optional message object to associate with this context.
+        """
         self.bot = MockBot()
         self.interaction = interaction
         self.message = message or MockMessage()
@@ -59,6 +105,15 @@ class MockContext:
         self.kwargs: dict[str, Any] = {}
 
     async def send(self, content: str | None = None, **kwargs: Any) -> discord.Message:
+        """Send a message through this context.
+
+        Args:
+            content: The content of the message to send.
+            **kwargs: Additional keyword arguments for the send operation.
+
+        Returns:
+            A mock message with the sent content.
+        """
         self.send_called = True
         self.sent_content = content
         self.sent_args = kwargs
@@ -66,21 +121,38 @@ class MockContext:
 
 
 @pytest.fixture
-async def ctx() -> MockContext:
-    """Fixture to provide a mock context."""
+def ctx() -> MockContext:
+    """Provide a standard mock context for testing.
+
+    Returns:
+        A mock context instance with no interaction.
+    """
     return MockContext()
 
 
 @pytest.fixture
-async def interaction_ctx() -> MockContext:
-    """Fixture to provide a mock context with interaction."""
+def interaction_ctx() -> MockContext:
+    """Provide a mock context with an interaction for testing.
+
+    Returns:
+        A mock context instance with a mock interaction.
+    """
     interaction = MockInteraction()
     return MockContext(interaction=interaction)
 
 
 @pytest.fixture
-async def cog(mocker: MockerFixture) -> Cog:
-    """Fixture to provide a cog instance with a mock bot."""
+def cog(mocker: MockerFixture) -> Cog:
+    """Provide a configured cog instance for testing.
+
+    Sets up a mock bot and configuration for testing cog functionality.
+
+    Args:
+        mocker: PyTest mock fixture for patching.
+
+    Returns:
+        An initialized Cog instance with mock dependencies.
+    """
     mock_bot = mocker.MagicMock(spec=Bot)
     mock_bot.translator = MockTranslator()
 
@@ -276,12 +348,10 @@ def test_create_cog() -> None:
     @lazy_hybrid_command()
     async def cmd1(self: Any, ctx: commands.Context[Bot]) -> None:
         """First test command."""
-        pass
 
     @lazy_hybrid_command()
     async def cmd2(self: Any, ctx: commands.Context[Bot]) -> None:
         """Second test command."""
-        pass
 
     # Create cog using factory function
     TestCog = create_cog("TestCog", [cmd1, cmd2])  # noqa: N806

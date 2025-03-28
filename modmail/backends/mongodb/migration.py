@@ -1,12 +1,7 @@
-"""
-modmail.backends.mongodb.migration
-==================================
-This module handles the migration of the MongoDB database using Beanie.
+"""Provides migration functionality for the MongoDB database.
 
-To create a new migration, use the following command:
-    beanie new-migration -n migration_name -p modmail/backends/mongodb/migrations
-Then manually edit the migration file to add the necessary changes.
-See: https://beanie-odm.dev/tutorial/migrations/.
+This module handles database migrations using the Beanie migration system,
+allowing for schema evolution and data transformations between versions.
 """
 
 from __future__ import annotations
@@ -18,12 +13,14 @@ __all__ = ["do_migration"]
 
 
 def do_migration(uri: str, db_name: str) -> None:
-    """
-    Performs the migration of the database.
-    This function should be called outside the main event loop.
+    """Performs the migration of the MongoDB database.
 
-    :param uri: The MongoDB connection URI.
-    :param db_name: The name of the database to migrate.
+    Executes all pending migrations for the specified database using Beanie's
+    migration system. Migrations are loaded from the local migrations directory.
+
+    Args:
+        uri: The MongoDB connection URI string.
+        db_name: The name of the database to migrate.
     """
     # Keep this import here to avoid logging issues.
     from beanie.executors import migrate

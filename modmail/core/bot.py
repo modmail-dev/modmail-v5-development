@@ -1,7 +1,7 @@
-"""
-modmail.core.bot
-================
-This module contains the main Bot class for the Modmail bot, responsible for handling events and loading cogs.
+"""Core bot implementation for the Modmail system.
+
+This module contains the main Bot class responsible for handling Discord events,
+loading cogs, and managing the bot's functionality.
 """
 
 from __future__ import annotations
@@ -26,11 +26,19 @@ __all__ = ["Bot"]
 
 
 class Bot(commands.Bot):
-    """
-    The main class for the bot.
+    """Main bot class for handling Modmail functionality.
+
+    This class extends discord.py's Bot class to provide Modmail-specific functionality
+    including database integration, command permission handling, and presence management.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize the Modmail bot.
+
+        Args:
+            *args: Variable length argument list for commands.Bot.
+            **kwargs: Arbitrary keyword arguments for commands.Bot.
+        """
         if CONFIG.bot.prefix is not None:  # Prefix is enabled
             intents = discord.Intents(
                 guilds=True, messages=True, reactions=True, typing=True, message_content=True, expressions=True
@@ -86,10 +94,13 @@ class Bot(commands.Bot):
         self.before_invoke(self.on_before_invoke)
 
     async def setup_hook(self) -> None:
-        """
-        This is called on bot login.
+        """Initialize bot configuration and synchronize commands.
 
-        Syncs the bot command tree when the bot is updated.
+        This method is called automatically on bot login and handles:
+        - Verification of bot publicity settings.
+        - Command tree synchronization.
+        - Database settings updates.
+        - Locale configuration.
         """
         app_info = self.application
         if app_info is None:
@@ -177,8 +188,10 @@ class Bot(commands.Bot):
             logger.debug("Updated last ran version to %s", self.version)
 
     async def _sync_slash_commands(self) -> None:
-        """
-        Sync the slash commands.
+        """Synchronize slash commands with Discord.
+
+        Updates the slash command configuration on Discord servers and stores
+        the sync version in the database.
         """
         logger.debug("Syncing slash commands (this may take a while).")
         await self.tree.sync()
@@ -186,8 +199,10 @@ class Bot(commands.Bot):
         await self.database_client.update_settings(last_slash_synced_version=self.version)
 
     async def _unsync_slash_commands(self) -> None:
-        """
-        Unsync the slash commands.
+        """Remove all slash commands from Discord.
+
+        Clears all registered slash commands and updates the database to reflect
+        the un-synced state.
         """
         logger.debug("Un-syncing slash commands (this may take a while).")
         self.tree.clear_commands(guild=None)
@@ -196,16 +211,26 @@ class Bot(commands.Bot):
         await self.database_client.update_settings(last_slash_synced_version=None)
 
     def run(self, *args: Any, **kwargs: Any) -> NoReturn:
-        """
-        Disable the default `run` method.
-        You should use `run_bot` instead.
+        """Disabled method to prevent incorrect bot initialization.
+
+        Args:
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+
+        Raises:
+            NotImplementedError: Always raised to direct users to use run_bot() instead.
         """
         raise NotImplementedError("Use `run_bot` instead.")
 
     def run_bot(self) -> NoReturn:
-        """
-        Runs the bot and terminates the script.
-        """
+        """Start the bot and handle the main execution loop.
+
+        Initializes database connection, loads extensions, and handles various
+        startup scenarios and potential errors.
+
+        Raises:
+            SystemExit: With appropriate exit codes based on execution result.
+        """  # noqa: DOC502
 
         async def bot_runner() -> None:
             await self.database_client.connect()
@@ -261,24 +286,28 @@ class Bot(commands.Bot):
 
     # noinspection PyMethodMayBeStatic
     async def on_ready(self) -> None:
-        """
-        This is called when the bot is ready.
+        """Handle bot ready event.
+
+        Called when the bot has successfully connected to Discord and is ready to
+        receive events.
         """
         logger.info("[bold green]Bot is ready.", extra={"markup": True})
 
     async def on_connect(self) -> None:
-        """
-        This is called when the bot connects to Discord.
+        """Handle bot connect event.
+
+        Called when the bot establishes a connection to Discord. Sets up initial
+        presence configuration.
         """
         logger.debug("Connected to Discord.")
         await self.set_bot_presence()
 
     def _get_discord_presence_from_settings(self) -> tuple[discord.BaseActivity | None, discord.Status | None]:
-        """
-        Get the discord presence from the database settings.
-        :return: a tuple of discord.Activity and discord.Status, both may be None.
-        """
+        """Generate Discord presence objects from database settings.
 
+        Returns:
+            A tuple containing the activity and status to display.
+        """
         dc_activity: discord.BaseActivity | None = None
         dc_status: discord.Status | None = None
 
@@ -313,10 +342,14 @@ class Bot(commands.Bot):
     async def set_bot_presence(
         self, *, activity: Activity | None = None, status: StatusType | None = None
     ) -> None:
-        """
-        Set the bot's presence.
+        """Update the bot's Discord presence.
 
-        If activity and/or status is provided, it will update the database settings.
+        If either argument is provided, the database settings will be updated before
+        applying the new presence.
+
+        Args:
+            activity: Optional activity to set for the bot.
+            status: Optional status to set for the bot.
         """
         await self.wait_until_ready()  # Wait until the bot is ready
 
@@ -334,16 +367,22 @@ class Bot(commands.Bot):
         await self.change_presence(activity=dc_activity, status=dc_status)
 
     async def clear_bot_presence(self) -> None:
-        """
-        Clear the bot's presence.
+        """Remove the bot's current presence settings.
+
+        Clears both activity and status from the database and Discord display.
         """
         logger.debug("Clearing bot presence.")
         await self.database_client.update_settings(activity=None, status=None)
         await self.set_bot_presence()
 
     async def on_command_error(self, context: commands.Context[Bot], exception: commands.CommandError, /) -> None:
-        """
-        This is called when a command raises an error.
+        """Handle command execution errors.
+
+        Ignores CommandNotFound and CheckFailure errors, passes others to parent handler.
+
+        Args:
+            context: The context in which the command was executed.
+            exception: The error that occurred during execution.
         """
         # Ignore command not found errors
         if isinstance(exception, commands.CommandNotFound):
@@ -364,8 +403,12 @@ class Bot(commands.Bot):
 
     @staticmethod
     async def on_before_invoke(ctx: commands.Context[Bot]) -> None:
-        """
-        This is called before a command is invoked.
+        """Perform pre-command execution logging.
+
+        Logs command execution attempts with permission check results if available.
+
+        Args:
+            ctx: The context in which the command is being executed.
         """
         if hasattr(ctx, "_perm_check_reason"):  # This gets injected by the permission check
             # noinspection PyProtectedMember
@@ -375,12 +418,14 @@ class Bot(commands.Bot):
 
     @staticmethod
     def get_command_access_level(base_command: commands.Command[Any, Any, Any]) -> RequiredAccessLevel:
-        """
-        Get the access level of the command.
-        Returns "everyone" if no access level is set.
+        """Determine the required access level for a command.
 
-        :param base_command: The command to get the access level for.
-        :return: The access level of the command.
+        Args:
+            base_command: The command to check.
+
+        Returns:
+            The access level required to use the command.
+            Defaults to "everyone" if no access level is explicitly set.
         """
         default_access_level: RequiredAccessLevel | None = None
 
@@ -411,14 +456,15 @@ class Bot(commands.Bot):
         return default_access_level if default_access_level is not None else RequiredAccessLevel.everyone
 
     def get_all_user_profiles(self, user: discord.User | discord.Member) -> list[Profile]:
-        """
-        Get all profiles for a user.
-        This includes the user profile and all roles in the guild.
+        """Retrieve all applicable profiles for a user.
 
-        :param user: The user to get the profiles for.
-        :return: A list of profiles for the user (from most to least significant).
-        """
+        Args:
+            user: The Discord user or member to get profiles for.
 
+        Returns:
+            List of profiles ordered from most to least significant,
+            including user profile and role profiles if applicable.
+        """
         all_profiles: list[Profile] = []  # All profiles to check for permission overrides
 
         user_profile = self.database_client.get_profile(user.id, ProfileType.user)
@@ -433,8 +479,13 @@ class Bot(commands.Bot):
         return all_profiles
 
     async def _permission_check(self, ctx: commands.Context[Bot]) -> bool:
-        """
-        A permission check to see if the user is allowed to invoke this command.
+        """Verify if a user has permission to execute a command.
+
+        Args:
+            ctx: The context in which the command is being executed.
+
+        Returns:
+            True if the user has permission to execute the command, False otherwise.
         """
         if ctx.author.bot:  # Ignore commands invoked by bots
             ctx._perm_check_reason = "bot"  # pyright: ignore [reportAttributeAccessIssue]
@@ -504,8 +555,13 @@ class Bot(commands.Bot):
         return False
 
     async def _bot_can_run_check(self, ctx: commands.Context[Bot]) -> bool:
-        """
-        Check if the bot can run the command.
+        """Verify if the bot has necessary permissions to execute a command.
+
+        Args:
+            ctx: The context in which the command is being run.
+
+        Returns:
+            True if the bot can run the command, False otherwise.
         """
         #     Check if the bot can run the command.
         #     Verify the bot has the following permissions:

@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 from discord.ext import commands
-from pytest_mock import MockerFixture
 
 from modmail.core.internals.command import (
     LazyHybridCommand,
@@ -22,8 +20,7 @@ class MockCog:
         self.name = "MockCog"
 
 
-@pytest.mark.asyncio
-async def test_lazy_hybrid_command_creation() -> None:
+def test_lazy_hybrid_command_creation() -> None:
     """Test creation of a LazyHybridCommand and conversion to a real command."""
 
     @lazy_hybrid_command()
@@ -40,8 +37,7 @@ async def test_lazy_hybrid_command_creation() -> None:
     assert isinstance(commands_dict["test_command"], commands.HybridCommand)
 
 
-@pytest.mark.asyncio
-async def test_lazy_hybrid_group_creation() -> None:
+def test_lazy_hybrid_group_creation() -> None:
     """Test creation of a LazyHybridGroup and conversion to a real command group."""
 
     @lazy_hybrid_group()
@@ -61,8 +57,7 @@ async def test_lazy_hybrid_group_creation() -> None:
     assert isinstance(commands_dict["test_group"], commands.HybridGroup)
 
 
-@pytest.mark.asyncio
-async def test_lazy_hybrid_group_with_children() -> None:
+def test_lazy_hybrid_group_with_children() -> None:
     """Test that LazyHybridGroup properly manages child commands and nested groups."""
 
     @lazy_hybrid_group()
@@ -107,8 +102,7 @@ async def test_lazy_hybrid_group_with_children() -> None:
     assert commands_dict["grandchild_command"].qualified_name == "parent_group child_group grandchild_command"
 
 
-@pytest.mark.asyncio
-async def test_wrap_decorator() -> None:
+def test_wrap_decorator() -> None:
     """Test that wrap decorator properly attaches check functions to commands."""
 
     def has_permission() -> bool:
@@ -127,8 +121,7 @@ async def test_wrap_decorator() -> None:
     )
 
 
-@pytest.mark.asyncio
-async def test_wrap_decorator_on_regular_function() -> None:
+def test_wrap_decorator_on_regular_function() -> None:
     """Test wrap decorator stores metadata when applied to non-command functions."""
 
     @wrap(commands.has_permissions, administrator=True)
@@ -143,8 +136,7 @@ async def test_wrap_decorator_on_regular_function() -> None:
     assert wrapper_kwargs == {"administrator": True}
 
 
-@pytest.mark.asyncio
-async def test_multiple_wrappers() -> None:
+def test_multiple_wrappers() -> None:
     """Test that multiple decorators can be stacked and are applied in correct order."""
 
     @wrap(commands.has_permissions, manage_messages=True)
@@ -165,8 +157,7 @@ async def test_multiple_wrappers() -> None:
     )
 
 
-@pytest.mark.asyncio
-async def test_qualname_injection(mocker: MockerFixture) -> None:
+def test_qualname_injection() -> None:
     """Test that cog name is injected into callback's __qualname__ for proper command registration."""
 
     @lazy_hybrid_command()
@@ -180,8 +171,7 @@ async def test_qualname_injection(mocker: MockerFixture) -> None:
     assert test_command.callback.__qualname__ == "TestCog.test_command"
 
 
-@pytest.mark.asyncio
-async def test_lazy_hybrid_command_with_args_and_kwargs() -> None:
+def test_lazy_hybrid_command_with_args_and_kwargs() -> None:
     """Test command arguments and parameters are properly passed to the real command."""
 
     @lazy_hybrid_command(name="custom_name", description="Custom description")
@@ -197,14 +187,12 @@ async def test_lazy_hybrid_command_with_args_and_kwargs() -> None:
     assert command.qualified_name == "custom_name"
 
 
-@pytest.mark.asyncio
-async def test_lazy_hybrid_group_command_and_group_methods() -> None:
+def test_lazy_hybrid_group_command_and_group_methods() -> None:
     """Test that LazyHybridGroup properly handles child command and group creation methods."""
 
     @lazy_hybrid_group()
     async def test_group(self: Any, ctx: Any) -> None:
         """Test group docstring."""
-        pass
 
     # Add command with custom parameters
     @test_group.command("cmd", description="Command description")
@@ -240,8 +228,7 @@ async def test_lazy_hybrid_group_command_and_group_methods() -> None:
     assert group_child.kwargs.get("description") == "Subgroup description"
 
 
-@pytest.mark.asyncio
-async def test_wrap_decorator_with_lazy_hybrid_command() -> None:
+def test_wrap_decorator_with_lazy_hybrid_command() -> None:
     """Test wrap decorator properly applies to lazy hybrid commands and persists after conversion."""
 
     @lazy_hybrid_command()

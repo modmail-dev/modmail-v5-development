@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""
-Script to find missing FTL strings in locale files.
-Displays file locations for each missing string.
+"""FTL string finder utility.
+
+This script scans Python files for FTL strings (strings that start with 'ftl-')
+and compares them with locale files to identify missing or unused translations.
+It displays file locations for each missing string to help with localization tasks.
 """
 
 from __future__ import annotations
@@ -12,13 +14,25 @@ from pathlib import Path
 
 
 class FTLStringFinder(ast.NodeVisitor):
-    """AST visitor that finds all string literals starting with 'ftl-'."""
+    """AST visitor that finds all string literals starting with 'ftl-'.
+
+    This class traverses the Python abstract syntax tree to identify
+    translation strings in the codebase, tracking their locations.
+    """
 
     def __init__(self) -> None:
+        """Initialize the FTL string finder.
+
+        Creates a dictionary to store FTL strings and their locations in code.
+        """
         self.ftl_strings: dict[str, list[tuple[int, int]]] = {}  # string -> [(line, col)]
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
-        """Visit function calls to catch _("ftl-...") and _(f"ftl-...") patterns."""
+        """Visit function calls to catch _("ftl-...") and _(f"ftl-...") patterns.
+
+        Args:
+            node: The AST node representing a function call.
+        """
         if isinstance(node.func, ast.Name) and node.func.id == "_" and len(node.args) > 0:
             # Handle regular string constant: _("ftl-...")
             if (
@@ -48,7 +62,14 @@ class FTLStringFinder(ast.NodeVisitor):
 
 
 def find_ftl_strings_in_file(file_path: Path) -> dict[str, list[tuple[int, int]]]:
-    """Find all ftl strings in a single Python file with their locations."""
+    """Find all FTL strings in a single Python file with their locations.
+
+    Args:
+        file_path: Path to the Python file to analyze.
+
+    Returns:
+        Dictionary mapping FTL strings to lists of their locations (line, column).
+    """
     try:
         with file_path.open("r", encoding="utf-8") as f:
             source = f.read()
@@ -63,11 +84,13 @@ def find_ftl_strings_in_file(file_path: Path) -> dict[str, list[tuple[int, int]]
 
 
 def scan_directory(directory: Path) -> dict[str, dict[Path, list[tuple[int, int]]]]:
-    """
-    Recursively scan directory for Python files and find all ftl strings.
+    """Recursively scan directory for Python files and find all FTL strings.
+
+    Args:
+        directory: The root directory to scan recursively.
 
     Returns:
-        Dict mapping ftl-strings to their locations (file path -> list of (line, col))
+        Dictionary mapping FTL strings to their locations (file path -> list of (line, col)).
     """
     result: dict[str, dict[Path, list[tuple[int, int]]]] = {}
 
@@ -84,7 +107,14 @@ def scan_directory(directory: Path) -> dict[str, dict[Path, list[tuple[int, int]
 
 
 def extract_locale_strings(locale_file: Path) -> set[str]:
-    """Extract all ftl- keys from a locale file."""
+    """Extract all ftl- keys from a locale file.
+
+    Args:
+        locale_file: Path to the locale file to analyze.
+
+    Returns:
+        Set of FTL string identifiers found in the locale file.
+    """
     locale_strings: set[str] = set()
     pattern = re.compile(r"^(ftl-[a-zA-Z0-9-]+)\s*=")
 
@@ -101,6 +131,11 @@ def extract_locale_strings(locale_file: Path) -> set[str]:
 
 
 def main() -> None:
+    """Execute the main functionality of the FTL string finder.
+
+    Scans the project for FTL strings, compares them with locale files,
+    and reports missing or unused translations for each locale.
+    """
     # Use the script's location to determine the project root
     script_path = Path(__file__).absolute()
     project_root = script_path.parent.parent

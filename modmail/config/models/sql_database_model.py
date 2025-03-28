@@ -1,6 +1,5 @@
-"""
-modmail.config.models.sql_database_model
-========================================
+"""SQL database configuration model for Modmail.
+
 This module defines the configuration model for the SQL database used by the Modmail bot.
 It includes validation logic to ensure the SQL connection URI is correctly specified.
 """
@@ -15,11 +14,10 @@ __all__ = [
 
 
 class SQLDatabaseConfig(BaseModel):
-    """
-    Configuration model for the SQL database.
+    """Configuration model for the SQL database.
 
     Attributes:
-        uri (str): The SQL connection URI.
+        uri: The SQL connection URI.
     """
 
     uri: SecretStr  # the SQL connection URI
@@ -27,9 +25,17 @@ class SQLDatabaseConfig(BaseModel):
 
     @field_validator("uri")
     @classmethod
-    def check_uri_is_valid(cls, v: str) -> str:
-        """
-        Validates that the SQL connection URI is valid.
+    def check_uri_is_valid(cls, v: SecretStr) -> SecretStr:
+        """Validates that the SQL connection URI is valid.
+
+        Args:
+            v: The SQL connection URI to validate.
+
+        Returns:
+            The validated SQL connection URI.
+
+        Note:
+            Currently a placeholder for future validation implementation.
         """
         # TODO: Add validation logic for SQL connection URI
         return v

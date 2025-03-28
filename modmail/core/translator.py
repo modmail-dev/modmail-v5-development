@@ -1,7 +1,5 @@
-"""
-modmail.core.translator
-=======================
-Provides translation services using FluentLocalization for Modmail interfaces.
+"""Provides translation services using FluentLocalization for Modmail interfaces.
+
 Loads locale files from the modmail/locales directory based on configuration settings.
 """
 
@@ -29,8 +27,14 @@ logger = logging.getLogger(__name__)
 FluentTypes = str | int | float | Decimal | datetime | date | None
 
 
-class HasLocaleStr(Protocol):
-    def __locale_str__(self) -> locale_str: ...
+class HasLocaleStr(Protocol):  # pragma: no cover
+    def __locale_str__(self) -> locale_str:
+        """Protocol for objects that can be converted to locale_str.
+
+        Returns:
+            A locale_str representation of the object.
+        """
+        ...
 
 
 # locales files are located in ../locales/{locale}/main.ftl
@@ -46,19 +50,23 @@ for allowed_locale in CONFIG.allowed_locales:
 
 
 class Translator(app_commands.Translator):
+    """Custom translator for Modmail using FluentLocalization."""
+
     async def translate(
         self,
         string: locale_str,
         locale: discord.Locale | str,
         context: app_commands.TranslationContextTypes | None = None,
     ) -> str | None:
-        """
-        Translate a message using FluentLocalization.
+        """Translate a message using FluentLocalization.
 
-        :param string: The string to translate.
-        :param locale: The locale to translate to, could be the name of the locale or provided by discord.py.
-        :param context: [IGNORED] The context in which the translation is used.
-        :return: The translated string or None if translation isn't available.
+        Args:
+            string: The string to translate.
+            locale: The locale to translate to, could be a discord.Locale object or a locale string.
+            context: The context in which the translation is used (ignored in this implementation).
+
+        Returns:
+            The translated string or None if translation isn't available.
         """
         if "_string" not in string.extras:
             return None  # Not Modmail's string
@@ -97,12 +105,23 @@ class Translator(app_commands.Translator):
 
 
 def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr) -> locale_str:
-    """
-    Translate string to default locale and move the original string into the extras dict.
+    """Translate string to default locale and prepare for multi-locale support.
 
-    This is necessary because discord.py assumes the string to be the default string and validates it.
-    """
+    This function handles the initial translation to the default locale and stores
+    the original string in extras for later translation to other locales.
 
+    Args:
+        string: The raw message key/string to be translated.
+        **kwargs: Optional parameters for string formatting. Can be basic types or objects
+            that implement __locale_str__.
+
+    Returns:
+        A locale_str object containing the translated string for default locale and
+        metadata for other locales.
+
+    Warnings:
+        Warning: If an unsupported type is provided for translation.
+    """
     # extras for the default translation
     temp_kwargs: dict[str, FluentTypes] = {}
 

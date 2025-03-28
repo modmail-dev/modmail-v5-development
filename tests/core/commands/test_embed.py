@@ -7,20 +7,31 @@ import discord
 import pytest
 from discord import app_commands
 
-from modmail.core import EmbedProxy
-
 # noinspection PyProtectedMember
-from modmail.core.translator import Translator, _
+from modmail.core import EmbedProxy, Translator, _
 
 
 class MockTranslator:
-    """Mock translator for testing EmbedProxy translations."""
+    """Mock translator for testing EmbedProxy translations.
+
+    A simple mock implementation that simulates translation by appending
+    the locale to the original message.
+    """
 
     # noinspection PyMethodMayBeStatic,PyUnusedLocal
     async def translate(
         self, string: app_commands.locale_str | str, locale: discord.Locale | str, context: Any = None
     ) -> str | None:
-        """Simulate translation by appending locale to string as translated text."""
+        """Simulate translation by appending locale to string as translated text.
+
+        Args:
+            string: The string or locale_str to translate.
+            locale: The target locale for translation.
+            context: Optional context information for translation.
+
+        Returns:
+            The "translated" string with locale appended, or None if translation fails.
+        """
         if isinstance(string, app_commands.locale_str):
             if string.message == "RETURN_NONE":  # Simulate a case where translation fails
                 return None
@@ -33,13 +44,16 @@ class MockTranslator:
 
 
 @pytest.fixture
-async def translator() -> MockTranslator:
-    """Fixture to provide a mock translator."""
+def translator() -> MockTranslator:
+    """Fixture to provide a mock translator.
+
+    Returns:
+        An instance of MockTranslator for testing.
+    """
     return MockTranslator()
 
 
-@pytest.mark.asyncio
-async def test_embed_proxy_basic_initialization() -> None:
+def test_embed_proxy_basic_initialization() -> None:
     """Test that EmbedProxy initializes with basic properties correctly."""
     embed_proxy = EmbedProxy(
         title="Test Title",
@@ -207,8 +221,7 @@ async def test_method_chaining(translator: Translator) -> None:
     assert len(discord_embed.fields) == 2
 
 
-@pytest.mark.asyncio
-async def test_set_field_at_index_error() -> None:
+def test_set_field_at_index_error() -> None:
     """Test that set_field_at properly raises IndexError with invalid indices."""
     embed_proxy = EmbedProxy()
 

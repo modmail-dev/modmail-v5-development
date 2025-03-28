@@ -1,7 +1,7 @@
-"""
-modmail.backends.common.abc
-===========================
-This module defines the abstract base class for database clients used by the Modmail bot.
+"""Defines the abstract base class for database clients.
+
+This module provides the DBClientBase class outlining the interface
+for database operations used by the Modmail bot.
 """
 
 from __future__ import annotations
@@ -21,74 +21,72 @@ __all__ = [
 
 
 class DBClientBase(ABC):  # pragma: no cover
-    def __init__(self, config: Config) -> None:
-        """
-        Initialize the database client with the given configuration.
+    """Abstract base class for database clients.
 
-        :param config: The configuration object containing database settings.
+    This class outlines the necessary interface for database operations within the Modmail bot.
+    """
+
+    def __init__(self, config: Config) -> None:
+        """Initializes the database client.
+
+        Args:
+            config: The configuration object containing database settings.
         """
         self._config = config
 
     @property
     @abstractmethod
     def settings_model(self) -> Settings:
+        """Gets the settings model class.
+
+        Returns:
+            The settings model.
         """
-        Get the settings model class.
-        """
-        pass
 
     @abstractmethod
     async def connect(self) -> None:
-        """
-        Connect to the database and load the bot settings.
+        """Connects to the database and loads bot settings.
 
-        :raises DatabaseConnectionError: If the connection to the database fails.
+        Raises:
+            DatabaseConnectionError: If the connection to the database fails.
         """
-        pass
 
     @abstractmethod
     async def disconnect(self) -> None:
-        """
-        Disconnect from the database.
-        """
-        pass
+        """Disconnects from the database."""
 
     @abstractmethod
     async def update_settings(self, **kwargs: Any) -> None:
-        """
-        Update settings in the database.
-        This method updates the specified key=value pairs in the settings.
+        """Updates settings in the database.
 
-        :param kwargs: Optional keyword arguments representing the setting keys to update.
+        Args:
+            **kwargs: Arbitrary keyword arguments representing setting keys and their new values.
         """
-        pass
 
     @abstractmethod
     def get_profile(self, profile_id: int, profile_type: ProfileType) -> Profile | None:
-        """
-        Retrieves a profile from the database.
-        This method does not fetch the profile from the database, but rather returns a cached version.
+        """Retrieves a profile from the database cache.
 
-        :param profile_id: The ID that belongs to a profile.
-        :param profile_type: The type of the profile (user/role).
-        :return: The profile if found, None otherwise.
+        Args:
+            profile_id: The identifier of the profile.
+            profile_type: The type of the profile (e.g., user/role).
+
+        Returns:
+            The profile if found, otherwise None.
         """
-        pass
 
     @abstractmethod
     async def update_profile(self, profile: Profile) -> None:
-        """
-        Update or create a profile on the database.
+        """Updates or creates a profile in the database.
 
-        :param profile: The profile to update or create.
+        Args:
+            profile: The profile object to update or create.
         """
-        pass
 
     @abstractmethod
     async def delete_profile(self, profile_id: int) -> None:
-        """
-        Delete a profile from the database.
+        """Deletes a profile from the database.
 
-        :param profile_id: The ID of the profile.
+        Args:
+            profile_id: The identifier of the profile to delete.
         """
-        pass

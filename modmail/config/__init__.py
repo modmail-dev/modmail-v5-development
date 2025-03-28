@@ -1,10 +1,12 @@
-"""
-modmail.config
-==============
-This package contains the configuration loading and model definitions for the Modmail bot.
-It includes functionality to load configuration from various sources and validate them using Pydantic models.
+"""Configuration package for the Modmail bot.
 
-Modules from this directory should not import from modmail.core.* (circular import issues).
+This package contains the configuration loading and model definitions for the Modmail bot.
+It includes functionality to load configuration from various sources and validate them
+using Pydantic models.
+
+Note:
+    Modules from this directory should not import from modmail.core.*
+    to avoid circular import issues.
 """
 
 from __future__ import annotations

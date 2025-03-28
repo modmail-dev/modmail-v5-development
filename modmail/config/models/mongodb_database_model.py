@@ -1,8 +1,8 @@
-"""
-modmail.config.models.mongodb_database_model
-============================================
+"""MongoDB database configuration model for Modmail.
+
 This module defines the configuration model for the MongoDB database used by the Modmail bot.
-It includes validation logic to ensure the MongoDB connection URI and database name are correctly specified.
+It includes validation logic to ensure the MongoDB connection URI and database name are
+correctly specified.
 """
 
 from __future__ import annotations
@@ -19,13 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 class MongoDBDatabaseConfig(BaseModel):
-    """
-    Configuration model for the MongoDB database.
+    """Configuration model for the MongoDB database.
 
     Attributes:
-        uri (str): The MongoDB connection URI.
-        database (str): The name of the database.
-        tls_allow_invalid_certificates (bool): Whether to allow invalid TLS certificates.
+        uri: The MongoDB connection URI, stored securely.
+        database: The name of the database to use.
+        tls_allow_invalid_certificates: Whether to allow invalid TLS certificates.
     """
 
     uri: SecretStr  # the MongoDB connection URI
@@ -35,8 +34,16 @@ class MongoDBDatabaseConfig(BaseModel):
     @field_validator("uri")
     @classmethod
     def check_uri_is_valid(cls, v: SecretStr) -> SecretStr:
-        """
-        Validates that the MongoDB connection URI is valid.
+        """Validates that the MongoDB connection URI is valid.
+
+        Args:
+            v: The MongoDB connection URI to validate.
+
+        Returns:
+            The validated MongoDB connection URI.
+
+        Raises:
+            ValueError: If the URI is invalid or contains formatting errors.
         """
         # Local import to avoid dependency issues when database type is not mongodb
         import pymongo.errors
@@ -64,8 +71,20 @@ class MongoDBDatabaseConfig(BaseModel):
     @field_validator("database")
     @classmethod
     def use_database_name_or_from_uri(cls, v: str, info: ValidationInfo) -> str:
-        """
-        If the database name is not provided, it will be parsed from the MongoDB connection URI.
+        """Uses the provided database name or extracts it from the URI.
+
+        If no database name is provided, attempts to parse it from the MongoDB
+        connection URI. Falls back to "modmail" if neither source provides a name.
+
+        Args:
+            v: The database name value to check.
+            info: Validation context containing other field values.
+
+        Returns:
+            The database name to use.
+
+        Raises:
+            ValueError: If URI field is missing from the database config.
         """
         # Local import to avoid dependency issues when database type is not mongodb
         from pymongo import uri_parser

@@ -1,34 +1,34 @@
-"""
-modmail.core.permission
-=======================
-Contains decorators for setting access levels on commands.
+"""Contains decorators for setting access levels on commands.
+
 These decorators are used to restrict command usage to users with specific access levels.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
-from typing import Any, TypeVar
+from typing import Any
 
 from discord.ext import commands
 
 from ..enum import RequiredAccessLevel
 from .internals import LazyHybridCommand
 
-type Co = Callable[..., Coroutine[Any, Any, Any]]
-T = TypeVar("T", bound=commands.Command[Any, Any, Any] | LazyHybridCommand[Any] | Co)
+type AnyCo = commands.Command[Any, Any, Any] | LazyHybridCommand[Any] | Callable[..., Coroutine[Any, Any, Any]]
 
 __all__ = ["admin_only", "manager_only", "owner_only", "staff_only"]
 
 
-def _set_access_level(func: T, access_level: RequiredAccessLevel) -> T:
-    """
-    Set the default required access level for the function.
+def _set_access_level[T: AnyCo](func: T, access_level: RequiredAccessLevel) -> T:
+    """Set the default required access level for the function.
+
     Injects __permission__ into the command callback function.
 
-    :param func: A command or function to set the permission level for.
-    :param access_level: The access level to set.
-    :return: Returns back func.
+    Args:
+        func: A command or function to set the permission level for.
+        access_level: The access level to set.
+
+    Returns:
+        The input function with permission level set.
     """
     # Lots of type ignore here because we are using function injection to set the access level.
     if isinstance(func, commands.Command | LazyHybridCommand):  # Inject into the command callback
@@ -38,41 +38,49 @@ def _set_access_level(func: T, access_level: RequiredAccessLevel) -> T:
     return func  # pyright: ignore [reportUnknownVariableType, reportReturnType]
 
 
-def staff_only(func: T) -> T:
-    """
-    Decorator to set the access level to staff.
+def staff_only[T: AnyCo](func: T) -> T:
+    """Decorator to set the command access level to staff.
 
-    :param func: A command or function to set the access level for.
-    :return: Returns back func.
+    Args:
+        func: A command or function to set the access level for.
+
+    Returns:
+        The input function with staff permission level set.
     """
     return _set_access_level(func, RequiredAccessLevel.staff)
 
 
-def manager_only(func: T) -> T:
-    """
-    Decorator to set the access level to manager.
+def manager_only[T: AnyCo](func: T) -> T:
+    """Decorator to set the command access level to manager.
 
-    :param func: A command or function to set the access level for.
-    :return: Returns back func.
+    Args:
+        func: A command or function to set the access level for.
+
+    Returns:
+        The input function with manager permission level set.
     """
     return _set_access_level(func, RequiredAccessLevel.manager)
 
 
-def admin_only(func: T) -> T:
-    """
-    Decorator to set the access level to admin.
+def admin_only[T: AnyCo](func: T) -> T:
+    """Decorator to set the command access level to admin.
 
-    :param func: A command or function to set the access level for.
-    :return: Returns back func.
+    Args:
+        func: A command or function to set the access level for.
+
+    Returns:
+        The input function with admin permission level set.
     """
     return _set_access_level(func, RequiredAccessLevel.admin)
 
 
-def owner_only(func: T) -> T:
-    """
-    Decorator to set the access level to owner.
+def owner_only[T: AnyCo](func: T) -> T:
+    """Decorator to set the command access level to owner.
 
-    :param func: A command or function to set the access level for.
-    :return: Returns back func.
+    Args:
+        func: A command or function to set the access level for.
+
+    Returns:
+        The input function with owner permission level set.
     """
     return _set_access_level(func, RequiredAccessLevel.owner)

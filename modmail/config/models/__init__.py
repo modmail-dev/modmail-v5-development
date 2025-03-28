@@ -1,6 +1,5 @@
-"""
-modmail.config.models
-=====================
+"""Configuration data models for the Modmail bot.
+
 This module defines the data models used for configuration files in the project.
 These models represent various configuration sections and are used to load,
 validate, and manage configuration settings for the bot.

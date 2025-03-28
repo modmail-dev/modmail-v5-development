@@ -1,9 +1,10 @@
-"""
-modmail.backends.sql.models
-===========================
+"""SQLAlchemy models for the SQL backend.
+
 This module provides the SQLAlchemy models for the SQL backend.
 
-Modules from this directory should not import from modmail.core.* (circular import issues).
+Note:
+    Modules from this directory should not import from modmail.core.*
+    to avoid circular import issues.
 """
 
 from __future__ import annotations

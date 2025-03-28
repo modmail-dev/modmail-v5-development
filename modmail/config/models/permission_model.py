@@ -1,8 +1,7 @@
-"""
-modmail.config.models.permission_model
-======================================
-Contains configuration models for the permission system.
-Defines the structure and validation for permission-related settings.
+"""Permission configuration models for Modmail.
+
+This module contains configuration models for the permission system.
+It defines the structure and validation for permission-related settings.
 """
 
 from __future__ import annotations
@@ -18,16 +17,17 @@ __all__ = ["PermissionConfig"]
 
 
 class PermissionConfig(BaseModel):
-    """
-    Configuration model for the permission system.
+    """Configuration model for the permission system.
 
     Attributes:
-        discord_admin_bypass (bool): Whether users with Discord administrator permission
-                                     should be given Modmail admin access level.
-        default_access_everyone (bool): Whether everyone should have access to commands
-                                        with "everyone" access level by default.
-        slash_minimum_permission_int (int): Minimum Discord permissions to see slash commands.
-        overrides (dict[str, RequiredAccessLevel]): Override a command's required access level.
+        discord_admin_bypass: Whether users with Discord administrator permission
+            should be given Modmail admin access level.
+        default_access_everyone: Whether everyone should have access to commands
+            with "everyone" access level by default.
+        slash_minimum_permission_int: Minimum Discord permissions integer value
+            required to see slash commands.
+        overrides: Mapping of command names to their required access levels,
+            allowing customization of command permissions.
     """
 
     discord_admin_bypass: bool = True
@@ -40,8 +40,17 @@ class PermissionConfig(BaseModel):
     def sanitize_overrides_values_config(
         cls, v: dict[str, RequiredAccessLevel | str] | None
     ) -> dict[str, RequiredAccessLevel]:
-        """
-        Sanitizes the overrides command names and parses the access levels.
+        """Sanitizes command names and parses access levels in the overrides mapping.
+
+        Args:
+            v: Dictionary mapping command names to their required access levels,
+               which can be either RequiredAccessLevel enum values or strings.
+
+        Returns:
+            A dictionary mapping sanitized command names to RequiredAccessLevel enum values.
+
+        Raises:
+            ValueError: If an invalid permission access level string is provided.
         """
         if v is None:
             return {}
