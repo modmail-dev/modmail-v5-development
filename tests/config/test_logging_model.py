@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from pytest_mock import MockerFixture
@@ -19,8 +19,18 @@ def test_logging_config_defaults() -> None:
     assert isinstance(config.logfile_max_size, int | float)
 
 
-def test_logging_config_custom_values() -> None:
+def test_logging_config_custom_values(mocker: MockerFixture, tmp_path: Path, patch_open: Any) -> None:
     """Test LoggingConfig with custom values."""
+
+    original_func = Path.open
+
+    def open_func(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self.name == "custom.log":
+            return original_func(Path(tmp_path / self.name), *args, **kwargs)  # pyright: ignore [reportUnknownVariableType]
+        return original_func(self, *args, **kwargs)  # pyright: ignore [reportUnknownVariableType]
+
+    mock_open = mocker.patch("pathlib.Path.open", side_effect=open_func, autospec=patch_open)
+
     config = LoggingConfig(
         enabled=False,
         root_level=logging.WARNING,
@@ -38,6 +48,7 @@ def test_logging_config_custom_values() -> None:
     assert config.logfile_max_size == 1024 * 1024
     assert config.discord_level == logging.ERROR
     assert config.discord_gateway_level == logging.ERROR
+    assert mock_open.call_count == 1
 
 
 def test_logging_config_level_normalization() -> None:
@@ -81,22 +92,38 @@ def test_logging_config_logfile_directory_error(tmp_path: Path) -> None:
         LoggingConfig(logfile=str(tmp_path))
 
 
-def test_logging_config_logfile_permission_error(mocker: MockerFixture) -> None:
+def test_logging_config_logfile_permission_error(mocker: MockerFixture, patch_open: Any) -> None:
     """Test validation when logfile cannot be opened due to permissions."""
-    mock_open = mocker.patch("pathlib.Path.open", side_effect=PermissionError("Permission denied"))
+
+    original_func = Path.open
+
+    def open_func(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self.name == "modmail-restricted-test.log":
+            raise PermissionError("Some OS error")
+        return original_func(self, *args, **kwargs)  # pyright: ignore [reportUnknownVariableType]
+
+    mock_open = mocker.patch("pathlib.Path.open", side_effect=open_func, autospec=patch_open)
 
     with pytest.raises(ValueError, match="No permissions to open the file"):
-        LoggingConfig(logfile="restricted.log")
+        LoggingConfig(logfile="modmail-restricted-test.log")
 
     mock_open.assert_called_once()
 
 
-def test_logging_config_logfile_os_error(mocker: MockerFixture) -> None:
+def test_logging_config_logfile_os_error(mocker: MockerFixture, patch_open: Any) -> None:
     """Test validation when logfile encounters an OS error."""
-    mock_open = mocker.patch("pathlib.Path.open", side_effect=OSError("Some OS error"))
+
+    original_func = Path.open
+
+    def open_func(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self.name == "modmail-error-test.log":
+            raise OSError("Some OS error")
+        return original_func(self, *args, **kwargs)  # pyright: ignore [reportUnknownVariableType]
+
+    mock_open = mocker.patch("pathlib.Path.open", side_effect=open_func, autospec=patch_open)
 
     with pytest.raises(ValueError, match="Logfile cannot be written to"):
-        LoggingConfig(logfile="error.log")
+        LoggingConfig(logfile="modmail-error-test.log")
 
     mock_open.assert_called_once()
 

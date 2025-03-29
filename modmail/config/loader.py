@@ -36,7 +36,7 @@ def load_config(file_path: str | Path) -> Config | None:
         file_path = Path(file_path)
 
     try:
-        with file_path.open("r") as f:
+        with file_path.open("r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
     except FileNotFoundError:
         logger.critical("Config file not found at %s.", file_path)

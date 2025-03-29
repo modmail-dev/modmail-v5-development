@@ -6,51 +6,42 @@ from typing import Any
 import discord
 import pytest
 from discord import app_commands
+from pytest_mock import MockerFixture
 
 # noinspection PyProtectedMember
 from modmail.core import EmbedProxy, Translator, _
 
 
-class MockTranslator:
-    """Mock translator for testing EmbedProxy translations.
+def translate(
+    string: app_commands.locale_str | str, locale: discord.Locale | str, context: Any = None
+) -> str | None:
+    """Simulate translation by appending locale to string as translated text.
 
-    A simple mock implementation that simulates translation by appending
-    the locale to the original message.
+    Args:
+        string: The string or locale_str to translate.
+        locale: The target locale for translation.
+        context: Optional context information for translation.
+
+    Returns:
+        The "translated" string with locale appended, or None if translation fails.
     """
-
-    # noinspection PyMethodMayBeStatic,PyUnusedLocal
-    async def translate(
-        self, string: app_commands.locale_str | str, locale: discord.Locale | str, context: Any = None
-    ) -> str | None:
-        """Simulate translation by appending locale to string as translated text.
-
-        Args:
-            string: The string or locale_str to translate.
-            locale: The target locale for translation.
-            context: Optional context information for translation.
-
-        Returns:
-            The "translated" string with locale appended, or None if translation fails.
-        """
-        if isinstance(string, app_commands.locale_str):
-            if string.message == "RETURN_NONE":  # Simulate a case where translation fails
-                return None
-
-            if "_string" in string.extras:
-                # For locale_str created with _()
-                return f"{string.message}_{locale}"
-            return f"{string.message}_{locale}"
-        return string
+    if isinstance(string, app_commands.locale_str):
+        if string.message == "RETURN_NONE":  # Simulate a case where translation fails
+            return None
+        return f"{string.message}_{locale}"
+    return string
 
 
 @pytest.fixture
-def translator() -> MockTranslator:
+def translator(mocker: MockerFixture) -> Translator:
     """Fixture to provide a mock translator.
 
     Returns:
         An instance of MockTranslator for testing.
     """
-    return MockTranslator()
+    mock_translator = mocker.MagicMock(spec=Translator)
+    mock_translator.translate = mocker.AsyncMock(side_effect=translate)
+    return mock_translator
 
 
 def test_embed_proxy_basic_initialization() -> None:

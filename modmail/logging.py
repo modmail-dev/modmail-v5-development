@@ -22,6 +22,8 @@ except ImportError as e:  # pragma: no cover
 
 __all__ = ["setup_logging"]
 
+_LOGGING_IS_SETUP = False
+
 
 class FileFormatter(logging.Formatter):
     """Custom formatter for log files.
@@ -53,6 +55,12 @@ def setup_logging() -> None:
     Console output uses rich formatting with traceback support, while file output
     uses a plain text format with configurable rotation.
     """
+    global _LOGGING_IS_SETUP  # noqa: PLW0603
+
+    if _LOGGING_IS_SETUP:  # Don't set up logging again if it's already done.
+        return
+    _LOGGING_IS_SETUP = True  # pyright: ignore [reportConstantRedefinition]
+
     # Configure root logging level.
     project_root_logger = logging.getLogger("modmail")
     project_root_logger.setLevel(CONFIG.logging.root_level)

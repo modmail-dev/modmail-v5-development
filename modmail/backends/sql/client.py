@@ -15,10 +15,10 @@ from sqlalchemy import and_, delete, event, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from modmail.backends.common import DBClientBase, Profile, Settings
 from modmail.enum import ProfileKey, ProfileType
 from modmail.errors import DatabaseConnectionError
 
+from ..common import DBClientBase, Profile, Settings
 from .migration import do_migration
 from .models import SQLActivityTable, SQLPermissionOverrideTable, SQLProfileTable, SQLSettingsTable
 
@@ -119,7 +119,7 @@ class SQLClient(DBClientBase):
             if engine.dialect.name.casefold() == "sqlite":
                 cursor = dbapi_connection.cursor()
                 cursor.execute("PRAGMA foreign_keys=ON;")
-                cursor.close()
+                cursor.close()  # pragma: no cover ; no idea why coverage thinks this is unreachable
 
         # noinspection PyAttributeOutsideInit
         self.__set_sqlite_pragma = set_sqlite_pragma  # Keep a reference to the listener function
@@ -148,21 +148,8 @@ class SQLClient(DBClientBase):
             await loop.run_in_executor(pool, do_migration, self._sql_config.uri.get_secret_value())
 
         # Load settings from the SQL database
-        async with self._async_session() as session:
-            query = select(SQLSettingsTable).where(SQLSettingsTable.bot_id == self._config.bot.bot_id)
-            result = await session.execute(query)
-            settings_table = result.scalar_one_or_none()
-            if settings_table is None:
-                logger.debug("Settings not found in SQL database. Creating new settings.")
-                settings_table = SQLSettingsTable(bot_id=self._config.bot.bot_id)
-                session.add(settings_table)
-                await session.commit()
-                await session.refresh(settings_table)  # Make sure all relationships are loaded
-            session.expunge(settings_table)  # Detach the settings from the session
-            self._settings_table = settings_table
-            logger.debug("Loaded settings from SQL database.")
-
-        await self._sync_profiles()
+        await self.sync_settings()
+        await self.sync_profiles()
 
     async def disconnect(self) -> None:
         """Disconnect from the SQL database.
@@ -178,14 +165,22 @@ class SQLClient(DBClientBase):
         """Sync the settings from the SQL database.
 
         Refreshes the local settings from the database to ensure they are up-to-date.
+        If the settings do not exist in the database, a new settings entry is created.
         """
         assert self._async_session is not None, "Session is not initialized."
         async with self._async_session() as session:
             query = select(SQLSettingsTable).where(SQLSettingsTable.bot_id == self._config.bot.bot_id)
             result = await session.execute(query)
-            settings_table = result.scalar_one()
+            settings_table = result.scalar_one_or_none()
+            if settings_table is None:
+                logger.debug("Settings not found in SQL database. Creating new settings.")
+                settings_table = SQLSettingsTable(bot_id=self._config.bot.bot_id)
+                session.add(settings_table)
+                await session.commit()
+                await session.refresh(settings_table)  # Make sure all relationships are loaded
             session.expunge(settings_table)
-            self._settings_table = settings_table
+        self._settings_table = settings_table
+        logger.debug("Synchronized settings from SQL database.")
 
     async def update_settings(self, **kwargs: Any) -> None:
         """Update bot settings in the database.
@@ -258,20 +253,21 @@ class SQLClient(DBClientBase):
         }
         return Profile(**attributes)
 
-    async def _sync_profiles(self) -> None:
+    async def sync_profiles(self) -> None:
         """Sync profiles from the database to the local cache.
 
         Fetches all profiles from the database and stores them in the local cache.
         """
         assert self._async_session is not None, "Session is not initialized."
-        self.__profiles_cache.clear()
+        profiles_cache: dict[ProfileKey, tuple[SQLProfileTable, Profile]] = {}
         async with self._async_session() as session:
             query = select(SQLProfileTable).where(SQLProfileTable.bot_id == self._config.bot.bot_id)
             results = (await session.execute(query)).scalars().fetchall()
             for profile_row in results:
                 profile_key = ProfileKey(profile_row.profile_id, profile_row.profile_type)
-                self.__profiles_cache[profile_key] = (profile_row, self._make_profile_from_table(profile_row))
+                profiles_cache[profile_key] = (profile_row, self._make_profile_from_table(profile_row))
                 session.expunge(profile_row)
+        self.__profiles_cache = profiles_cache
         logger.debug("Synchronized profiles from SQL database.")
 
     def get_profile(self, profile_id: int, profile_type: ProfileType) -> Profile | None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from discord.ext import commands
+from pytest_mock import MockerFixture
 
 from modmail.core.internals.command import (
     LazyHybridCommand,
@@ -11,13 +12,6 @@ from modmail.core.internals.command import (
     lazy_hybrid_group,
     wrap,
 )
-
-
-class MockCog:
-    """A mock cog for testing purposes."""
-
-    def __init__(self) -> None:
-        self.name = "MockCog"
 
 
 def test_lazy_hybrid_command_creation() -> None:
@@ -171,15 +165,14 @@ def test_qualname_injection() -> None:
     assert test_command.callback.__qualname__ == "TestCog.test_command"
 
 
-def test_lazy_hybrid_command_with_args_and_kwargs() -> None:
+def test_lazy_hybrid_command_with_args_and_kwargs(mocker: MockerFixture) -> None:
     """Test command arguments and parameters are properly passed to the real command."""
 
     @lazy_hybrid_command(name="custom_name", description="Custom description")
     async def test_command(self: Any, ctx: Any) -> None:
         pass
 
-    cog = MockCog()
-    command = test_command.get_commands(cog.name)["test_command"]
+    command = test_command.get_commands("TestCog")["test_command"]
 
     # Verify parameters were properly transferred
     assert command.name == "custom_name"

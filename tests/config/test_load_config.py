@@ -12,25 +12,6 @@ from modmail.config.models import Config
 
 
 @pytest.fixture
-def valid_config_dict() -> dict[str, Any]:
-    """Provide a valid configuration dictionary for testing.
-
-    Returns:
-        A dictionary containing valid configuration data with bot token,
-        server ID, database configuration, and other required fields.
-    """
-    return {
-        "version": "1.0",
-        "bot": {
-            "token": "MTIzNDU2Nzg5MDEyMzQ1Njc4.abcdef.ghijklmnopqrstuvwxyz1234567890",
-            "staff_server_id": 123456789012345,
-        },
-        "database_type": "sql",
-        "sql_config": {"uri": "sqlite:///modmail.db"},
-    }
-
-
-@pytest.fixture
 def config_file_path(tmp_path: Path, valid_config_dict: dict[str, Any]) -> Path:
     """Create a temporary config YAML file with valid content.
 
@@ -41,43 +22,59 @@ def config_file_path(tmp_path: Path, valid_config_dict: dict[str, Any]) -> Path:
     Returns:
         Path to the created temporary YAML configuration file.
     """
-    config_path = tmp_path / "config.yaml"
-    with config_path.open("w") as f:
+    config_path = tmp_path / "valid_config.yaml"
+    with config_path.open("w", encoding="utf-8") as f:
         yaml.dump(valid_config_dict, f)
     return config_path
 
 
 def test_load_config_file_not_found() -> None:
     """Test that load_config returns None when file is not found."""
-    result = load_config("nonexistent_file.yaml")
+    result = load_config("invalid_config.yaml")
     assert result is None
 
 
-def test_load_config_permission_error(mocker: MockerFixture) -> None:
+def test_load_config_permission_error(mocker: MockerFixture, patch_open: Any) -> None:
     """Test that load_config returns None when a permission error occurs."""
-    mock_open = mocker.patch("pathlib.Path.open", side_effect=PermissionError("Permission denied"))
 
-    result = load_config("config.yaml")
+    original_func = Path.open
+
+    def open_func(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self.name == "invalid-config.yaml":
+            raise PermissionError("Permission denied")
+        return original_func(self, *args, **kwargs)  # pyright: ignore [reportUnknownVariableType]
+
+    mock_open = mocker.patch("pathlib.Path.open", side_effect=open_func, autospec=patch_open)
+
+    result = load_config("invalid-config.yaml")
 
     assert result is None
-    mock_open.assert_called_once_with("r")
+    mock_open.assert_called_once()
 
 
-def test_load_config_os_error(mocker: MockerFixture) -> None:
+def test_load_config_os_error(mocker: MockerFixture, patch_open: Any) -> None:
     """Test that load_config returns None when an OS error occurs."""
-    mock_open = mocker.patch("pathlib.Path.open", side_effect=OSError("Some OS error"))
 
-    result = load_config("config.yaml")
+    original_func = Path.open
+
+    def open_func(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self.name == "invalid-config.yaml":
+            raise OSError("Some OS error")
+        return original_func(self, *args, **kwargs)  # pyright: ignore [reportUnknownVariableType]
+
+    mock_open = mocker.patch("pathlib.Path.open", side_effect=open_func, autospec=patch_open)
+
+    result = load_config("invalid-config.yaml")
 
     assert result is None
-    mock_open.assert_called_once_with("r")
+    mock_open.assert_called_once()
 
 
 def test_load_config_invalid_yaml(tmp_path: Path) -> None:
     """Test that load_config returns None when given invalid YAML content."""
     # Create an invalid YAML file
     config_path = tmp_path / "invalid_config.yaml"
-    with config_path.open("w") as f:
+    with config_path.open("w", encoding="utf-8") as f:
         f.write("This is not valid YAML")
 
     result = load_config(str(config_path))
@@ -85,13 +82,11 @@ def test_load_config_invalid_yaml(tmp_path: Path) -> None:
     assert result is None
 
 
-def test_load_config_validation_error(mocker: MockerFixture, tmp_path: Path) -> None:
+def test_load_config_validation_error(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Test that load_config returns None when configuration fails validation."""
-    mock_logger = mocker.patch("modmail.config.loader.logger")
-
     # Create a config with valid YAML but invalid values
-    config_path = tmp_path / "invalid_values.yaml"
-    with config_path.open("w") as f:
+    config_path = tmp_path / "invalid_config.yaml"
+    with config_path.open("w", encoding="utf-8") as f:
         yaml.dump(
             {"version": "invalid_version", "bot": {"token": "invalid_token"}, "database_type": "unknown_db_type"},
             f,
@@ -100,19 +95,19 @@ def test_load_config_validation_error(mocker: MockerFixture, tmp_path: Path) -> 
     result = load_config(str(config_path))
 
     assert result is None
-    mock_logger.critical.assert_called_once()
-    assert "Invalid config file at" in mock_logger.critical.call_args[0][0]
+    assert "Invalid config file at" in caplog.text
+    assert any(record.levelname == "CRITICAL" for record in caplog.records)
 
 
-def test_load_config_success(config_file_path: Path) -> None:
+def test_load_config_success(config_file_path: Path, valid_config_dict: dict[str, Any]) -> None:
     """Test that load_config correctly processes a valid configuration file."""
     result = load_config(str(config_file_path))
 
     assert isinstance(result, Config)
-    assert result.version == "1.0"
-    assert result.database_type == "sql"
-    assert result.bot.token.get_secret_value() == "MTIzNDU2Nzg5MDEyMzQ1Njc4.abcdef.ghijklmnopqrstuvwxyz1234567890"
-    assert result.bot.staff_server_id == 123456789012345
+    assert result.version == valid_config_dict["version"]
+    assert result.database_type == valid_config_dict["database_type"]
+    assert result.bot.token.get_secret_value() == valid_config_dict["bot"]["token"]
+    assert result.bot.staff_server_id == valid_config_dict["bot"]["staff_server_id"]
     assert result.sql_config is not None
-    assert result.sql_config.uri.get_secret_value() == "sqlite:///modmail.db"
+    assert result.sql_config.uri.get_secret_value() == valid_config_dict["sql_config"]["uri"]
     assert result.mongodb_config is None

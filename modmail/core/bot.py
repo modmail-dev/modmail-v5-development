@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import discord
 from discord.ext import commands
@@ -250,17 +250,17 @@ class Bot(commands.Bot):
                     await self.database_client.disconnect()
 
         try:
-            try:
-                # noinspection PyUnresolvedReferences
-                import uvloop  # pyright: ignore
-            except ImportError as e:
-                # uvloop is not available on Windows
-                if e.name == "uvloop" and sys.platform != "win32":
-                    logger.warning("uvloop not installed, consider installing with the -G speed option.")
-                uvloop = asyncio  # Use the default asyncio loop.
+            if not TYPE_CHECKING:
+                try:
+                    import uvloop
+                except ImportError as e:
+                    # uvloop is not available on Windows
+                    if e.name == "uvloop" and sys.platform != "win32":
+                        logger.warning("uvloop not installed, consider installing with the -G speed option.")
+                    uvloop = asyncio  # Use the default asyncio loop.
 
-            # Start the bot with uvloop.run or asyncio.run
-            uvloop.run(bot_runner())  # pyright: ignore
+                # Start the bot with uvloop.run or asyncio.run
+                uvloop.run(bot_runner())
         except KeyboardInterrupt:
             logger.debug("Keyboard interrupt.")
             logger.info("[yellow]Shutting down Modmail.", extra={"markup": True})

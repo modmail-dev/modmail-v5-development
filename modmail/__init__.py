@@ -22,19 +22,6 @@ __all__ = ["__version__", "init", "run_bot"]
 logger = _logging.getLogger(__name__)
 
 
-if sys.platform == "win32":
-    import asyncio
-
-    try:
-        # This is a Windows-specific event loop policy that allows for better performance on Windows.
-        # Should already been default in Python 3.8+.
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    except AttributeError:
-        import warnings
-
-        warnings.warn("Failed to use WindowsProactorEventLoopPolicy.", RuntimeWarning, stacklevel=1)
-
-
 # Global variable to store the loaded configuration.
 CONFIG: Config
 

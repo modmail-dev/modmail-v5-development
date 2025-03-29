@@ -16,10 +16,10 @@ import pymongo.errors
 from beanie import init_beanie  # pyright: ignore [reportUnknownVariableType]  # beanie is not fully typed
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from modmail.backends.common import DBClientBase, Profile, Settings
 from modmail.enum import ProfileKey, ProfileType
 from modmail.errors import DatabaseConnectionError
 
+from ..common import DBClientBase, Profile, Settings
 from .migration import do_migration
 from .models import MongoDBActivityModel, MongoDBProfileDocument, MongoDBSettingsDocument
 
@@ -211,7 +211,16 @@ class MongoDBClient(DBClientBase):
                 pool, do_migration, self._mongodb_config.uri.get_secret_value(), self._mongodb_config.database
             )
 
-        # Load settings from MongoDB
+        await self.sync_settings()
+        await self.sync_profiles()
+
+    async def sync_settings(self) -> None:
+        """Synchronize settings with the database.
+
+        This method is called to ensure that the current settings model
+        are up to date with the settings in the database.
+        If the settings document is not found, it creates a new one.
+        """
         settings_document = await MongoDBSettingsDocument.find_one(
             MongoDBSettingsDocument.bot_id == self._config.bot.bot_id
         )
@@ -221,9 +230,7 @@ class MongoDBClient(DBClientBase):
             await settings_document.create()
 
         self._settings_document = settings_document
-        logger.debug("Loaded settings from MongoDB.")
-
-        await self._sync_profiles()
+        logger.debug("Synced settings from MongoDB.")
 
     async def update_settings(self, **kwargs: Any) -> None:
         """Update bot settings in the database.
@@ -232,6 +239,9 @@ class MongoDBClient(DBClientBase):
 
         Args:
             **kwargs: Key-value pairs of settings to update.
+
+        Raises:
+            DatabaseConnectionError: If the update operation fails.
         """
         # Validate the kwargs, by creating a new Settings object with the provided kwargs.
         # Uses a new Settings model to avoid modifying the original settings and validate the new settings.
@@ -250,22 +260,28 @@ class MongoDBClient(DBClientBase):
                 value = MongoDBActivityModel(**value)
             setattr(settings_document, key, value)
 
-        await settings_document.replace()  # Use .replace() to update the document in place
+        try:
+            await settings_document.replace()  # Use .replace() to update the document in place
+        except Exception as e:
+            logger.error("Failed to update settings in MongoDB: %s", e)
+            raise DatabaseConnectionError from e
         self._settings_document = settings_document  # Update the settings model to the new one
 
-    async def _sync_profiles(self) -> None:
+    async def sync_profiles(self) -> None:
         """Sync profiles from the database to the local cache.
 
         Retrieves all profiles from the database for the current bot and
         stores them in the local cache for faster access.
         """
-        self.__profiles_cache.clear()
+        profiles_cache: dict[ProfileKey, tuple[MongoDBProfileDocument, Profile]] = {}
         # Finds all profiles in the database and adds them to the cache.
         async for profile_document in MongoDBProfileDocument.find(
             MongoDBProfileDocument.bot_id == self._config.bot.bot_id
         ):
             profile_key = ProfileKey(profile_document.profile_id, profile_document.profile_type)
-            self.__profiles_cache[profile_key] = (profile_document, Profile.model_validate(profile_document))
+            profiles_cache[profile_key] = (profile_document, Profile.model_validate(profile_document))
+
+        self.__profiles_cache = profiles_cache
         logger.debug("Synced %d profiles from MongoDB.", len(self.__profiles_cache))
 
     def get_profile(self, profile_id: int, profile_type: ProfileType) -> Profile | None:

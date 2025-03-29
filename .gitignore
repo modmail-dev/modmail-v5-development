@@ -2,6 +2,7 @@
 .pdm.toml
 .pdm-python
 modmail.log
+modmail.log.*
 data/
 config.yaml
 modmail.db

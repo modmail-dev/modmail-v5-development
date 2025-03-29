@@ -89,6 +89,7 @@ sql_config:
   #   * SQLite
   # Example for SQLite: "sqlite+aiosqlite:///modmail.db"
   # Example for PostgreSQL: "postgresql+asyncpg://user:password@localhost/modmail"
+  # For SQLite, in-memory database is not supported, you must use a file.
   uri: "sqlite+aiosqlite:///modmail.db"
 
 # Configurations for the MongoDB database type. Only required if database_type is mongodb.
@@ -166,11 +167,12 @@ logging:
   # See the possible variables here: https://docs.python.org/3/library/logging.html#logrecord-attributes.
   # logfile_format: "%(asctime)s %(levelname)s %(name)s:%(lineno)d %(message)s"
 
-  # The maximum size of each logfile, in bytes. Defaults to 35MB.
-  # logfile_max_size: 36700160
+  # The maximum size of each logfile, in bytes. Defaults to 10MB.
+  # logfile_max_size: 10485760
 
-  # The number of logfile backups to keep. Default no backups.
-  # logfile_backup_count: 0
+  # The number of logfile backups to keep. Default 3 backups.
+  # It is not recommended to set this to 0, as the logfile will grow indefinitely beyond `logfile_max_size`.
+  # logfile_backup_count: 3
 
   # Configure the logging levels for discord.py's internal loggers.
   # It's suggested to leave these at their default values for easier debugging.
@@ -178,6 +180,6 @@ logging:
   # discord_level: "INFO"
   # discord_state_level: "INFO"
   # discord_http_level: "INFO"
-  # discord_gateway_level: "info"
+  # discord_gateway_level: "INFO"
 
   # TODO: add sentry support

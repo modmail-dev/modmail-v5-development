@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
@@ -11,9 +12,6 @@ from pytest_mock import MockerFixture
 
 # noinspection PyProtectedMember
 from modmail.core import Translator, _
-
-# noinspection PyProtectedMember
-from modmail.core.translator import HasLocaleStr
 
 
 class MockFluentLocalization:
@@ -47,18 +45,16 @@ class MockFluentLocalization:
         }
 
     def format_value(self, message_id: str, args: dict[str, Any] | None = None) -> str:
-        """Format the message ID with the provided arguments.
+        """Simulate fluent formatting with predefined locale texts.
 
-        Applies localization using the predefined translations and formats
-        placeholders based on the provided arguments.
+        Looks up the message ID in the translations dictionary and formats it.
 
         Args:
             message_id: The identifier for the message to be translated.
             args: Dictionary of arguments to format into the translated string.
 
         Returns:
-            The formatted message in the appropriate locale, or the message_id
-            if no translation is found.
+            The formatted message in the appropriate locale, or the message_id if no translation is found.
         """
         args = args or {}
         locale = self.locales[0]
@@ -77,27 +73,21 @@ class MockFluentLocalization:
 
         # Simple formatting for placeholders
         for key, value in args.items():
-            if key != "_string":
-                placeholder = f"{{{key}}}"
-                if placeholder in result:
-                    result = result.replace(placeholder, str(value))
+            placeholder = f"{{{key}}}"
+            if placeholder in result:
+                result = result.replace(placeholder, str(value))
 
         return result
 
 
-class MockLocaleStr(HasLocaleStr):
+@dataclass
+class MockLocaleStr:
     """Mock object that implements the HasLocaleStr protocol.
 
     Used for testing objects that can be converted to locale_str.
     """
 
-    def __init__(self, message: str) -> None:
-        """Initialize the mock object with a message.
-
-        Args:
-            message: The string message to be converted to locale_str.
-        """
-        self._message = message
+    message: str
 
     def __locale_str__(self) -> locale_str:
         """Convert this object to a locale_str.
@@ -105,17 +95,15 @@ class MockLocaleStr(HasLocaleStr):
         Returns:
             A locale_str representation of this object.
         """
-        return locale_str(self._message, _string=self._message)
+        return locale_str(self.message, _string=self.message)
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_fluent_setup(mocker: MockerFixture) -> None:
     """Set up mocks for FluentLocalization and CONFIG."""
-    # Mock CONFIG object
-    mock_config = mocker.MagicMock()
-    mock_config.default_locale = "en"
-    mock_config.allowed_locales = ["en", "es", "fr"]
-    mocker.patch("modmail.core.translator.CONFIG", mock_config)
+    # Patch the locales in the config
+    mocker.patch("modmail.core.translator.CONFIG.default_locale", "en")
+    mocker.patch("modmail.core.translator.CONFIG.allowed_locales", ["en", "es", "fr"])
 
     # Mock FluentLocalization
     mock_l10n_en = MockFluentLocalization(["en"])
@@ -128,7 +116,7 @@ def mock_fluent_setup(mocker: MockerFixture) -> None:
 
 
 @pytest.mark.asyncio
-async def test_translator_translate_basic(mock_fluent_setup: None) -> None:
+async def test_translator_translate_basic() -> None:
     """Test basic translation functionality with different locales."""
     translator = Translator()
 
@@ -142,21 +130,20 @@ async def test_translator_translate_basic(mock_fluent_setup: None) -> None:
     result_es = await translator.translate(string, discord.Locale.spain_spanish)
     assert result_es == "¡Hola, World!"
 
-    result_fr = await translator.translate(string, "fr")
-    assert result_fr == "Bonjour, World!"
+    result_fr_str = await translator.translate(string, "fr")
+    assert result_fr_str == "Bonjour, World!"
 
-    # Test with string locale identifier
     result_es_str = await translator.translate(string, "es")
     assert result_es_str == "¡Hola, World!"
 
 
 @pytest.mark.asyncio
-async def test_translator_fallback(mock_fluent_setup: None) -> None:
+async def test_translator_fallback() -> None:
     """Test fallback to default locale when translation is missing."""
     translator = Translator()
 
     # Use a message ID that doesn't have a French translation
-    string = locale_str("Goodbye!", _string="test.farewell")
+    string = locale_str("Something!", _string="test.farewell")
 
     # French should fall back to English
     result_fr = await translator.translate(string, "fr")
@@ -168,7 +155,7 @@ async def test_translator_fallback(mock_fluent_setup: None) -> None:
 
 
 @pytest.mark.asyncio
-async def test_translator_region_specific_locale(mock_fluent_setup: None) -> None:
+async def test_translator_region_specific_locale() -> None:
     """Test handling of region-specific locales like en-US."""
     translator = Translator()
 
@@ -184,14 +171,12 @@ async def test_translator_region_specific_locale(mock_fluent_setup: None) -> Non
 
 
 @pytest.mark.asyncio
-async def test_translator_with_nested_locale_str(mock_fluent_setup: None, mocker: MockerFixture) -> None:
+async def test_translator_with_nested_locale_str(mocker: MockerFixture) -> None:
     """Test translation with nested locale_str objects."""
     translator = Translator()
 
-    # Mock the translate method to track calls and return expected values
-    original_translate = translator.translate
-    mock_translate = mocker.AsyncMock(side_effect=original_translate)
-    translator.translate = mock_translate
+    # Spy on the translate method to track calls
+    spy_translate = mocker.spy(translator, "translate")
 
     # Create a nested locale_str
     nested = MockLocaleStr("Nested")
@@ -199,12 +184,12 @@ async def test_translator_with_nested_locale_str(mock_fluent_setup: None, mocker
 
     result = await translator.translate(string, "es")
 
-    assert mock_translate.call_count == 2
+    assert spy_translate.call_count == 2
     assert result == "¡Hola, Nested!"
 
 
 @pytest.mark.asyncio
-async def test_translator_non_modmail_string(mock_fluent_setup: None) -> None:
+async def test_translator_non_modmail_string() -> None:
     """Test handling strings that aren't from Modmail (no _string extra)."""
     translator = Translator()
 
@@ -217,7 +202,7 @@ async def test_translator_non_modmail_string(mock_fluent_setup: None) -> None:
 
 
 @pytest.mark.asyncio
-async def test_translator_with_unsupported_type(mock_fluent_setup: None) -> None:
+async def test_translator_with_unsupported_type() -> None:
     """Test that the translator handles unsupported types by converting them to strings."""
     translator = Translator()
 
@@ -238,7 +223,7 @@ async def test_translator_with_unsupported_type(mock_fluent_setup: None) -> None
     assert result == "¡Hola, CustomObject!"
 
 
-def test_underscore_function(mock_fluent_setup: None) -> None:
+def test_underscore_function() -> None:
     """Test the _ function that creates locale_str objects."""
     # Test with basic string
     result = _("test.greeting", name="World")
@@ -248,7 +233,7 @@ def test_underscore_function(mock_fluent_setup: None) -> None:
     assert result.extras.get("name") == "World"
 
 
-def test_underscore_with_various_types(mock_fluent_setup: None) -> None:
+def test_underscore_with_various_types() -> None:
     """Test the _ function with various argument types."""
     # Test with different FluentTypes
     result = _(
@@ -269,7 +254,7 @@ def test_underscore_with_various_types(mock_fluent_setup: None) -> None:
     assert result.extras.get("none_val", -1) is None
 
 
-def test_underscore_with_locale_str_object(mock_fluent_setup: None) -> None:
+def test_underscore_with_locale_str_object() -> None:
     """Test the _ function with a nested locale_str object."""
     nested = MockLocaleStr("Nested Value")
 
@@ -281,7 +266,7 @@ def test_underscore_with_locale_str_object(mock_fluent_setup: None) -> None:
     assert result.extras.get("_string") == "test.greeting"
 
 
-def test_underscore_with_unsupported_type(mock_fluent_setup: None) -> None:
+def test_underscore_with_unsupported_type() -> None:
     """Test the _ function with an unsupported type (should convert to string)."""
 
     class CustomClass:
@@ -291,7 +276,7 @@ def test_underscore_with_unsupported_type(mock_fluent_setup: None) -> None:
     custom_obj = CustomClass()
 
     # Should issue a warning and convert to string
-    with pytest.warns(UserWarning, match="Unsupported type for translation"):
+    with pytest.warns(UserWarning, match=r"Unsupported type for translation"):
         result = _("test.greeting", name=custom_obj)  # pyright: ignore [reportArgumentType]
 
     assert result.extras.get("name") == custom_obj

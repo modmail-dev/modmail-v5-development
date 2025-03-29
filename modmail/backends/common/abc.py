@@ -64,6 +64,20 @@ class DBClientBase(ABC):  # pragma: no cover
         """
 
     @abstractmethod
+    async def sync_settings(self) -> None:
+        """Synchronizes the settings with the database.
+
+        This method shouldn't need to be called directly, as the bot stores the settings in cache.
+        """
+
+    @abstractmethod
+    async def sync_profiles(self) -> None:
+        """Synchronizes the profiles with the database.
+
+        This method shouldn't need to be called directly, as the bot stores the profiles in cache.
+        """
+
+    @abstractmethod
     def get_profile(self, profile_id: int, profile_type: ProfileType) -> Profile | None:
         """Retrieves a profile from the database cache.
 

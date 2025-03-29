@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import Mock
 
@@ -36,12 +37,12 @@ class Context(commands.Context[Bot]):
 def mock_bot(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch) -> Bot:
     """Return a Bot instance with key mocks for testing."""
     bot = Bot()
-    mocker.patch.object(bot, "is_owner", mocker.AsyncMock(return_value=False))
-    mocker.patch.object(bot, "wait_until_ready", mocker.AsyncMock())
-    mocker.patch.object(bot, "start", mocker.AsyncMock())
-    mocker.patch.object(bot, "close", mocker.AsyncMock())
-    mocker.patch.object(bot, "database_client", mocker.MagicMock(spec=DBClientBase))
-    mocker.patch.object(bot, "load_extension", mocker.AsyncMock())
+    mocker.patch.object(bot, "is_owner", return_value=False)
+    mocker.patch.object(bot, "wait_until_ready")
+    mocker.patch.object(bot, "start")
+    mocker.patch.object(bot, "close")
+    mocker.patch.object(bot, "database_client", spec=DBClientBase)
+    mocker.patch.object(bot, "load_extension")
 
     # Mock application info and command tree
     app_info = mocker.MagicMock(spec=discord.AppInfo)
@@ -75,15 +76,15 @@ def test_bot_init_no_prefix(mocker: MockerFixture) -> None:
     """Test bot initializes with default command prefix when not configured."""
     mocker.patch("modmail.core.bot.CONFIG.bot.prefix", None)
     bot = Bot()
-    assert "?" not in bot.command_prefix  # pyright: ignore [reportUnknownMemberType, reportOperatorIssue]
+    assert not bot.command_prefix  # pyright: ignore [reportUnknownMemberType]
 
 
-def test_bot_init_database_clients(mocker: MockerFixture) -> None:
+def test_bot_init_database_clients(mocker: MockerFixture, tmp_path: Path) -> None:
     """Test bot initializes correct database clients based on configuration."""
     mocker.patch("modmail.core.bot.CONFIG.database_type", "mongodb")
     mocker.patch(
         "modmail.core.bot.CONFIG.mongodb_config",
-        MongoDBDatabaseConfig(uri=cast(SecretStr, "mongodb://localhost:27017")),
+        MongoDBDatabaseConfig(uri=cast(SecretStr, "mongodb://some-database:27017")),
     )
 
     bot = Bot()
@@ -91,16 +92,17 @@ def test_bot_init_database_clients(mocker: MockerFixture) -> None:
 
     mocker.patch("modmail.core.bot.CONFIG.database_type", "sql")
     mocker.patch(
-        "modmail.core.bot.CONFIG.mongodb_config", SQLDatabaseConfig(uri=cast(SecretStr, "sqlite:///test.db"))
-    )
+        "modmail.core.bot.CONFIG.mongodb_config",
+        SQLDatabaseConfig(uri=cast(SecretStr, f"sqlite+aiosqlite:////{tmp_path.absolute() / 'some-database.db'}")),
+    )  # Using tmp_path in case the file gets created/modified somehow.
 
     bot = Bot()
     assert isinstance(bot.database_client, SQLClient)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_setup_hook_slash_command_syncing(mock_bot: Bot, mocker: MockerFixture) -> None:
-    """Test slash command syncing/unsyncing conditions during bot setup."""
+    """Test slash command syncing/un-syncing conditions during bot setup."""
     # Mock the settings model, database_client was already mocked in the fixture
     settings_mock = mocker.MagicMock(spec=Settings)
     settings_mock.last_slash_synced_version = mock_bot.version
@@ -113,9 +115,9 @@ async def test_setup_hook_slash_command_syncing(mock_bot: Bot, mocker: MockerFix
     cast(Mock, mock_bot.database_client).settings_model = settings_mock
 
     # Mock sync methods
-    sync_mock = mocker.patch.object(mock_bot, "_sync_slash_commands", mocker.AsyncMock())
-    unsync_mock = mocker.patch.object(mock_bot, "_unsync_slash_commands", mocker.AsyncMock())
-    update_settings_mock = mocker.patch.object(mock_bot.database_client, "update_settings", mocker.AsyncMock())
+    sync_mock = mocker.patch.object(mock_bot, "_sync_slash_commands")
+    unsync_mock = mocker.patch.object(mock_bot, "_unsync_slash_commands")
+    update_settings_mock = mocker.patch.object(mock_bot.database_client, "update_settings")
 
     # Grouping conditions for force sync and unsync scenarios.
     # Test 1: Force sync with use_slash_commands = True
@@ -161,7 +163,7 @@ async def test_setup_hook_slash_command_syncing(mock_bot: Bot, mocker: MockerFix
     sync_mock.reset_mock()
     unsync_mock.reset_mock()
 
-    # Test 6: No unsync needed when already unsynced
+    # Test 6: No unsync needed when already un-synced
     settings_mock.last_slash_synced_version = None
     await mock_bot.setup_hook()
     sync_mock.assert_not_called()
@@ -200,30 +202,30 @@ async def test_setup_hook_slash_command_syncing(mock_bot: Bot, mocker: MockerFix
     update_settings_mock.assert_any_call(last_slash_minimum_permission_int=2)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_slash_sync_unsync(mock_bot: Bot, mocker: MockerFixture) -> None:
-    """Test proper syncing and unsyncing of slash commands with Discord."""
-    update_settings_mock = mocker.patch.object(mock_bot.database_client, "update_settings", mocker.AsyncMock())
+    """Test proper syncing and un-syncing of slash commands with Discord."""
+    update_settings_mock = mocker.patch.object(mock_bot.database_client, "update_settings")
 
     # Test syncing
     await mock_bot._sync_slash_commands()
     update_settings_mock.assert_called_once_with(last_slash_synced_version=mock_bot.version)
     update_settings_mock.reset_mock()
 
-    # Test unsyncing
+    # Test un-syncing
     await mock_bot._unsync_slash_commands()
     update_settings_mock.assert_called_once_with(last_slash_synced_version=None)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_bot_permission_check_owner(mock_bot: Bot, context: Context, mocker: MockerFixture) -> None:
     """Test that bot owner bypasses permission checks."""
-    mocker.patch.object(mock_bot, "is_owner", mocker.AsyncMock(return_value=True))
+    mocker.patch.object(mock_bot, "is_owner", return_value=True)
     assert await mock_bot._permission_check(context), context._perm_check_reason
     assert context._perm_check_reason == "owner"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_bot_permission_check_bot(mock_bot: Bot, context: Context) -> None:
     """Test rejection of bot accounts in permission checks."""
     context.author.bot = True
@@ -231,7 +233,7 @@ async def test_bot_permission_check_bot(mock_bot: Bot, context: Context) -> None
     assert context._perm_check_reason == "bot"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_bot_permission_check_profiles(mock_bot: Bot, context: Context, mocker: MockerFixture) -> None:
     """Test permission validation using user profiles with access levels."""
     # Mock profile
@@ -249,7 +251,7 @@ async def test_bot_permission_check_profiles(mock_bot: Bot, context: Context, mo
     assert str(profile.profile_id) in context._perm_check_reason
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_permission_check_with_different_access_levels(
     mock_bot: Bot, context: Context, mocker: MockerFixture
 ) -> None:
@@ -310,7 +312,7 @@ async def test_permission_check_with_different_access_levels(
     assert "owner only" in context._perm_check_reason
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_permission_check_with_profile_overrides(
     mock_bot: Bot, context: Context, mocker: MockerFixture
 ) -> None:
@@ -342,7 +344,7 @@ async def test_permission_check_with_profile_overrides(
     assert "allow test" in context._perm_check_reason
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_permission_check_with_wildcard_overrides(
     mock_bot: Bot, context: Context, mocker: MockerFixture
 ) -> None:
@@ -400,7 +402,7 @@ async def test_permission_check_with_wildcard_overrides(
     assert "owner only" in context._perm_check_reason
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_permission_check_with_multiple_profiles(
     mock_bot: Bot, context: Context, mocker: MockerFixture
 ) -> None:
@@ -568,7 +570,7 @@ def test_get_all_user_profiles(mock_bot: Bot, mocker: MockerFixture) -> None:
     assert len(profiles) == 0
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_setup_hook_bot_public(
     mock_bot: Bot, mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -591,7 +593,7 @@ async def test_setup_hook_bot_public(
     close_mock.assert_not_called()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_set_and_clear_bot_presence(mock_bot: Bot, mocker: MockerFixture) -> None:
     """Test setting and clearing the bot's presence (activity and status)."""
     # Mock change_presence
@@ -645,7 +647,7 @@ def test_database_error_handling(mock_bot: Bot, mocker: MockerFixture) -> None:
         mock_bot.run_bot()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_command_logging(mock_bot: Bot, context: Context, caplog: pytest.LogCaptureFixture) -> None:
     """Test that command execution logs include relevant permission context."""
     caplog.set_level(logging.DEBUG)
@@ -723,11 +725,12 @@ def test_run_bot_uvloop_available(mock_bot: Bot, mocker: MockerFixture) -> None:
         return original_import(name, *args, **kwargs)
 
     mocker.patch("builtins.__import__", mock_import)
-    # Prevent actual exit
-    mocker.patch("sys.exit")
 
-    mock_bot.run_bot()
+    with pytest.raises(SystemExit) as excinfo:
+        mock_bot.run_bot()
+
     # noinspection PyUnreachableCode
+    assert excinfo.value.code == 0  # Clean exit
     mock_bot.start.assert_called_once()
 
 
@@ -738,7 +741,7 @@ def test_run_bot_uvloop_import_error(mock_bot: Bot, mocker: MockerFixture) -> No
 
     def mock_import(name: str, *args: Any, **kwargs: Any) -> Any:
         if name == "uvloop":
-            raise ModuleNotFoundError("Module 'uvloop' not found")
+            raise ModuleNotFoundError("Module 'uvloop' not found", name="uvloop")
         return original_import(name, *args, **kwargs)
 
     mocker.patch("builtins.__import__", mock_import)
@@ -746,11 +749,11 @@ def test_run_bot_uvloop_import_error(mock_bot: Bot, mocker: MockerFixture) -> No
     # Mock sys.platform to be non-Windows
     mocker.patch("sys.platform", "linux")
 
-    # Prevent actual exit
-    mocker.patch("sys.exit")
+    with pytest.raises(SystemExit) as excinfo:
+        mock_bot.run_bot()
 
-    mock_bot.run_bot()
     # noinspection PyUnreachableCode
+    assert excinfo.value.code == 0  # Clean exit
     mock_bot.start.assert_called_once()
 
 
@@ -760,22 +763,22 @@ def test_run_bot_with_jishaku(mock_bot: Bot, mocker: MockerFixture) -> None:
     mocker.patch("modmail.core.bot.CONFIG.bot.enable_jishaku", True)
 
     # Mock load_extension to track calls
-    load_extension_mock = mocker.patch.object(mock_bot, "load_extension", mocker.AsyncMock())
+    load_extension_mock = mocker.patch.object(mock_bot, "load_extension")
 
-    # Prevent actual exit
-    mocker.patch("sys.exit")
-
-    mock_bot.run_bot()
+    with pytest.raises(SystemExit) as excinfo:
+        mock_bot.run_bot()
 
     # Verify that jishaku was loaded
     # noinspection PyUnreachableCode
+    assert excinfo.value.code == 0  # Clean exit
     load_extension_mock.assert_any_call("jishaku")
     mock_bot.start.assert_called_once()
 
 
+@pytest.mark.asyncio(loop_scope="function")
 async def test_on_event_valid(mock_bot: Bot, mocker: MockerFixture) -> None:
     """Test execution of built-in event handlers."""
-    set_bot_presence_mock = mocker.patch.object(mock_bot, "set_bot_presence", mocker.AsyncMock())
+    set_bot_presence_mock = mocker.patch.object(mock_bot, "set_bot_presence")
     await mock_bot.on_ready()
     await mock_bot.on_connect()
     set_bot_presence_mock.assert_called_once()
@@ -853,11 +856,11 @@ def test_get_discord_presence_from_settings(mock_bot: Bot, mocker: MockerFixture
         assert activity.type == discord.ActivityType[activity_type.name]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="function")
 async def test_on_command_error(mock_bot: Bot, context: Context, mocker: MockerFixture) -> None:
     """Test error handling in commands, propagating non-ignored errors."""
     # Mock the super().on_command_error method
-    super_error_handler = mocker.patch.object(commands.Bot, "on_command_error", mocker.AsyncMock())
+    super_error_handler = mocker.patch.object(commands.Bot, "on_command_error")
 
     # Test case 1: CommandNotFound error (should be ignored)
     error = commands.CommandNotFound()
@@ -873,6 +876,6 @@ async def test_on_command_error(mock_bot: Bot, context: Context, mocker: MockerF
     super_error_handler.reset_mock()
 
     # Test case 3: Other errors (should be propagated to super)
-    error = commands.MissingRequiredArgument(param=mocker.MagicMock())
+    error = commands.MissingRequiredArgument(param=mocker.MagicMock(spec=commands.Parameter))
     await mock_bot.on_command_error(context, error)
     super_error_handler.assert_called_once_with(context, error)

@@ -23,7 +23,7 @@ class TestBotConfig:
 
     def test_token_validation_failure_invalid_format(self) -> None:
         """Test that an improperly formatted token is rejected."""
-        with pytest.raises(ValidationError, match="Invalid bot token"):
+        with pytest.raises(ValidationError, match=r"Invalid bot token"):
             BotConfig(token=cast(SecretStr, "invalid-token"), staff_server_id=VALID_ID)
 
     def test_token_validation_failure_invalid_bot_token(self) -> None:
@@ -33,11 +33,11 @@ class TestBotConfig:
         invalid_token = f"{encoded_id}.xyz123.abc"
 
         # Bad ID length
-        with pytest.raises(ValidationError, match="Invalid bot token"):
+        with pytest.raises(ValidationError, match=r"Invalid bot token"):
             BotConfig(token=cast(SecretStr, invalid_token), staff_server_id=VALID_ID)
 
         # Bad ID format
-        with pytest.raises(ValidationError, match="Invalid bot token"):
+        with pytest.raises(ValidationError, match=r"Invalid bot token"):
             BotConfig(token=cast(SecretStr, "abc.def.ghi"), staff_server_id=VALID_ID)
 
     def test_empty_prefix_becomes_none(self) -> None:

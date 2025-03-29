@@ -43,8 +43,8 @@ class LoggingConfig(BaseModel):
     stdout_format: str = "%(message)s"
     logfile: str | None = "modmail.log"
     logfile_format: str = "%(asctime)s %(levelname)s %(name)s:%(lineno)d %(message)s"
-    logfile_max_size: NonNegativeInt = 1024 * 1024 * 35  # 35 MB
-    logfile_backup_count: NonNegativeInt = 0
+    logfile_max_size: NonNegativeInt = 1024 * 1024 * 10  # 10 MB
+    logfile_backup_count: NonNegativeInt = 3
     discord_level: int = logging.INFO
     discord_state_level: int = logging.INFO
     discord_http_level: int = logging.INFO

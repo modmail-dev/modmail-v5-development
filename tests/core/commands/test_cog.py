@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
@@ -9,43 +10,25 @@ from discord import app_commands
 from discord.ext import commands
 from pytest_mock import MockerFixture
 
-from modmail.core import Bot, Cog, EmbedProxy, create_cog, lazy_hybrid_command
+from modmail.core import Bot, Cog, EmbedProxy, Translator, create_cog, lazy_hybrid_command
 
 
-class MockBot:
-    """Mock implementation of Bot class for testing cog functionality.
+def translate(
+    string: app_commands.locale_str | str, locale: discord.Locale | str, context: Any = None
+) -> str | None:
+    """Mock-translate the given string to the specified locale.
 
-    This class provides a simplified bot with translation capabilities for testing.
+    Args:
+        string: The locale string or regular string to translate.
+        locale: The locale to translate to.
+        context: Optional context for translation.
+
+    Returns:
+        Translated string or None if translation failed.
     """
-
-    def __init__(self) -> None:
-        """Initialize the mock bot with a translator."""
-        self.translator = MockTranslator()
-
-
-class MockTranslator:
-    """Mock translator for testing localization features.
-
-    Simulates the translation process for locale strings.
-    """
-
-    @staticmethod
-    async def translate(
-        string: app_commands.locale_str | str, locale: discord.Locale | str, context: Any = None
-    ) -> str | None:
-        """Translate the given string to the specified locale.
-
-        Args:
-            string: The locale string or regular string to translate.
-            locale: The locale to translate to.
-            context: Optional context for translation.
-
-        Returns:
-            Translated string or None if translation failed.
-        """
-        if isinstance(string, app_commands.locale_str):
-            return f"{string.message}_{locale}"
-        return string
+    if isinstance(string, app_commands.locale_str):
+        return f"{string.message}_{locale}"
+    return string
 
 
 @dataclass
@@ -96,7 +79,11 @@ class MockContext:
             interaction: Optional interaction object to associate with this context.
             message: Optional message object to associate with this context.
         """
-        self.bot = MockBot()
+
+        self.bot = MagicMock(spec=Bot)
+        self.bot.translator = MagicMock(spec=Translator)
+        self.bot.translator.translate = AsyncMock(side_effect=translate)
+
         self.interaction = interaction
         self.message = message or MockMessage()
         self.send_called = False
@@ -154,12 +141,11 @@ def cog(mocker: MockerFixture) -> Cog:
         An initialized Cog instance with mock dependencies.
     """
     mock_bot = mocker.MagicMock(spec=Bot)
-    mock_bot.translator = MockTranslator()
+    mock_bot.translator = MagicMock(spec=Translator)
+    mock_bot.translator.translate = AsyncMock(side_effect=translate)
 
-    # Mock CONFIG
-    mock_config = mocker.MagicMock()
-    mock_config.default_locale = "en-US"
-    mocker.patch("modmail.core.internals.cog.CONFIG", mock_config)
+    # Mock CONFIG's default_locale
+    mocker.patch("modmail.core.internals.cog.CONFIG.default_locale", "en-US")
 
     return Cog(mock_bot)
 

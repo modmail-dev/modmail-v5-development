@@ -59,16 +59,17 @@ all = [
 
 [dependency-groups]
 dev = [
+    "modmail[all]",  # All dependencies are needed for development
     "ruff>=0.11.2",
     "pyright>=1.1.396",
     "isort>=6.0.1",
     "pre-commit<5,>=4.1.0",
     "pytest<9,>=8.3.5",
+    "python-dotenv>=1.0.0",
     # When updating pytest plugins, update it below in the pytest "required_plugins" section too
     "pytest-mock<4,>=3.14.0",
-    "pytest-asyncio<1,>=0.25.3",
+    "pytest-asyncio<0.27.0,>=0.26.0",
     "pytest-cov<7,>=6.0.0",
-    "mock"  # used by pytest-mock
 ]
 debug = [
     "jishaku<2.7,>=2.6.0",
@@ -189,9 +190,9 @@ executionEnvironments = [
 ]
 
 [tool.pytest.ini_options]
-mock_use_standalone_module = true
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
+asyncio_default_fixture_loop_scope = "module"
+asyncio_default_test_loop_scope = "module"
 addopts = "--cov=modmail --cov=modmail/backends --cov=modmail/cogs --cov-report html"
 testpaths = ["tests"]
 required_plugins = ["pytest-mock<4,>=3.14.0", "pytest-asyncio<1,>=0.25.3", "pytest-cov<7,>=6.0.0"]
@@ -199,10 +200,16 @@ filterwarnings = [
     "ignore:.*'audioop' is deprecated.*:DeprecationWarning", # discord.py uses audioop, which is deprecated
 ]
 
+[tool.coverage.run]
+omit = [
+    "*/migrations/*",
+]
+
 [tool.coverage.report]
-exclude_also = [
+exclude_also = [  # Exclude files from coverage report, regex patterns
     "if TYPE_CHECKING:",
-    "if \"pytest\" not in sys.modules:",
+    "if os\\.environ\\.get\\(\"PYTEST_VERSION\"\\) is None:",
+    "if __name__ == \"__main__\":",
     "raise NotImplementedError",
     "raise AssertionError",
 ]

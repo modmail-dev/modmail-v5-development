@@ -7,7 +7,7 @@ that the configuration is correctly loaded and validated from various sources.
 
 from __future__ import annotations
 
-import sys
+import os
 from typing import Literal, TypeVar
 
 from packaging.version import Version
@@ -56,7 +56,7 @@ class Config(BaseSettings):
     logging: LoggingConfig = Field(LoggingConfig(), validate_default=True)
 
     # Don't load .env when testing.
-    if "pytest" not in sys.modules:
+    if os.environ.get("PYTEST_VERSION") is None:
         model_config = SettingsConfigDict(
             env_prefix="modmail_",
             env_file=".env",

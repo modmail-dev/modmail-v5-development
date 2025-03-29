@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-__all__ = ["do_migration"]
+__all__ = ["do_migration", "rollback_migration"]
 
 
 def do_migration(uri: str) -> None:
@@ -38,3 +38,18 @@ def do_migration(uri: str) -> None:
 
     # Run the migrations: upgrade to the latest revision.
     command.upgrade(alembic_cfg, "head")
+
+
+def rollback_migration(uri: str) -> None:
+    """Rollback all SQL database migration done by Alembic.
+
+    Args:
+        uri: The SQL database connection URI.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    ini_location = Path(__file__).absolute().parent / "migrations" / "alembic.ini"
+    alembic_cfg = Config(file_=ini_location)
+    alembic_cfg.set_main_option("sqlalchemy.url", uri)
+    command.downgrade(alembic_cfg, "base")

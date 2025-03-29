@@ -46,9 +46,9 @@ class TestMongoDBDatabaseConfig:
 class TestSQLDatabaseConfig:
     def test_sql_uri_basic(self) -> None:
         """Test basic SQL URI configuration."""
-        config = SQLDatabaseConfig(uri=cast(SecretStr, "sqlite:///modmail.db"))
+        config = SQLDatabaseConfig(uri=cast(SecretStr, "sqlite:///modmail-test.db"))
         assert isinstance(config.uri, SecretStr)
-        assert config.uri.get_secret_value() == "sqlite:///modmail.db"
+        assert config.uri.get_secret_value() == "sqlite:///modmail-test.db"
 
         # PostgreSQL format
         config = SQLDatabaseConfig(uri=cast(SecretStr, "postgresql://user:password@localhost:5432/modmail"))
