@@ -192,7 +192,7 @@ executionEnvironments = [
 mock_use_standalone_module = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "--cov=modmail --cov-report html"
+addopts = "--cov=modmail --cov=modmail/backends --cov=modmail/cogs --cov-report html"
 testpaths = ["tests"]
 required_plugins = ["pytest-mock<4,>=3.14.0", "pytest-asyncio<1,>=0.25.3", "pytest-cov<7,>=6.0.0"]
 filterwarnings = [
