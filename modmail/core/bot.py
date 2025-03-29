@@ -15,7 +15,7 @@ import discord
 from discord.ext import commands
 
 from .. import CONFIG, __version__, utils
-from ..backends import Activity, DBClientBase, Profile
+from ..backends.common import Activity, DBClientBase, Profile
 from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
 from ..errors import DatabaseError
 from .translator import Translator

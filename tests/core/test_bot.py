@@ -11,7 +11,7 @@ from discord.ext import commands
 from pydantic import SecretStr
 from pytest_mock import MockerFixture
 
-from modmail.backends import Activity, DBClientBase, Profile, Settings
+from modmail.backends.common import Activity, DBClientBase, Profile, Settings
 from modmail.backends.mongodb import MongoDBClient
 from modmail.backends.sql import SQLClient
 from modmail.config.models import MongoDBDatabaseConfig, SQLDatabaseConfig

@@ -15,7 +15,7 @@ from sqlalchemy import and_, delete, event, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from modmail.backends import DBClientBase, Profile, Settings
+from modmail.backends.common import DBClientBase, Profile, Settings
 from modmail.enum import ProfileKey, ProfileType
 from modmail.errors import DatabaseConnectionError
 

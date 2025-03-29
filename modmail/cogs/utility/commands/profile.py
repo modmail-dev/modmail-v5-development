@@ -18,7 +18,7 @@ from discord.ext import commands
 
 # noinspection PyProtectedMember
 from modmail import CONFIG, utils
-from modmail.backends import Profile
+from modmail.backends.common import Profile
 
 # noinspection PyProtectedMember
 from modmail.core import Bot, _, lazy_hybrid_group

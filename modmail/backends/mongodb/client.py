@@ -16,7 +16,7 @@ import pymongo.errors
 from beanie import init_beanie  # pyright: ignore [reportUnknownVariableType]  # beanie is not fully typed
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from modmail.backends import DBClientBase, Profile, Settings
+from modmail.backends.common import DBClientBase, Profile, Settings
 from modmail.enum import ProfileKey, ProfileType
 from modmail.errors import DatabaseConnectionError
 

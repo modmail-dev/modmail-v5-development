@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from discord import app_commands
 from discord.ext import commands
 
-from modmail.backends import Activity
+from modmail.backends.common import Activity
 
 # noinspection PyProtectedMember
 from modmail.core import Bot, _, admin_only, lazy_hybrid_group, wrap

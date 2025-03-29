@@ -101,7 +101,7 @@ combine_star = true
 [tool.ruff]
 line-length = 115
 preview = true
-namespace-packages = ["modmail/cogs"]
+namespace-packages = ["modmail/cogs", "modmail/backends"]
 
 [tool.ruff.format]
 docstring-code-format = true
