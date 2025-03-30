@@ -26,11 +26,12 @@ logger = _logging.getLogger(__name__)
 CONFIG: Config
 
 
-def init(config_file_path: str = "config.yaml") -> None:
+def init(config_file_path: str = "config.yaml", *, configure_logging: bool = True) -> None:
     """Initialize the bot by loading the configuration.
 
     Args:
         config_file_path: Path to the configuration file. Defaults to "config.yaml".
+        configure_logging: Whether to configure logging when logging is enabled in the configs.
     """
     global CONFIG  # noqa: PLW0603
     # noinspection PyPep8Naming
@@ -40,7 +41,7 @@ def init(config_file_path: str = "config.yaml") -> None:
         sys.exit(1)
     CONFIG = CONFIG_  # pyright: ignore [reportConstantRedefinition]
 
-    if CONFIG.logging.enabled:
+    if configure_logging and CONFIG.logging.enabled:
         from .logging import setup_logging
 
         setup_logging()
