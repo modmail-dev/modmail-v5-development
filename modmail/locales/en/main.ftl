@@ -11,6 +11,12 @@ ftl-access-level-manager = Manager
 ftl-access-level-admin = Admin
 ftl-access-level-owner = Owner
 
+ftl-msg-permission-denied = You do not have permission to use this command.
+ftl-msg-command-invoke-error = An unknown error occurred while trying to process your command. Please try again later. If the problem persists, please report it to the Modmail team.
+
+ftl-view-prompt-cancel-label = Cancel
+ftl-msg-prompt-timeout = Timed out. Please rerun the command to try again.
+
 ### ========================
 ###         Commands
 ### ========================
@@ -46,6 +52,8 @@ ftl-cmd-profile-name = profile
 ftl-cmd-profile-description = View a list of all profiles.
 ftl-cmd-profile-fallback-name = view
 
+ftl-cmd-profile-no-bot = Bots cannot have profiles.
+
 ftl-modal-profile-customize-title = Customize Profile
 ftl-modal-profile-customize-colour = Colour
 ftl-modal-profile-customize-colour-invalid = Invalid colour. Please use a colour hex code (e.g. #FF0000 for red).
@@ -61,6 +69,7 @@ ftl-view-profile-select-level-success = { $level ->
    *[default] Successfully set the permission access level of { $name } to { $level }.
     [None]    Successfully removed the permission access level of { $name }.
 }
+
 ## Subcommand: Utility.profile.add
 
 ftl-cmd-profile-add-name = add
@@ -87,6 +96,7 @@ ftl-cmd-profile-edit-description = Customize the profile.
 ftl-cmd-profile-edit-message = Customizing the profile of { $name }.
 
 ## Subcommand: Utility.profile.allow
+
 ftl-cmd-profile-allow-name = allow
 ftl-cmd-profile-allow-description = Allow users of this profile to use a command.
 # :param $name: the name of the user or role
@@ -98,6 +108,7 @@ ftl-cmd-profile-override-owner-command = Only bot owners can override this comma
 ftl-cmd-profile-override-command-not-found = Command { $command } not found.
 
 ## Subcommand: Utility.profile.deny
+
 ftl-cmd-profile-deny-name = deny
 ftl-cmd-profile-deny-description = Deny users of this profile from using a command.
 # :param $name: the name of the user or role
@@ -105,6 +116,7 @@ ftl-cmd-profile-deny-description = Deny users of this profile from using a comma
 ftl-cmd-profile-deny-success = Denied { $name } from using { $command }.
 
 ## Subcommand: Utility.profile.unset
+
 ftl-cmd-profile-unset-name = unset
 ftl-cmd-profile-unset-description = Remove an allow/deny override from this profile on a command.
 # The following params can be used for the next 3 lines
@@ -114,21 +126,57 @@ ftl-cmd-profile-unset-success = The override for { $name } on { $command } has b
 ftl-cmd-profile-unset-profile-not-found = { $name } does not have a profile.
 ftl-cmd-profile-unset-override-not-found = No override exists on { $command } for { $name }.
 
+## Command: Modmail.setup
+
+ftl-cmd-setup-name = setup
+ftl-cmd-setup-description = Setup the Modmail bot.
+# :param $guild_name: the name of the staff guild
+ftl-cmd-setup-wrong-guild = You can only setup the Modmail bot in the staff server ({ $guild_name }).
+ftl-cmd-setup-already-running = You can't use this command right now. Please try again later.
+ftl-cmd-setup-not-enough-guild-permissions = I don't have enough permissions to create the Modmail category and channels.
+ftl-cmd-setup-guild-already-configured-prompt = This server is already configured. Do you want to reconfigure it?
+ftl-cmd-setup-guild-already-configured-prompt-continue-anyway = Yes
+ftl-cmd-setup-use-new-category-prompt = Do you want me to create a new category for Modmail?
+ftl-cmd-setup-use-new-category-prompt-new = Yes
+ftl-cmd-setup-use-new-category-prompt-existing = Use an existing category
+ftl-cmd-setup-use-new-category-prompt-existing-category = Please enter the ID or name of the category you want to use for Modmail:
+ftl-cmd-setup-use-new-category-prompt-existing-category-not-found = Category not found.
+ftl-cmd-setup-use-new-category-prompt-existing-category-no-permissions = I don't have enough permissions in this category.
+ftl-cmd-setup-category-name = Modmail
+ftl-cmd-setup-category-create-reason = Category for Modmail.
+ftl-cmd-setup-category-permissions-reason = Category permissions for Modmail.
+ftl-cmd-setup-log-channel-name = thread-logs
+ftl-cmd-setup-log-channel-topic = Modmail logs
+ftl-cmd-setup-log-channel-create-reason = Log channel for Modmail.
+ftl-cmd-setup-storage-channel-name = modmail-storage
+ftl-cmd-setup-storage-channel-topic = Modmail storage (reserved for Modmail use only)
+ftl-cmd-setup-storage-channel-create-reason = Storage channel for Modmail.
+# TODO: Add more information (e.g. quick tutorial) + better format setup complete
+# :param $category: the name of the Modmail category
+# :param $log_channel: the name of the Modmail log channel
+# :param $storage_channel: the name of the Modmail storage channel
+ftl-cmd-setup-complete = Successfully setup Modmail. Your Modmail category is { $category }. I have also created a channel called { $log_channel } for Modmail logs and { $storage_channel } for storing some of my internal data. Feel free to rename and move these channels, but please do not delete them! Please check the permissions of the category and channels to make sure they are correct.
+
 ### ========================
 ###         Messages
 ### ========================
 
 ## Status messages
 
-# current-status and set-status has $status as the name of the current status (formatted in models section)
-# current-activity and set-activity has $activity as the name of the current activity (formatted in models section)
+# The following params can be used for the next 2 lines
+# :param $status: the status name (formatted in models section)
 ftl-msg-status-current-status = Current status: { $status }
-ftl-msg-status-current-activity = Current activity: { $activity }
-ftl-msg-status-no-status = No status is currently set.
 ftl-msg-status-set-status = Set status to { $status }.
+# The following params can be used for the next 2 lines
+# :param $activity: the activity name (formatted in models section)
+ftl-msg-status-current-activity = Current activity: { $activity }
 ftl-msg-status-set-activity = Set activity to { $activity }.
+ftl-msg-status-no-status = No status is currently set.
 ftl-msg-status-clear-status = Cleared status.
 
+# :param $user_or_role: the name of the user or role
+ftl-msg-grant-access-reason = Granting access to { $user_or_role } to Modmail category and channels.
+ftl-msg-revoke-access-reason = Revoking access to { $user_or_role } to Modmail category and channels.
 
 ### ========================
 ###          Models

@@ -15,7 +15,13 @@ from discord.ext import commands
 
 from ... import CONFIG
 
-__all__ = ["LazyHybridCommand", "LazyHybridGroup", "lazy_hybrid_command", "lazy_hybrid_group", "wrap"]
+__all__ = [
+    "LazyHybridCommand",
+    "LazyHybridGroup",
+    "lazy_hybrid_command",
+    "lazy_hybrid_group",
+    "wrap",
+]
 
 
 type Co = Callable[..., Coroutine[Any, Any, Any]]

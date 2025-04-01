@@ -15,7 +15,12 @@ from .internals import LazyHybridCommand
 
 type AnyCo = commands.Command[Any, Any, Any] | LazyHybridCommand[Any] | Callable[..., Coroutine[Any, Any, Any]]
 
-__all__ = ["admin_only", "manager_only", "owner_only", "staff_only"]
+__all__ = [
+    "admin_only",
+    "manager_only",
+    "owner_only",
+    "staff_only",
+]
 
 
 def _set_access_level[T: AnyCo](func: T, access_level: RequiredAccessLevel) -> T:

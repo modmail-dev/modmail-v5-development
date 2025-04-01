@@ -17,9 +17,7 @@ from .models import Config
 logger = logging.getLogger(__name__)
 
 
-__all__ = [
-    "load_config",
-]
+__all__ = ["load_config"]
 
 
 def load_config(file_path: str | Path) -> Config | None:

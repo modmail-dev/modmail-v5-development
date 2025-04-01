@@ -85,12 +85,15 @@ def setup_logging() -> None:
 
     logger_dc2 = logging.getLogger("discord.state")
     logger_dc2.setLevel(CONFIG.logging.discord_state_level)
+    logger_dc2.addHandler(handler)
 
     logger_dc3 = logging.getLogger("discord.http")
     logger_dc3.setLevel(CONFIG.logging.discord_http_level)
+    logger_dc3.addHandler(handler)
 
     logger_dc4 = logging.getLogger("discord.gateway")
     logger_dc4.setLevel(CONFIG.logging.discord_gateway_level)
+    logger_dc4.addHandler(handler)
 
     # Configure RotatingFileHandler for file logging with rotation.
     if CONFIG.logging.logfile is not None:

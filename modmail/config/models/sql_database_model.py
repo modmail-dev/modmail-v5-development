@@ -8,9 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, SecretStr, field_validator
 
-__all__ = [
-    "SQLDatabaseConfig",
-]
+__all__ = ["SQLDatabaseConfig"]
 
 
 class SQLDatabaseConfig(BaseModel):

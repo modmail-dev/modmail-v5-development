@@ -26,7 +26,7 @@ from modmail.enum import (
     RequiredAccessLevel,
     StatusType,
 )
-from modmail.errors import DatabaseError
+from modmail.errors import DatabaseError, NoStaffGuildError
 
 
 class Context(commands.Context[Bot]):
@@ -38,11 +38,12 @@ def mock_bot(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch) -> Bot:
     """Return a Bot instance with key mocks for testing."""
     bot = Bot()
     mocker.patch.object(bot, "is_owner", return_value=False)
-    mocker.patch.object(bot, "wait_until_ready")
     mocker.patch.object(bot, "start")
     mocker.patch.object(bot, "close")
     mocker.patch.object(bot, "database_client", spec=DBClientBase)
     mocker.patch.object(bot, "load_extension")
+    mocker.patch.object(bot, "_bot_initialized_event", spec=asyncio.Event)
+    monkeypatch.setattr("discord.Client.wait_until_ready", mocker.AsyncMock())
 
     # Mock application info and command tree
     app_info = mocker.MagicMock(spec=discord.AppInfo)
@@ -62,6 +63,7 @@ def context(mock_bot: Bot, mocker: MockerFixture) -> Context:
     ctx.bot = mock_bot
     ctx.author = mocker.MagicMock(spec=discord.Member)
     ctx.author.bot = False
+    ctx.interaction = mocker.MagicMock(spec=discord.Interaction)
 
     @admin_only
     @commands.command()
@@ -222,7 +224,7 @@ async def test_bot_permission_check_owner(mock_bot: Bot, context: Context, mocke
     """Test that bot owner bypasses permission checks."""
     mocker.patch.object(mock_bot, "is_owner", return_value=True)
     assert await mock_bot._permission_check(context), context._perm_check_reason
-    assert context._perm_check_reason == "owner"
+    assert "owner" in context._perm_check_reason
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -230,7 +232,7 @@ async def test_bot_permission_check_bot(mock_bot: Bot, context: Context) -> None
     """Test rejection of bot accounts in permission checks."""
     context.author.bot = True
     assert not await mock_bot._permission_check(context), context._perm_check_reason
-    assert context._perm_check_reason == "bot"
+    assert "bot" in context._perm_check_reason
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -731,7 +733,7 @@ def test_run_bot_uvloop_available(mock_bot: Bot, mocker: MockerFixture) -> None:
 
     # noinspection PyUnreachableCode
     assert excinfo.value.code == 0  # Clean exit
-    mock_bot.start.assert_called_once()
+    cast(Mock, mock_bot.start).assert_called_once()
 
 
 def test_run_bot_uvloop_import_error(mock_bot: Bot, mocker: MockerFixture) -> None:
@@ -754,7 +756,7 @@ def test_run_bot_uvloop_import_error(mock_bot: Bot, mocker: MockerFixture) -> No
 
     # noinspection PyUnreachableCode
     assert excinfo.value.code == 0  # Clean exit
-    mock_bot.start.assert_called_once()
+    cast(Mock, mock_bot.start).assert_called_once()
 
 
 def test_run_bot_with_jishaku(mock_bot: Bot, mocker: MockerFixture) -> None:
@@ -772,16 +774,7 @@ def test_run_bot_with_jishaku(mock_bot: Bot, mocker: MockerFixture) -> None:
     # noinspection PyUnreachableCode
     assert excinfo.value.code == 0  # Clean exit
     load_extension_mock.assert_any_call("jishaku")
-    mock_bot.start.assert_called_once()
-
-
-@pytest.mark.asyncio(loop_scope="function")
-async def test_on_event_valid(mock_bot: Bot, mocker: MockerFixture) -> None:
-    """Test execution of built-in event handlers."""
-    set_bot_presence_mock = mocker.patch.object(mock_bot, "set_bot_presence")
-    await mock_bot.on_ready()
-    await mock_bot.on_connect()
-    set_bot_presence_mock.assert_called_once()
+    cast(Mock, mock_bot.start).assert_called_once()
 
 
 def test_get_discord_presence_from_settings(mock_bot: Bot, mocker: MockerFixture) -> None:
@@ -870,12 +863,223 @@ async def test_on_command_error(mock_bot: Bot, context: Context, mocker: MockerF
 
     # Test case 2: CheckFailure error (should be ignored)
     error = commands.CheckFailure()
-    context._perm_check_reason = "test reason"
+    context._perm_check_reason = "fail: test reason"
     await mock_bot.on_command_error(context, error)
     super_error_handler.assert_not_called()
     super_error_handler.reset_mock()
 
-    # Test case 3: Other errors (should be propagated to super)
+    # Test case 3: CommandInvokeError with regular exception
+    original_error = Exception("Regular error")
+    error = commands.CommandInvokeError(original_error)
+
+    # Mock translator and reply methods
+    mock_translator = mocker.MagicMock()
+    mock_translator.translate = mocker.AsyncMock(return_value="Error message")
+    mocker.patch.object(mock_bot, "translator", mock_translator)
+    mock_reply = mocker.AsyncMock()
+    context.reply = mock_reply
+
+    # Test interaction case
+    context.interaction.locale = "en"
+    await mock_bot.on_command_error(context, error)
+    mock_translator.translate.assert_called_once()
+    mock_reply.assert_called_once_with("Error message", ephemeral=True)
+    super_error_handler.assert_not_called()
+
+    # Reset mocks for non-interaction case
+    mock_reply.reset_mock()
+    mock_translator.translate.reset_mock()
+    context.interaction = None
+    cast(Mock, context).channel = mocker.MagicMock()
+    cast(Mock, context).me = mocker.MagicMock()
+    permissions = mocker.MagicMock()
+    permissions.read_messages = True
+    permissions.send_messages = True
+    context.channel.permissions_for.return_value = permissions
+
+    await mock_bot.on_command_error(context, error)
+    mock_translator.translate.assert_called_once()
+    mock_reply.assert_called_once_with("Error message", ephemeral=True)
+    super_error_handler.assert_not_called()
+    super_error_handler.reset_mock()
+
+    # Test case 4: Other errors (should be propagated to super)
     error = commands.MissingRequiredArgument(param=mocker.MagicMock(spec=commands.Parameter))
     await mock_bot.on_command_error(context, error)
     super_error_handler.assert_called_once_with(context, error)
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_on_ready_with_staff_guild(
+    mock_bot: Bot, mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test on_ready when the bot is in the staff guild."""
+    # Mock the staff guild to exist
+    guild = mocker.MagicMock(spec=discord.Guild)
+    guild.id = 123456789012345
+    guild.name = "Staff Guild"
+    other_guild = mocker.MagicMock(spec=discord.Guild)
+    other_guild.id = 1234567890123456
+    other_guild.name = "Other Guild"
+    monkeypatch.setattr("modmail.core.internals.StaffGuild.exists", True)
+    monkeypatch.setattr("modmail.core.internals.StaffGuild.guild", guild)
+
+    mocker.patch("modmail.core.bot.CONFIG.bot.staff_server_id", guild.id)
+    mocker.patch("modmail.core.bot.Version.is_prerelease", False)
+    monkeypatch.setattr("modmail.core.Bot.guilds", [guild])
+
+    await mock_bot.on_ready()
+    cast(Mock, mock_bot.close).assert_not_called()
+
+    # Test case 2: Bot is in staff guild but is a prerelease and multiple guilds
+    monkeypatch.setattr("modmail.core.Bot.guilds", [guild, other_guild])
+    mocker.patch("modmail.core.bot.Version.is_prerelease", True)
+    await mock_bot.on_ready()
+    cast(Mock, mock_bot.close).assert_not_called()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_on_ready_without_staff_guild(
+    mock_bot: Bot, mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test on_ready when the bot is not in the staff guild."""
+    # Mock the staff guild to not exist
+    monkeypatch.setattr("modmail.core.internals.StaffGuild.exists", False)
+
+    other_guild = mocker.MagicMock(spec=discord.Guild)
+    other_guild.id = 123456789012345
+    other_guild.name = "Other Guild"
+    monkeypatch.setattr("modmail.core.Bot.guilds", [other_guild])
+    mocker.patch("modmail.core.bot.CONFIG.bot.staff_server_id", 1234567890000000)
+
+    await mock_bot.on_ready()
+
+    # The bot should exit
+    cast(Mock, mock_bot.close).assert_called_once()
+    assert mock_bot._exit_status == 1
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_on_connect_with_staff_guild(
+    mock_bot: Bot, mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test on_connect when the bot is in the staff guild."""
+    # Mock the staff guild to exist
+    monkeypatch.setattr("modmail.core.internals.StaffGuild.exists", True)
+    mocker.patch.object(mock_bot, "set_bot_presence")
+
+    await mock_bot.on_connect()
+
+    # The bot should set presence and not exit
+    cast(Mock, mock_bot.set_bot_presence).assert_called_once()
+    cast(Mock, mock_bot.close).assert_not_called()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_on_connect_without_staff_guild(
+    mock_bot: Bot, mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test on_connect when the bot is not in the staff guild."""
+    # Mock the staff guild to not exist
+    monkeypatch.setattr("modmail.core.internals.StaffGuild.exists", False)
+    mocker.patch.object(mock_bot, "set_bot_presence")
+    mocker.patch.object(mock_bot, "_not_in_guild_close")
+
+    await mock_bot.on_connect()
+
+    cast(Mock, mock_bot._not_in_guild_close).assert_called_once()
+    cast(Mock, mock_bot.set_bot_presence).assert_not_called()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_on_guild_remove_staff_guild(mock_bot: Bot, mocker: MockerFixture) -> None:
+    """Test on_guild_remove when the staff guild is removed."""
+    guild = mocker.MagicMock(spec=discord.Guild)
+    guild.id = 123456789012345
+    guild.name = "Staff Guild"
+
+    mocker.patch("modmail.core.bot.CONFIG.bot.staff_server_id", guild.id)
+    mocker.patch.object(mock_bot, "_not_in_guild_close")
+
+    # Call on_guild_remove with the staff guild
+    await mock_bot.on_guild_remove(guild)
+
+    cast(Mock, mock_bot._not_in_guild_close).assert_called_once()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_on_guild_remove_other_guild(mock_bot: Bot, mocker: MockerFixture) -> None:
+    """Test on_guild_remove when a non-staff guild is removed."""
+    # Create a mock guild with a different ID than staff guild
+    guild = mocker.MagicMock(spec=discord.Guild)
+    guild.id = 123456789012345
+    guild.name = "Other Guild"
+
+    mocker.patch("modmail.core.bot.CONFIG.bot.staff_server_id", 1098765432109876)
+    mocker.patch.object(mock_bot, "_not_in_guild_close")
+
+    # Call on_guild_remove with the other guild
+    await mock_bot.on_guild_remove(guild)
+
+    cast(Mock, mock_bot._not_in_guild_close).assert_not_called()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_not_in_guild_close(mock_bot: Bot, caplog: pytest.LogCaptureFixture) -> None:
+    """Test _not_in_guild_close method logs critical error and exits the bot."""
+    caplog.set_level(logging.CRITICAL)
+    await mock_bot._not_in_guild_close()
+
+    # Check the bot tried to close and set exit status
+    cast(Mock, mock_bot.close).assert_called_once()
+    assert mock_bot._exit_status == 1
+
+    assert any("removed from the staff server" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_no_staff_guild_error(mock_bot: Bot, context: Context, mocker: MockerFixture) -> None:
+    """Test that NoStaffGuildError in command invocation triggers bot exit."""
+    # Create a CommandInvokeError with NoStaffGuildError as the original
+    original_error = NoStaffGuildError("Test error")
+    error = commands.CommandInvokeError(original_error)
+
+    not_in_guild_close_mock = mocker.patch.object(mock_bot, "_not_in_guild_close")
+    # Mock super().on_command_error
+    super_error_handler = mocker.patch.object(commands.Bot, "on_command_error")
+
+    await mock_bot.on_command_error(context, error)
+
+    not_in_guild_close_mock.assert_called_once()
+    super_error_handler.assert_not_called()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_on_error(mock_bot: Bot, mocker: MockerFixture) -> None:
+    """Test on_error handling, especially for NoStaffGuildError."""
+    not_in_guild_close_mock = mocker.patch.object(mock_bot, "_not_in_guild_close")
+
+    # Mock super().on_error
+    super_error_handler = mocker.patch.object(commands.Bot, "on_error")
+
+    # Test case 1: NoStaffGuildError
+    error = NoStaffGuildError("Test error")
+    mocker.patch("sys.exc_info", return_value=(None, error, None))
+
+    await mock_bot.on_error("some_event")
+
+    not_in_guild_close_mock.assert_called_once()
+    super_error_handler.assert_not_called()
+
+    # Reset mocks
+    not_in_guild_close_mock.reset_mock()
+    super_error_handler.reset_mock()
+
+    # Test case 2: Other error
+    other_error = Exception("Some other error")
+    mocker.patch("sys.exc_info", return_value=(None, other_error, None))
+
+    await mock_bot.on_error("some_event", "arg1", kwarg1="value")
+
+    not_in_guild_close_mock.assert_not_called()
+    super_error_handler.assert_called_once_with("some_event", "arg1", kwarg1="value")

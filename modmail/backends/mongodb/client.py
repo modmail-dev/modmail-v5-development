@@ -26,9 +26,7 @@ from .models import MongoDBActivityModel, MongoDBProfileDocument, MongoDBSetting
 if TYPE_CHECKING:
     from modmail.config.models import Config, MongoDBDatabaseConfig
 
-__all__ = [
-    "MongoDBClient",
-]
+__all__ = ["MongoDBClient"]
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +85,15 @@ class MongoDBClient(DBClientBase):
         """
         assert self.__settings_model is not None, "Settings model not loaded."
         return self.__settings_model
+
+    @property
+    def profiles(self) -> list[Profile]:
+        """Get the list of profiles from the cache.
+
+        Returns:
+            list[Profile]: A list of profiles.
+        """
+        return [profile[1] for profile in self.__profiles_cache.values()]
 
     @property
     def _mongodb_config(self) -> MongoDBDatabaseConfig:

@@ -15,9 +15,7 @@ if TYPE_CHECKING:
 
     from .models import Profile, Settings
 
-__all__ = [
-    "DBClientBase",
-]
+__all__ = ["DBClientBase"]
 
 
 class DBClientBase(ABC):  # pragma: no cover
@@ -41,6 +39,15 @@ class DBClientBase(ABC):  # pragma: no cover
 
         Returns:
             The settings model.
+        """
+
+    @property
+    @abstractmethod
+    def profiles(self) -> list[Profile]:
+        """Gets the list of profiles.
+
+        Returns:
+            A list of profile objects.
         """
 
     @abstractmethod

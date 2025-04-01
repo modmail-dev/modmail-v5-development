@@ -13,9 +13,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
-__all__ = [
-    "BotConfig",
-]
+__all__ = ["BotConfig"]
 
 logger = logging.getLogger(__name__)
 

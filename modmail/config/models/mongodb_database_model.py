@@ -11,9 +11,7 @@ import logging
 
 from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
-__all__ = [
-    "MongoDBDatabaseConfig",
-]
+__all__ = ["MongoDBDatabaseConfig"]
 
 logger = logging.getLogger(__name__)
 

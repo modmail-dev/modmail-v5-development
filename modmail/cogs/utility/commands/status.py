@@ -13,9 +13,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from modmail.backends.common import Activity
-
-# noinspection PyProtectedMember
-from modmail.core import Bot, _, admin_only, lazy_hybrid_group, wrap
+from modmail.core import Bot, Str, _, admin_only, lazy_hybrid_group, wrap
 from modmail.enum import ActivityType, StatusType
 
 if TYPE_CHECKING:
@@ -31,7 +29,7 @@ __all__ = ["status_command"]
     fallback=_("ftl-cmd-status-fallback-name"),
     description=_("ftl-cmd-status-description"),
 )
-async def status_command(self: Utility, ctx: commands.Context[Bot], *, status: str | None = None) -> None:
+async def status_command(self: Utility, ctx: commands.Context[Bot], *, status: Str | None = None) -> None:
     """Set the bot's status or activity message.
 
     Possible statuses:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
@@ -67,7 +68,6 @@ class MockContext:
         send_called: Whether send() has been called.
         sent_args: Arguments passed to the send method.
         sent_content: Content sent through the context.
-        kwargs: Additional keyword arguments.
     """
 
     def __init__(
@@ -89,7 +89,6 @@ class MockContext:
         self.send_called = False
         self.sent_args: dict[str, Any] = {}
         self.sent_content: str | None = None
-        self.kwargs: dict[str, Any] = {}
 
     async def send(self, content: str | None = None, **kwargs: Any) -> discord.Message:
         """Send a message through this context.
@@ -153,7 +152,7 @@ def cog(mocker: MockerFixture) -> Cog:
 @pytest.mark.asyncio
 async def test_reply_with_normal_context(cog: Cog, ctx: MockContext) -> None:
     """Test reply method with standard context without interaction."""
-    await cog.reply(cast(commands.Context[Bot], ctx), "Test message")
+    await cog.reply(cast(commands.Context[Bot], ctx), "Test message", auto_embed=False)
 
     assert ctx.send_called
     assert ctx.sent_content == "Test message"
@@ -164,7 +163,7 @@ async def test_reply_with_normal_context(cog: Cog, ctx: MockContext) -> None:
 @pytest.mark.asyncio
 async def test_reply_with_interaction_context(cog: Cog, interaction_ctx: MockContext) -> None:
     """Test reply method handles interaction contexts properly."""
-    await cog.reply(cast(commands.Context[Bot], interaction_ctx), "Test message")
+    await cog.reply(cast(commands.Context[Bot], interaction_ctx), "Test message", auto_embed=False)
 
     assert interaction_ctx.send_called
     assert interaction_ctx.sent_content == "Test message"
@@ -172,10 +171,23 @@ async def test_reply_with_interaction_context(cog: Cog, interaction_ctx: MockCon
 
 
 @pytest.mark.asyncio
+async def test_reply_with_original_message(cog: Cog, ctx: MockContext, mocker: MockerFixture) -> None:
+    """Test reply method with standard context without interaction."""
+
+    message = MockMessage()
+    message.edit = mocker.AsyncMock()
+
+    await cog.reply(cast(commands.Context[Bot], ctx), "Test message", auto_embed=False, original_message=message)
+
+    assert not ctx.send_called
+    message.edit.assert_awaited_once_with(content="Test message")
+
+
+@pytest.mark.asyncio
 async def test_send_with_locale_str(cog: Cog, ctx: MockContext) -> None:
     """Test send method correctly handles locale_str translation."""
     locale_string = app_commands.locale_str("Test message")
-    await cog.send(cast(commands.Context[Bot], ctx), locale_string)
+    await cog.send(cast(commands.Context[Bot], ctx), locale_string, auto_embed=False)
 
     assert ctx.send_called
     assert ctx.sent_content == "Test message_en-US"
@@ -189,7 +201,7 @@ async def test_send_with_locale_str_translation_none(cog: Cog, ctx: MockContext,
     # Mock the translator to return None for translation
     cog.bot.translator.translate = mocker.AsyncMock(return_value=None)
 
-    await cog.send(cast(commands.Context[Bot], ctx), locale_string)
+    await cog.send(cast(commands.Context[Bot], ctx), locale_string, auto_embed=False)
 
     assert ctx.send_called
     assert ctx.sent_content == "Test message"  # Should fallback to the message
@@ -347,3 +359,85 @@ def test_create_cog() -> None:
     assert TestCog.__name__ == "TestCog"
     assert hasattr(TestCog, "cmd1")
     assert hasattr(TestCog, "cmd2")
+
+
+@pytest.mark.asyncio
+async def test_prompt_with_response(cog: Cog, ctx: MockContext, mocker: MockerFixture) -> None:
+    """Test the prompt method when the user provides a response."""
+    # Mock discord.ui.View
+    mocker.patch.object(discord.ui.View, "wait")
+    mocker.patch.object(discord.ui.View, "stop")
+
+    # Mock the prompt message
+    prompt_message = MockMessage(content="Prompt message")
+    prompt_message.edit = mocker.AsyncMock()
+
+    # Mock message response
+    response_message = MockMessage(content="User response")
+
+    # Mock listeners
+    cog.bot._listeners = {"message": []}
+    mocker.patch("modmail.core.internals.cog._", side_effect=lambda x="text": x)
+    cog.bot.loop = mocker.MagicMock(spec=asyncio.BaseEventLoop)
+
+    # Mock asyncio.wait_for to return a response
+    wait_for_mock = mocker.patch("asyncio.wait_for", autospec=True)
+    wait_for_mock.return_value = response_message
+
+    # Mock a send call to return our mock prompt message
+    ctx.send = AsyncMock(return_value=prompt_message)
+
+    # Call the prompt method
+    result_prompt, result_response = await cog.prompt(ctx, "Test prompt", wait_for=10.0, auto_embed=False)
+
+    # Verify the prompt was sent with the view
+    assert "view" in ctx.send.call_args[1]
+
+    # Verify wait_for was called with the right timeout
+    wait_for_mock.assert_awaited_once()
+    assert wait_for_mock.call_args[0][1] == 10.0
+
+    # Verify the result returned contains the expected messages
+    assert result_prompt == prompt_message
+    assert result_response == response_message
+
+    # Verify the view was removed after getting a response
+    prompt_message.edit.assert_awaited_once_with(view=None)
+
+
+@pytest.mark.asyncio
+async def test_prompt_timeout(cog: Cog, ctx: MockContext, mocker: MockerFixture) -> None:
+    """Test the prompt method when it times out."""
+    # Mock discord.ui.View
+    mocker.patch.object(discord.ui.View, "wait")
+    mocker.patch.object(discord.ui.View, "stop")
+
+    # Mock the prompt message
+    prompt_message = MockMessage(content="Prompt message")
+    prompt_message.edit = mocker.AsyncMock()
+
+    # Mock listeners
+    cog.bot._listeners = {"message": []}
+    mocker.patch("modmail.core.internals.cog._", side_effect=lambda x="text": x)
+    cog.bot.loop = mocker.MagicMock(spec=asyncio.BaseEventLoop)
+
+    # Mock asyncio.wait_for to timeout
+    wait_for_mock = mocker.patch("asyncio.wait_for", autospec=True)
+    wait_for_mock.side_effect = TimeoutError("Timeout")
+
+    # Mock a send call to return our mock prompt message
+    ctx.send = AsyncMock(return_value=prompt_message)
+
+    # Mock the reply method
+    reply_mock = mocker.patch.object(cog, "reply", autospec=True)
+
+    # Call the prompt method
+    result_prompt, result_response = await cog.prompt(ctx, "Test prompt", wait_for=10.0, reply=False)
+
+    # Verify the result returned contains the expected message and None response
+    assert result_prompt == prompt_message
+    assert result_response is None
+
+    # Verify the timeout message was sent
+    reply_mock.assert_awaited_once()
+    assert "ftl-msg-prompt-timeout" in str(reply_mock.call_args)

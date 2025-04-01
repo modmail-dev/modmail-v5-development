@@ -8,4 +8,6 @@ from __future__ import annotations
 
 from .cog import *
 from .command import *
+from .converters import *
 from .embed import *
+from .staff_guild import *

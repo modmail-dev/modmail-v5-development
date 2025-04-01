@@ -11,9 +11,7 @@ from modmail.enum import StatusType
 
 from .activity_model import Activity
 
-__all__ = [
-    "Settings",
-]
+__all__ = ["Settings"]
 
 
 class Settings(BaseModel):
@@ -27,6 +25,8 @@ class Settings(BaseModel):
         last_slash_minimum_permission_int: Last minimum permission integer for slash commands.
         main_category_id: Main category identifier.
         fallback_category_id: Fallback category identifier.
+        log_channel_id: Log channel identifier.
+        storage_channel_id: Storage channel identifier.
         status: The bot's status.
         activity: The bot's activity.
     """
@@ -40,5 +40,7 @@ class Settings(BaseModel):
     last_slash_minimum_permission_int: int | None = None  # The last minimum permission int for slash commands
     main_category_id: int | None = None
     fallback_category_id: int | None = None
+    log_channel_id: int | None = None
+    storage_channel_id: int | None = None
     status: StatusType | None = None
     activity: Activity | None = None

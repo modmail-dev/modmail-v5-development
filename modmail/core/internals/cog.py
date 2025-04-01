@@ -7,6 +7,7 @@ and improved context handling.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +16,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ... import CONFIG
+from ..translator import _
 from .embed import EmbedProxy
 
 if TYPE_CHECKING:
@@ -45,7 +47,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         ctx: commands.Context[Bot],
         content: str | app_commands.locale_str | None,
         *,
-        auto_embed: bool = False,
+        auto_embed: bool = True,
         **kwargs: Any,
     ) -> discord.Message:
         """Reply to a command context with a message.
@@ -64,7 +66,9 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         """
         # Same reply logic as ctx.send()
         if ctx.interaction is None:
-            return await self.send(ctx, content, auto_embed=auto_embed, reference=ctx.message, **kwargs)
+            if kwargs.get("reference") is None:
+                kwargs["reference"] = ctx.message
+            return await self.send(ctx, content, auto_embed=auto_embed, **kwargs)
         return await self.send(ctx, content, auto_embed=auto_embed, **kwargs)
 
     async def send(
@@ -72,7 +76,8 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         ctx: commands.Context[Bot],
         content: str | app_commands.locale_str | None,
         *,
-        auto_embed: bool = False,
+        auto_embed: bool = True,
+        original_message: discord.Message | None = None,
         **kwargs: Any,
     ) -> discord.Message:
         """Send a message using the command context.
@@ -84,6 +89,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
             ctx: The command context to use for sending.
             content: The message content to send.
             auto_embed: Whether to automatically convert the content to an embed.
+            original_message: The original message if editing a message instead of sending a new one.
             **kwargs: Additional keyword arguments to pass to the send method.
 
         Returns:
@@ -107,12 +113,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
 
         # Translate the message if it's a locale_str
         if isinstance(content, app_commands.locale_str):
-            translated_message = await self.bot.translator.translate(content, locale)
-            if translated_message is not None:
-                content = translated_message
-            else:
-                logger.warning("Failed to translate message: %s", content)
-                content = content.message
+            content = await self.translate(ctx, content)
 
         # Translate embed and embeds in kwargs
         if "embed" in kwargs:
@@ -129,6 +130,9 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
                     embeds.append(embed)
             kwargs["embeds"] = embeds
 
+        if original_message is not None:
+            kwargs.pop("reference", None)  # Remove reference if it exists
+            return await original_message.edit(content=content, **kwargs)
         return await ctx.send(content, **kwargs)
 
     # TODO: implement caching
@@ -154,6 +158,230 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
             return string.message
         return message
 
+    async def prompt(
+        self,
+        ctx: commands.Context[Bot],
+        content: str | app_commands.locale_str | None,
+        *,
+        auto_embed: bool = False,
+        reply: bool = True,
+        wait_for: float | int = 120.0,
+        **kwargs: Any,
+    ) -> tuple[discord.Message, discord.Message | None]:
+        """Prompt the user with a message.
+
+        Args:
+            ctx: The command context to use for sending.
+            content: The message content to send.
+            auto_embed: Whether to automatically convert the content to an embed.
+            reply: Whether to use ctx.reply() instead of ctx.send().
+            wait_for: The time in seconds to wait for a response before timing out.
+            **kwargs: Additional keyword arguments to pass to the send method.
+
+        Returns:
+            A tuple of the prompt message and the user's response Discord message object
+            if they responded, else None.
+        """
+        ui_cancel_label = await self.translate(ctx, _("ftl-view-prompt-cancel-label"))
+
+        class CancelButtonView(discord.ui.View):
+            """A view with a cancel button for user interaction."""
+
+            def __init__(self) -> None:
+                """Initialize the CancelButtonView with a timeout."""
+                super().__init__(timeout=wait_for)
+
+            async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+                """Check if the interaction is from the user who invoked the command.
+
+                Args:
+                    interaction: The interaction to check.
+
+                Returns:
+                    True if the interaction is from the user who invoked the command, False otherwise.
+                """
+                return interaction.user == ctx.author
+
+            async def on_timeout(self) -> None:
+                """Handle the timeout of the view.
+
+                This method is called when the view times out.
+                """
+                try:
+                    await prompt_message.edit(view=None)
+                finally:
+                    self.stop()
+
+            @discord.ui.button(label=ui_cancel_label, style=discord.ButtonStyle.danger)
+            async def cancel(
+                self, interaction: discord.Interaction, button: discord.ui.Button[CancelButtonView]
+            ) -> None:
+                """Handle the cancel button interaction.
+
+                Args:
+                    interaction: The interaction that triggered the button.
+                    button: The button that was pressed.
+                """
+                try:
+                    future.cancel("User cancelled the prompt.")
+                    await interaction.response.defer()
+                    await prompt_message.delete()  # Delete the prompt message
+                finally:
+                    self.stop()
+
+        view = CancelButtonView()
+        if reply:
+            prompt_message = await self.reply(ctx, content, auto_embed=auto_embed, view=view, **kwargs)
+        else:
+            prompt_message = await self.send(ctx, content, auto_embed=auto_embed, view=view, **kwargs)
+
+        def check(m: discord.Message) -> bool:
+            return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
+
+        # Similar to bot.wait_for(), but we're doing creating the wait_for manually here to allow future.cancel()
+        future = self.bot.loop.create_future()
+        try:
+            listeners: list[Any] = self.bot._listeners["message"]  # pyright: ignore [reportUnknownMemberType, reportPrivateUsage]
+        except KeyError:
+            listeners = []
+            self.bot._listeners["message"] = listeners  # pyright: ignore [reportUnknownMemberType, reportPrivateUsage]
+        listeners.append((future, check))
+
+        try:
+            message = await asyncio.wait_for(future, wait_for)
+        except TimeoutError:
+            await self.reply(ctx, _("ftl-msg-prompt-timeout"))
+            return prompt_message, None
+        finally:
+            view.stop()
+        await prompt_message.edit(view=None)
+        return prompt_message, message
+
+    async def prompt_choices(
+        self,
+        ctx: commands.Context[Bot],
+        content: str | app_commands.locale_str | None,
+        choices: list[str | app_commands.locale_str],
+        *,
+        auto_embed: bool = False,
+        reply: bool = True,
+        wait_for: float | int = 120.0,
+        **kwargs: Any,
+    ) -> tuple[discord.Message, int | None]:
+        """Prompt the user with a message and ask to choose a choice via buttons.
+
+        Args:
+            ctx: The command context to use for sending.
+            content: The message content to send.
+            choices: The list of choices to present to the user.
+            auto_embed: Whether to automatically convert the content to an embed.
+            reply: Whether to use ctx.reply() instead of ctx.send().
+            wait_for: The time in seconds to wait for a response before timing out.
+            **kwargs: Additional keyword arguments to pass to the send method.
+
+        Returns:
+            A tuple of the prompt message and the index of the chosen choice if the user chose one, else None.
+        """
+        choices_labels = [
+            await self.translate(ctx, choice) if isinstance(choice, app_commands.locale_str) else choice
+            for choice in choices
+        ]
+        reply_method = self.reply
+        ui_cancel_label = await self.translate(ctx, _("ftl-view-prompt-cancel-label"))
+
+        class PromptChoiceView(discord.ui.View):
+            """A view with buttons for user to choose from multiple choices."""
+
+            def __init__(self) -> None:
+                """Initialize the PromptChoiceView with choices and a timeout."""
+                self.result: int | None = None
+                super().__init__(timeout=wait_for)
+
+                # Create buttons for each choice
+                for i, label in enumerate(choices_labels):
+
+                    def create_button(i: int, label: str) -> discord.ui.Button[PromptChoiceView]:
+                        """Create a button for a choice.
+
+                        Args:
+                            i: The index of the choice.
+                            label: The label of the button.
+
+                        Returns:
+                            The created button.
+                        """
+                        button = discord.ui.Button[PromptChoiceView](
+                            label=label, style=discord.ButtonStyle.primary
+                        )
+
+                        async def button_callback(interaction: discord.Interaction) -> None:
+                            """Handle the button interaction.
+
+                            Args:
+                                interaction: The interaction that triggered the button.
+                            """
+                            self.result = i
+                            try:
+                                await interaction.response.defer()
+                                await prompt_message.edit(view=None)
+                            finally:
+                                self.stop()
+
+                        button.callback = button_callback
+                        return button
+
+                    self.add_item(create_button(i, label))
+
+                cancel_button = discord.ui.Button[PromptChoiceView](
+                    label=ui_cancel_label, style=discord.ButtonStyle.danger
+                )
+
+                async def cancel_callback(interaction: discord.Interaction) -> None:
+                    """Handle the cancel button interaction.
+
+                    Args:
+                        interaction: The interaction that triggered the button.
+                    """
+                    try:
+                        await interaction.response.defer()
+                        await prompt_message.delete()  # Delete the prompt message
+                    finally:
+                        self.stop()
+
+                cancel_button.callback = cancel_callback
+                self.add_item(cancel_button)  # Add the cancel button to the end
+
+            async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+                """Check if the interaction is from the user who invoked the command.
+
+                Args:
+                    interaction: The interaction to check.
+
+                Returns:
+                    True if the interaction is from the user who invoked the command, False otherwise.
+                """
+                return interaction.user == ctx.author
+
+            async def on_timeout(self) -> None:
+                """Handle the timeout of the view.
+
+                This method is called when the view times out.
+                """
+                try:
+                    await reply_method(ctx, _("ftl-msg-prompt-timeout"))
+                    await prompt_message.edit(view=None)
+                finally:
+                    self.stop()
+
+        view = PromptChoiceView()
+        if reply:
+            prompt_message = await self.reply(ctx, content, auto_embed=auto_embed, view=view, **kwargs)
+        else:
+            prompt_message = await self.send(ctx, content, auto_embed=auto_embed, view=view, **kwargs)
+
+        await view.wait()
+        return prompt_message, view.result
+
     # TODO: Add a before invoke hook (here or in bot) that checks if using ctx.send() and warns to use cog.send().
 
 
@@ -175,4 +403,5 @@ def create_cog(name: str, all_commands: list[LazyHybridCommand[Any]]) -> type[Co
     for command in all_commands:
         methods.update(command.get_commands(name))
 
+    # noinspection PyTypeChecker
     return type(name, (Cog,), methods, group_auto_locale_strings=False)

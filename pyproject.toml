@@ -158,8 +158,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F403"]  # F403: 'from module import *' used; unable to detect undefined names
 "ftl_finder.py" = ["T201"]  # T201: Use of print
-"tests/*" = ["D107", "D101", "D100", "D105", "D202", "D102", "D104", "D103", "PLR2004", "PLC2701"]  # D*: Missing doc strings, PLR2004: Compare magic number, PLC2701: Private name import from external module
-"modmail/backends/sql/migrations/versions/*" = ["D415"]  # D415:  First line should end with a period, question mark, or exclamation point
+"tests/*" = ["D107", "D101", "D100", "D105", "D202", "D102", "D104", "D103", "PLR2004", "PLR0917", "PLC2701"]  # D*: Missing doc strings, PLR2004: Compare magic number, PLC2701: Private name import from external module
+"modmail/backends/sql/migrations/versions/*" = ["D415", "UP"]  # D415:  First line should end with a period, question mark, or exclamation point
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]

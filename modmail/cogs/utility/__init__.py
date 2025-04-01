@@ -13,8 +13,6 @@ from modmail.core import Bot, Cog, create_cog
 
 from .commands import all_commands
 
-__all__ = ["Utility", "setup"]
-
 if TYPE_CHECKING:
 
     class Utility(Cog):  # Makes linters happy
@@ -22,6 +20,9 @@ if TYPE_CHECKING:
 
 else:
     Utility = create_cog("Utility", all_commands)
+
+
+__all__ = ["Utility", "setup"]
 
 
 async def setup(bot: Bot) -> None:

@@ -13,12 +13,14 @@ from typing import TYPE_CHECKING, Any, NoReturn
 
 import discord
 from discord.ext import commands
+from packaging.version import Version
 
 from .. import CONFIG, __version__, utils
 from ..backends.common import Activity, DBClientBase, Profile
 from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
-from ..errors import DatabaseError
-from .translator import Translator
+from ..errors import DatabaseError, NoStaffGuildError
+from .internals import StaffGuild
+from .translator import Translator, _
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,12 @@ class Bot(commands.Bot):
 
     This class extends discord.py's Bot class to provide Modmail-specific functionality
     including database integration, command permission handling, and presence management.
+
+    Attributes:
+        translator: Translator instance for handling translations.
+        staff_guild: StaffGuild instance for managing staff server interactions.
+        version: The version of the bot.
+        database_client: Database client instance for interacting with the database.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -39,15 +47,18 @@ class Bot(commands.Bot):
             *args: Variable length argument list for commands.Bot.
             **kwargs: Arbitrary keyword arguments for commands.Bot.
         """
+        self._exit_status = 0  # Used to set the exit code of the bot when it exits.
+
+        intents = discord.Intents(
+            guilds=True, messages=True, reactions=True, typing=True, message_content=True, expressions=True
+        )
+
         if CONFIG.bot.prefix is not None:  # Prefix is enabled
-            intents = discord.Intents(
-                guilds=True, messages=True, reactions=True, typing=True, message_content=True, expressions=True
-            )
+            logger.info("Using prefix: %s", CONFIG.bot.prefix)
             command_prefix: list[str] = [CONFIG.bot.prefix]
             if CONFIG.bot.respond_bot_mention:
                 command_prefix += [f"<@!{CONFIG.bot.bot_id}> ", f"<@{CONFIG.bot.bot_id}> "]
         else:
-            intents = discord.Intents(guilds=True, dm_messages=True, reactions=True, typing=True, expressions=True)
             command_prefix = []
 
         # Set owner IDs, if any, otherwise discord.py will fetch the owner IDs from Discord.
@@ -63,7 +74,8 @@ class Bot(commands.Bot):
         kwargs.setdefault("chunk_guilds_at_startup", False)  # Don't load guilds at startup
 
         # Set ratelimit timeout to 60s to prevent stalled commands.
-        kwargs.setdefault("max_ratelimit_timeout", 60.0)
+        # This is currently disabled due to discord.py poor rate limit handler logic.
+        # kwargs.setdefault("max_ratelimit_timeout", 60.0)
 
         # Disallow all mentions by default.
         allowed_mention = discord.AllowedMentions.none()
@@ -75,6 +87,9 @@ class Bot(commands.Bot):
         super().__init__(*args, **kwargs)
 
         self.translator = Translator()
+        self.staff_guild = StaffGuild(self)
+
+        self._bot_initialized_event = asyncio.Event()
 
         self.version: str = __version__
         logger.debug("[bold green]Bot version: %s", self.version, extra={"markup": True, "highlighter": None})
@@ -92,6 +107,11 @@ class Bot(commands.Bot):
         self.add_check(self._bot_can_run_check)
         self.add_check(self._permission_check)
         self.before_invoke(self.on_before_invoke)
+
+    async def wait_until_ready(self) -> None:
+        """Wait until the bot is ready and the database is connected."""
+        await super().wait_until_ready()
+        await self._bot_initialized_event.wait()
 
     async def setup_hook(self) -> None:
         """Initialize bot configuration and synchronize commands.
@@ -123,6 +143,9 @@ class Bot(commands.Bot):
 
         # Set the translator for the command tree. Should be done before syncing.
         await self.tree.set_translator(self.translator)
+
+        if not CONFIG.bot.use_slash_commands:
+            logger.info("Slash commands are disabled.")
 
         slash_synced = False
 
@@ -187,6 +210,8 @@ class Bot(commands.Bot):
             await self.database_client.update_settings(last_ran_version=self.version)
             logger.debug("Updated last ran version to %s", self.version)
 
+        self._bot_initialized_event.set()
+
     async def _sync_slash_commands(self) -> None:
         """Synchronize slash commands with Discord.
 
@@ -231,11 +256,12 @@ class Bot(commands.Bot):
         Raises:
             SystemExit: With appropriate exit codes based on execution result.
         """  # noqa: DOC502
+        self._exit_status = 0
 
         async def bot_runner() -> None:
             await self.database_client.connect()
 
-            for ext in ["utility"]:
+            for ext in ["utility", "modmail"]:
                 logger.debug("Loading extension %s", ext)
                 await self.load_extension(f".cogs.{ext}", package="modmail")
             if CONFIG.bot.enable_jishaku:
@@ -266,32 +292,83 @@ class Bot(commands.Bot):
             logger.info("[yellow]Shutting down Modmail.", extra={"markup": True})
         except DatabaseError:
             logger.critical("[bold red]Failed to connect to the database.", extra={"markup": True})
-            sys.exit(1)
+            self._exit_status = 1
         except discord.PrivilegedIntentsRequired:
             logger.debug("Login failure.", exc_info=True)
             logger.critical(
                 "Prefixed commands require the message content privileged intent. "
                 "Please enable it in the developer portal: https://discord.com/developers/applications/."
             )
-            sys.exit(1)
+            self._exit_status = 1
         except discord.errors.LoginFailure:
             logger.debug("Login failure.", exc_info=True)
             logger.critical("Failed to login to Discord. Check your token.")
-            sys.exit(1)
+            self._exit_status = 1
         except Exception as e:
             logger.debug("An unknown error occurred.", exc_info=True)
             logger.critical("An unknown error occurred: %s", e)
-            sys.exit(1)
-        sys.exit(0)
+            self._exit_status = 1
 
-    # noinspection PyMethodMayBeStatic
+        sys.exit(self._exit_status)  # Should be 0 if everything went well, 1 if there was an error.
+
+    async def _not_in_guild_close(self) -> None:
+        """Close the bot if it is not in the staff guild.
+
+        This method is called when the bot is removed from the staff guild.
+        """
+        logger.critical(
+            "[bold red]The bot was removed from the staff server. "
+            "Please invite the bot back to the server and then restart the bot.",
+            extra={"markup": True},
+        )
+        self._exit_status = 1
+        await self.close()
+
     async def on_ready(self) -> None:
         """Handle bot ready event.
 
         Called when the bot has successfully connected to Discord and is ready to
         receive events.
         """
+        await self.wait_until_ready()
+
+        other_server_names = [
+            f"{guild} ({guild.id})" for guild in self.guilds if guild.id != CONFIG.bot.staff_server_id
+        ]
+
+        # Check if the bot is in the staff server.
+        if not self.staff_guild.exists:
+            # TODO: Send the bot's invite link
+            logger.critical(
+                "[bold red]The bot is not in the staff server (%d). "
+                "Please double check the ID, invite the bot to the server, and then restart the bot.",
+                CONFIG.bot.staff_server_id,
+                extra={"markup": True},
+            )
+            if other_server_names:  # If the bot is in other servers, show them.
+                logger.critical(
+                    "[bold red]The bot is currently these servers: %s",
+                    ", ".join(other_server_names),
+                    extra={"markup": True},
+                )
+            self._exit_status = 1
+            await self.close()
+            return
+
         logger.info("[bold green]Bot is ready.", extra={"markup": True})
+        logger.info("Logged in as: %s", self.user)
+
+        if other_server_names:
+            logger.info("Staff server: %s", self.staff_guild)
+            logger.info("Other servers: %s", ", ".join(other_server_names))
+        else:
+            logger.info("Server: %s", self.staff_guild)
+
+        if Version(self.version).is_prerelease:
+            logger.info(
+                "[bold yellow]Running a development version. Please report any issues to the Modmail team.",
+                extra={"markup": True},
+            )
 
     async def on_connect(self) -> None:
         """Handle bot connect event.
@@ -300,7 +377,25 @@ class Bot(commands.Bot):
         presence configuration.
         """
         logger.debug("Connected to Discord.")
+        await self.wait_until_ready()
+
+        # Check if the staff guild still exists, in case the bot was removed from the server between connects.
+        if not self.staff_guild.exists:
+            await self._not_in_guild_close()
+            return
+
         await self.set_bot_presence()
+
+    async def on_guild_remove(self, guild: discord.Guild) -> None:
+        """Handle guild removal event.
+
+        Called when the bot is removed from a guild.
+        Exit bot if the guild is the staff server.
+        """
+        logger.info("Removed from guild %s", guild.name)
+        if guild.id == CONFIG.bot.staff_server_id:
+            await self._not_in_guild_close()
+            return
 
     def _get_discord_presence_from_settings(self) -> tuple[discord.BaseActivity | None, discord.Status | None]:
         """Generate Discord presence objects from database settings.
@@ -390,16 +485,67 @@ class Bot(commands.Bot):
 
         # Ignore command check failure errors
         if isinstance(exception, commands.CheckFailure):
-            if hasattr(context, "_perm_check_reason"):  # This gets injected by the permission check
-                # noinspection PyProtectedMember
+            if getattr(context, "_perm_check_reason", "").startswith("fail:"):  # The permission check failed
+                # noinspection PyUnresolvedReferences
                 logger.debug(
-                    "%s is not allowed to run %s: %s",
+                    "%s is not allowed to run `%s` (%s)",
                     context.author,
                     context.command,
                     context._perm_check_reason,  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
                 )
+                if context.interaction is not None:  # tell the user they don't have permission
+                    message = await self.translator.translate(
+                        _("ftl-msg-permission-denied"), context.interaction.locale
+                    )
+                    await context.reply(message, ephemeral=True)
             return
+
+        if isinstance(exception, commands.CommandInvokeError):
+            if isinstance(exception.original, NoStaffGuildError):
+                await self._not_in_guild_close()
+                return
+
+            logger.info(
+                "[red]Command %s failed with an uncaught error: %s",
+                context.command,
+                exception.original,
+                exc_info=exception,
+                extra={"markup": True},
+            )
+
+            # Tell the user there was an error
+            if context.interaction is not None:
+                message = await self.translator.translate(
+                    _("ftl-msg-command-invoke-error"), context.interaction.locale
+                )
+                await context.reply(message, ephemeral=True)
+            else:
+                permissions = context.channel.permissions_for(context.me)  # pyright: ignore [reportArgumentType]
+                if permissions.read_messages and permissions.send_messages:
+                    message = await self.translator.translate(
+                        _("ftl-msg-command-invoke-error"), CONFIG.default_locale
+                    )
+                    await context.reply(message, ephemeral=True)
+            return
+
         await super().on_command_error(context, exception)
+
+    async def on_error(self, event_method: str, /, *args: Any, **kwargs: Any) -> None:
+        """Handle errors that occur during event processing.
+
+        When NoStaffGuildError is raised, log a critical error and exit the bot.
+
+        Args:
+            event_method: The name of the event method where the error occurred.
+            *args: Positional arguments passed to the event method.
+            **kwargs: Keyword arguments passed to the event method.
+        """
+        exc_info = sys.exc_info()
+
+        if isinstance(exc_info[1], NoStaffGuildError):
+            await self._not_in_guild_close()
+            return
+        await super().on_error(event_method, *args, **kwargs)
 
     @staticmethod
     async def on_before_invoke(ctx: commands.Context[Bot]) -> None:
@@ -412,7 +558,12 @@ class Bot(commands.Bot):
         """
         if hasattr(ctx, "_perm_check_reason"):  # This gets injected by the permission check
             # noinspection PyProtectedMember
-            logger.debug("%s is running %s, allowed reason: %s", ctx.author, ctx.command, ctx._perm_check_reason)  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
+            logger.debug(
+                "%s is running `%s`, allowed reason (%s)",
+                ctx.author,
+                ctx.command,
+                ctx._perm_check_reason,  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
+            )
         else:
             logger.debug("User %s is running the %s command.", ctx.author, ctx.command)
 
@@ -488,7 +639,7 @@ class Bot(commands.Bot):
             True if the user has permission to execute the command, False otherwise.
         """
         if ctx.author.bot:  # Ignore commands invoked by bots
-            ctx._perm_check_reason = "bot"  # pyright: ignore [reportAttributeAccessIssue]
+            ctx._perm_check_reason = "fail: bot"  # pyright: ignore [reportAttributeAccessIssue]
             return False
 
         if ctx.command is None:  # pragma: nocover ; When would this happen?
@@ -496,7 +647,7 @@ class Bot(commands.Bot):
             return True
 
         if await self.is_owner(ctx.author):
-            ctx._perm_check_reason = "owner"  # pyright: ignore [reportAttributeAccessIssue]
+            ctx._perm_check_reason = "pass: owner"  # pyright: ignore [reportAttributeAccessIssue]
             return True
 
         all_profiles = self.get_all_user_profiles(ctx.author)
@@ -511,10 +662,10 @@ class Bot(commands.Bot):
             for profile in all_profiles:
                 if i == 0:  # Check for override on the exact command name
                     if profile.permission_overrides.get(command_name) == PermissionOverrideValue.deny:
-                        ctx._perm_check_reason = f"{profile.profile_id} deny {command_name}"  # pyright: ignore [reportAttributeAccessIssue]
+                        ctx._perm_check_reason = f"fail: {profile.profile_id} deny {command_name}"  # pyright: ignore [reportAttributeAccessIssue]
                         return False
                     if profile.permission_overrides.get(command_name) == PermissionOverrideValue.allow:
-                        ctx._perm_check_reason = f"{profile.profile_id} allow {command_name}"  # pyright: ignore [reportAttributeAccessIssue]
+                        ctx._perm_check_reason = f"pass: {profile.profile_id} allow {command_name}"  # pyright: ignore [reportAttributeAccessIssue]
                         return True
                 elif command_access_level == RequiredAccessLevel.owner:
                     # Owner-only commands cannot be overridden by wildcard overrides on parent.
@@ -523,21 +674,21 @@ class Bot(commands.Bot):
 
                 # Check for wildcard override (on parents). e.g. "profile+" will match "profile add"
                 if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.deny:
-                    ctx._perm_check_reason = f"{profile.profile_id} deny {command_name}+"  # pyright: ignore [reportAttributeAccessIssue]
+                    ctx._perm_check_reason = f"fail: {profile.profile_id} deny {command_name}+"  # pyright: ignore [reportAttributeAccessIssue]
                     return False
 
                 if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.allow:
-                    ctx._perm_check_reason = f"{profile.profile_id} allow {command_name}+"  # pyright: ignore [reportAttributeAccessIssue]
+                    ctx._perm_check_reason = f"pass: {profile.profile_id} allow {command_name}+"  # pyright: ignore [reportAttributeAccessIssue]
                     return True
 
         # Owner check
         if command_access_level == RequiredAccessLevel.owner:
-            ctx._perm_check_reason = "owner only"  # pyright: ignore [reportAttributeAccessIssue]
+            ctx._perm_check_reason = "fail: owner only"  # pyright: ignore [reportAttributeAccessIssue]
             return False
 
         if CONFIG.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
             # If the command is set to everyone, allow it.
-            ctx._perm_check_reason = "everyone"  # pyright: ignore [reportAttributeAccessIssue]
+            ctx._perm_check_reason = "pass: everyone"  # pyright: ignore [reportAttributeAccessIssue]
             return True
 
         for profile in all_profiles:
@@ -547,11 +698,11 @@ class Bot(commands.Bot):
             # Check if the user has the required access level for the command.
             if profile.access_level >= command_access_level:
                 ctx._perm_check_reason = (  # pyright: ignore [reportAttributeAccessIssue]
-                    f"{profile.profile_id} level {profile.access_level} >= {command_access_level}"
+                    f"pass: {profile.profile_id} level {profile.access_level} >= {command_access_level}"
                 )
                 return True
 
-        ctx._perm_check_reason = f"no access {command_access_level}"  # pyright: ignore [reportAttributeAccessIssue]
+        ctx._perm_check_reason = f"fail: no access {command_access_level}"  # pyright: ignore [reportAttributeAccessIssue]
         return False
 
     async def _bot_can_run_check(self, ctx: commands.Context[Bot]) -> bool:

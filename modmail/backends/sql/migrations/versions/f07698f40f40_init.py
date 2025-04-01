@@ -1,23 +1,23 @@
 """init
 
-Revision ID: fec4067d17f4
+Revision ID: f07698f40f40
 Revises:
-Create Date: 2025-03-26 11:38:24.535913
+Create Date: 2025-03-30 17:10:42.510548
 
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "fec4067d17f4"
-down_revision: str | None = None
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+revision: str = "f07698f40f40"
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
@@ -44,6 +44,8 @@ def upgrade() -> None:
         sa.Column("last_slash_minimum_permission_int", sa.Integer(), nullable=True),
         sa.Column("main_category_id", sa.Integer(), nullable=True),
         sa.Column("fallback_category_id", sa.Integer(), nullable=True),
+        sa.Column("log_channel_id", sa.Integer(), nullable=True),
+        sa.Column("storage_channel_id", sa.Integer(), nullable=True),
         sa.Column("status", sa.Enum("online", "idle", "dnd", "offline", name="statustype"), nullable=True),
         sa.PrimaryKeyConstraint("bot_id", name=op.f("pk_settings")),
         sa.UniqueConstraint("bot_id", name=op.f("uq_settings_bot_id")),

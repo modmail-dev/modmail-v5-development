@@ -10,13 +10,12 @@ from typing import TYPE_CHECKING
 
 from discord.ext import commands
 
-# noinspection PyProtectedMember
 from modmail.core import Bot, _, lazy_hybrid_group
-
-__all__ = ["about_command"]
 
 if TYPE_CHECKING:
     from .. import Utility
+
+__all__ = ["about_command"]
 
 
 @lazy_hybrid_group(
@@ -46,4 +45,4 @@ async def about_version_command(self: Utility, ctx: commands.Context[Bot]) -> No
         self: The Utility cog instance.
         ctx: The command context.
     """
-    await self.reply(ctx, _("ftl-cmd-about-version-message", version=self.bot.version), auto_embed=True)
+    await self.reply(ctx, _("ftl-cmd-about-version-message", version=self.bot.version))

@@ -16,15 +16,10 @@ from typing import TYPE_CHECKING, Any, Final, NamedTuple
 import discord
 from discord.ext import commands
 
-# noinspection PyProtectedMember
 from modmail import CONFIG, utils
 from modmail.backends.common import Profile
-
-# noinspection PyProtectedMember
-from modmail.core import Bot, _, lazy_hybrid_group
+from modmail.core import Bot, Str, _, lazy_hybrid_group
 from modmail.enum import AccessLevel, PermissionOverrideValue, ProfileType, RequiredAccessLevel
-
-__all__ = ["profile_command"]
 
 if TYPE_CHECKING:
     from .. import Utility
@@ -36,7 +31,13 @@ if TYPE_CHECKING:
         def set_original_message(self, message: discord.Message) -> None: ...
 
 
+__all__ = ["profile_command"]
+
+
 logger = logging.getLogger(__name__)
+
+
+# TODO: move ProfileDetail and _get_profile_detail into a converter/transformer in converters.py
 
 
 class ProfileDetail(NamedTuple):
@@ -87,6 +88,20 @@ def _get_profile_detail(
     else:
         return None
     return ProfileDetail(profile_mention, profile_id, profile_type)
+
+
+def _check_is_bot(user_or_role: discord.Member | discord.User | discord.Role) -> bool:
+    """Check if the user or role is a bot or bot's role.
+
+    Args:
+        user_or_role: The user or role to check.
+
+    Returns:
+        True if the user or role is a bot, False otherwise.
+    """
+    if isinstance(user_or_role, discord.Member | discord.User):
+        return user_or_role.bot
+    return bool(user_or_role.tags is not None and user_or_role.tags.is_bot_managed())
 
 
 async def make_profile_customize_view(
@@ -234,6 +249,8 @@ async def make_profile_customize_view(
 
         async def on_timeout(self) -> None:
             """Disable all components of this view when timed out."""
+            self.stop()
+
             for children in self.children:
                 if hasattr(children, "disabled"):
                     children.disabled = True  # pyright: ignore [reportAttributeAccessIssue]
@@ -264,6 +281,14 @@ async def make_profile_customize_view(
                 await ctx.bot.database_client.update_profile(new_profile)
                 logger.debug("Updated profile access level for %d to %s.", new_profile.profile_id, selected_level)
                 profile = new_profile
+
+                if selected_level is None or selected_level == AccessLevel.everyone:
+                    # Remove the profile's access from the Modmail category
+                    await ctx.bot.staff_guild.revoke_access(profile.profile_id, profile.profile_type)
+                else:
+                    # Add the profile's access to the Modmail category
+                    await ctx.bot.staff_guild.grant_access(profile.profile_id, profile.profile_type)
+
             await interaction.response.send_message(
                 await cog.translate(
                     ctx,
@@ -318,6 +343,10 @@ async def profile_add_command(
         ctx: The command context.
         user_or_role: The user or role to create a profile for.
     """
+    if _check_is_bot(user_or_role):
+        await self.reply(ctx, _("ftl-cmd-profile-no-bot"))
+        return
+
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
 
     # These can't be None, assert for type checker
@@ -331,7 +360,9 @@ async def profile_add_command(
         return
 
     new_profile = Profile(
-        bot_id=CONFIG.bot.bot_id, profile_id=profile_detail.profile_id, profile_type=profile_detail.profile_type
+        bot_id=CONFIG.bot.bot_id,
+        profile_id=profile_detail.profile_id,
+        profile_type=profile_detail.profile_type,
     )
     await self.bot.database_client.update_profile(new_profile)
 
@@ -370,6 +401,10 @@ async def profile_delete_command(
         return
 
     await self.bot.database_client.delete_profile(profile_id=profile_detail.profile_id)
+    if profile_detail.profile_type is not None and user_or_role is not None and not _check_is_bot(user_or_role):
+        # Remove access from the Modmail category if not a bot
+        await self.bot.staff_guild.revoke_access(profile_detail.profile_id, profile_detail.profile_type)
+
     await self.reply(ctx, _("ftl-cmd-profile-delete-success", name=profile_detail.mention))
 
 
@@ -389,6 +424,10 @@ async def profile_edit_command(
         ctx: The command context.
         user_or_role: The user or role whose profile should be edited.
     """
+    if _check_is_bot(user_or_role):
+        await self.reply(ctx, _("ftl-cmd-profile-no-bot"))
+        return
+
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
 
     # These can't be None, assert for type checker
@@ -415,7 +454,7 @@ async def _update_permission_override(
     self: Utility,
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
-    command_name: str,
+    command_name: Str,
     override_value: PermissionOverrideValue,
 ) -> None:
     """Update the permission override for a user or role.
@@ -430,6 +469,10 @@ async def _update_permission_override(
         command_name: The command name to override permissions for.
         override_value: The permission value to set (allow or deny).
     """
+    if _check_is_bot(user_or_role):
+        await self.reply(ctx, _("ftl-cmd-profile-no-bot"))
+        return
+
     # Sanitize the command name
     command_name = utils.sanitize_user_command_name(command_name)
     command_name_no_wildcard = command_name.split("+")[0].strip()
@@ -489,7 +532,7 @@ async def profile_allow_command(
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
     *,
-    command_name: str,
+    command_name: Str,
 ) -> None:
     """Allow a user or role to use a specific command.
 
@@ -512,7 +555,7 @@ async def profile_deny_command(
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
     *,
-    command_name: str,
+    command_name: Str,
 ) -> None:
     """Deny a user or role from using a specific command.
 
@@ -534,7 +577,7 @@ async def profile_unset_command(
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
     *,
-    command_name: str | None,
+    command_name: Str | None,
 ) -> None:
     """Remove command permission overrides for a user or role.
 
@@ -547,6 +590,10 @@ async def profile_unset_command(
         user_or_role: The user or role to remove overrides for.
         command_name: The specific command override to remove, or None to remove all overrides.
     """
+    if _check_is_bot(user_or_role):
+        await self.reply(ctx, _("ftl-cmd-profile-no-bot"))
+        return
+
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
 
     # These can't be None, assert for type checker

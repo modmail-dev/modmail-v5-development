@@ -18,9 +18,7 @@ from .base import SQLBase
 if TYPE_CHECKING:
     from .activity_model import SQLActivityTable
 
-__all__ = [
-    "SQLSettingsTable",
-]
+__all__ = ["SQLSettingsTable"]
 
 
 class SQLSettingsTable(SQLBase):
@@ -37,6 +35,8 @@ class SQLSettingsTable(SQLBase):
         last_slash_minimum_permission_int: The minimum permission level required for slash commands.
         main_category_id: The Discord category ID where new tickets are created.
         fallback_category_id: The backup Discord category ID for when the main category is full.
+        log_channel_id: The Discord channel ID for the log channel.
+        storage_channel_id: The Discord channel ID for the storage channel.
         status: The bot's current status type.
         activity: The bot's current activity configuration.
     """
@@ -50,6 +50,8 @@ class SQLSettingsTable(SQLBase):
     last_slash_minimum_permission_int: Mapped[int | None]
     main_category_id: Mapped[int | None]
     fallback_category_id: Mapped[int | None]
+    log_channel_id: Mapped[int | None]
+    storage_channel_id: Mapped[int | None]
     status: Mapped[StatusType | None]
     activity: Mapped[SQLActivityTable | None] = relationship(
         cascade="all, delete-orphan", passive_deletes=True, single_parent=True, lazy="joined"

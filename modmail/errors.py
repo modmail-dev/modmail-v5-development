@@ -10,6 +10,7 @@ __all__ = [
     "DatabaseConnectionError",
     "DatabaseError",
     "ModmailError",
+    "NoStaffGuildError",
 ]
 
 
@@ -32,4 +33,11 @@ class DatabaseConnectionError(DatabaseError):
     """Exception for database connection errors.
 
     Raised when the application fails to establish a connection with the database.
+    """
+
+
+class NoStaffGuildError(ModmailError):
+    """Exception for when the staff guild is not set.
+
+    Raised when an operation requires a staff guild but none has been set.
     """

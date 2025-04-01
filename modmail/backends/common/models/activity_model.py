@@ -10,9 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from modmail.enum import ActivityType
 
-__all__ = [
-    "Activity",
-]
+__all__ = ["Activity"]
 
 
 class Activity(BaseModel):

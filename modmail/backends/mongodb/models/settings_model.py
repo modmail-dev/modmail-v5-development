@@ -49,6 +49,8 @@ class MongoDBSettingsDocument(Document):
         last_slash_minimum_permission_int: The minimum permission integer required for using slash commands.
         main_category_id: The ID of the main category for organizing channels.
         fallback_category_id: The ID of the fallback category used when main is unavailable.
+        log_channel_id: The ID of the log channel.
+        storage_channel_id: The ID of the storage channel.
         status: The bot's status.
         activity: The bot's activity.
     """
@@ -60,6 +62,8 @@ class MongoDBSettingsDocument(Document):
     last_slash_minimum_permission_int: int | None = None  # the last minimum permission int for slash commands
     main_category_id: int | None = None
     fallback_category_id: int | None = None
+    log_channel_id: int | None = None
+    storage_channel_id: int | None = None
     status: StatusType | None = None
     activity: MongoDBActivityModel | None = None
 

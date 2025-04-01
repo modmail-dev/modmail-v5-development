@@ -448,6 +448,9 @@ async def test_multiple_profile_types(client: DBClientBase) -> None:
     assert retrieved_role is not None
     assert retrieved_user.tag == "Test User"
     assert retrieved_role.tag == "Test Role"
+    assert len(client.profiles) == 2
+    assert retrieved_user in client.profiles
+    assert retrieved_role in client.profiles
     await client.delete_profile(profile_id1)
     await client.delete_profile(profile_id2)
 

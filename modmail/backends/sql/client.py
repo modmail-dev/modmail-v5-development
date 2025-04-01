@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
     from modmail.config.models import Config, SQLDatabaseConfig
 
+__all__ = ["SQLClient"]
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,15 @@ class SQLClient(DBClientBase):
         """
         assert self.__settings_model is not None, "Settings model not loaded."
         return self.__settings_model
+
+    @property
+    def profiles(self) -> list[Profile]:
+        """Get the list of profiles.
+
+        Returns:
+            A list of profile objects.
+        """
+        return [profile[1] for profile in self.__profiles_cache.values()]
 
     @property
     def _sql_config(self) -> SQLDatabaseConfig:
