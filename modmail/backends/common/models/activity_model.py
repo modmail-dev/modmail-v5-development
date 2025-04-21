@@ -10,10 +10,10 @@ from pydantic import BaseModel, ConfigDict
 
 from modmail.enum import ActivityType
 
-__all__ = ["Activity"]
+__all__ = ["ActivityModel"]
 
 
-class Activity(BaseModel):
+class ActivityModel(BaseModel):
     """Represents a Discord activity.
 
     Attributes:

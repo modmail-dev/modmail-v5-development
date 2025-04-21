@@ -32,29 +32,29 @@ setup_lock = asyncio.Lock()  # Lock to prevent multiple setup commands from runn
     name=_("ftl-cmd-setup-name"),
     description=_("ftl-cmd-setup-description"),
 )
-async def setup_command(self: Modmail, ctx: commands.Context[Bot]) -> None:
+async def setup_command(cog: Modmail, ctx: commands.Context[Bot]) -> None:
     """Configure the server for Modmail.
 
     This command initiates the setup process for Modmail in a guild. It checks if
     the command is run in the correct guild and ensures only one setup can run at a time.
 
     Args:
-        self: The Modmail cog instance.
+        cog: The Modmail cog instance.
         ctx: The command context containing information about the invocation.
     """
-    if ctx.guild is None or ctx.guild.id != self.bot.staff_guild.guild_id:
-        await self.reply(ctx, _("ftl-cmd-setup-wrong-guild", guild_name=self.bot.staff_guild.guild.name))
+    if ctx.guild is None or ctx.guild.id != cog.bot.staff_guild.guild_id:
+        await cog.reply(ctx, _("ftl-cmd-setup-wrong-guild", guild_name=cog.bot.staff_guild.guild.name))
         return
 
     if setup_lock.locked():
-        await self.reply(ctx, _("ftl-cmd-setup-already-running"))
+        await cog.reply(ctx, _("ftl-cmd-setup-already-running"))
         return
 
     async with setup_lock:
-        await do_setup(self, ctx)
+        await do_setup(cog, ctx)
 
 
-async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
+async def do_setup(cog: Modmail, ctx: commands.Context[Bot]) -> None:
     """Perform the full setup process for the Modmail bot in a guild.
 
     This function handles the interactive setup process including:
@@ -65,7 +65,7 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
     - Finalizing the setup and informing the user
 
     Args:
-        self: The Modmail cog instance.
+        cog: The Modmail cog instance.
         ctx: The command context containing information about the invocation.
     """
     assert ctx.guild is not None, "This function should only be ran in a guild context"
@@ -73,8 +73,8 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
     prompt_message: discord.Message | None = None  # The latest prompt message
     response_message: discord.Message | None = None  # The latest response message
 
-    if self.bot.staff_guild.is_configured():
-        prompt_message, response = await self.prompt_choices(
+    if cog.bot.staff_guild.is_configured():
+        prompt_message, response = await cog.prompt_choices(
             ctx,
             _("ftl-cmd-setup-guild-already-configured-prompt"),
             choices=[
@@ -87,7 +87,7 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
 
     logger.info("%s is setting up the bot in %s", ctx.author, ctx.guild.name)
 
-    prompt_message, response = await self.prompt_choices(
+    prompt_message, response = await cog.prompt_choices(
         ctx,
         _("ftl-cmd-setup-use-new-category-prompt"),
         choices=[
@@ -110,10 +110,10 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
 
     if response == 0:  # Using a new category
         if (
-            ctx.guild.me.guild_permissions & self.bot.staff_guild.MIN_PERMISSIONS
-            != self.bot.staff_guild.MIN_PERMISSIONS
+            ctx.guild.me.guild_permissions & cog.bot.staff_guild.MIN_PERMISSIONS
+            != cog.bot.staff_guild.MIN_PERMISSIONS
         ):
-            await self.reply(ctx, _("ftl-cmd-setup-not-enough-guild-permissions"))
+            await cog.reply(ctx, _("ftl-cmd-setup-not-enough-guild-permissions"))
             logger.debug("Bot doesn't have enough permissions to create a new category")
             return
 
@@ -122,11 +122,11 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
         # Gives the bot the minimum permissions required to function properly, and hide from everyone else.
         overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
             ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            me_user_or_role: self.bot.staff_guild.MIN_PERMISSIONS_OVERWRITE,
+            me_user_or_role: cog.bot.staff_guild.MIN_PERMISSIONS_OVERWRITE,
         }
 
         # Allow staff members to see the category and channels
-        for profile in self.bot.database_client.profiles:
+        for profile in cog.bot.database_client.profiles:
             if profile.access_level is not None and profile.access_level >= AccessLevel.staff:
                 if profile.profile_type == ProfileType.user:
                     try:
@@ -143,15 +143,15 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
                     overwrites[role] = discord.PermissionOverwrite(read_messages=True)
 
         category = await ctx.guild.create_category(
-            name=await self.translate(ctx, _("ftl-cmd-setup-category-name")),
-            reason=await self.translate(ctx, _("ftl-cmd-setup-category-create-reason")),
+            name=await cog.translate(ctx, _("ftl-cmd-setup-category-name")),
+            reason=await cog.translate(ctx, _("ftl-cmd-setup-category-create-reason")),
             overwrites=overwrites,
             position=0,
         )
         await category.edit(position=0)  # Force the category to the top of the channel list
 
     else:  # Using an existing category
-        prompt_message, response_message = await self.prompt(
+        prompt_message, response_message = await cog.prompt(
             ctx, _("ftl-cmd-setup-use-new-category-prompt-existing-category"), original_message=prompt_message
         )
         if response_message is None:
@@ -167,7 +167,7 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
                 category = guild_category
                 break
         else:
-            await self.reply(
+            await cog.reply(
                 ctx,
                 _("ftl-cmd-setup-use-new-category-prompt-existing-category-not-found"),
                 reference=response_message,
@@ -176,10 +176,10 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
             return
 
         if (
-            category.permissions_for(ctx.guild.me) & self.bot.staff_guild.MIN_PERMISSIONS
-            != self.bot.staff_guild.MIN_PERMISSIONS
+            category.permissions_for(ctx.guild.me) & cog.bot.staff_guild.MIN_PERMISSIONS
+            != cog.bot.staff_guild.MIN_PERMISSIONS
         ):
-            await self.reply(
+            await cog.reply(
                 ctx,
                 _("ftl-cmd-setup-use-new-category-prompt-existing-category-no-permissions"),
                 reference=response_message,
@@ -190,22 +190,22 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
         logger.info("Using existing category %s for Modmail", category)
         await category.set_permissions(
             me_user_or_role,
-            overwrite=self.bot.staff_guild.MIN_PERMISSIONS_OVERWRITE,
-            reason=await self.translate(ctx, _("ftl-cmd-setup-category-permissions-reason")),
+            overwrite=cog.bot.staff_guild.MIN_PERMISSIONS_OVERWRITE,
+            reason=await cog.translate(ctx, _("ftl-cmd-setup-category-permissions-reason")),
         )
 
     # Create the channels
     log_channel, storage_channel = await asyncio.gather(
         category.create_text_channel(
-            name=await self.translate(ctx, _("ftl-cmd-setup-log-channel-name")),
-            topic=await self.translate(ctx, _("ftl-cmd-setup-log-channel-topic")),
-            reason=await self.translate(ctx, _("ftl-cmd-setup-log-channel-create-reason")),
+            name=await cog.translate(ctx, _("ftl-cmd-setup-log-channel-name")),
+            topic=await cog.translate(ctx, _("ftl-cmd-setup-log-channel-topic")),
+            reason=await cog.translate(ctx, _("ftl-cmd-setup-log-channel-create-reason")),
             position=0,  # This will be updated later (position here is useless)
         ),
         category.create_text_channel(
-            name=await self.translate(ctx, _("ftl-cmd-setup-storage-channel-name")),
-            topic=await self.translate(ctx, _("ftl-cmd-setup-storage-channel-topic")),
-            reason=await self.translate(ctx, _("ftl-cmd-setup-storage-channel-create-reason")),
+            name=await cog.translate(ctx, _("ftl-cmd-setup-storage-channel-name")),
+            topic=await cog.translate(ctx, _("ftl-cmd-setup-storage-channel-topic")),
+            reason=await cog.translate(ctx, _("ftl-cmd-setup-storage-channel-create-reason")),
             position=0,  # This will be updated later (position here is useless)
         ),
     )
@@ -214,11 +214,11 @@ async def do_setup(self: Modmail, ctx: commands.Context[Bot]) -> None:
         # Disallow everyone but the bot to send messages in the storage channel
         # Previously allowed staffs should still be able to see the channel
         storage_channel.set_permissions(ctx.guild.default_role, read_messages=False, send_messages=False),
-        self.bot.staff_guild.setup(category, log_channel, storage_channel),
+        cog.bot.staff_guild.setup(category, log_channel, storage_channel),
     )
 
     logger.info("Modmail setup complete in %s", ctx.guild.name)
-    await self.reply(
+    await cog.reply(
         ctx,
         _(
             "ftl-cmd-setup-complete",

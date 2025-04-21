@@ -7,7 +7,7 @@ tags, and display colors.
 
 from __future__ import annotations
 
-from sqlalchemy import PrimaryKeyConstraint, String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from modmail.enum import AccessLevel, ProfileType
@@ -36,14 +36,14 @@ class SQLProfileTable(SQLBase):
 
     __tablename__ = "profile"
 
-    bot_id: Mapped[int]
-    profile_id: Mapped[int]
-    profile_type: Mapped[ProfileType]
+    bot_id: Mapped[int] = mapped_column(
+        ForeignKey("settings.bot_id", ondelete="CASCADE", onupdate="CASCADE"), primary_key=True
+    )
+    profile_id: Mapped[int] = mapped_column(primary_key=True)
+    profile_type: Mapped[ProfileType] = mapped_column(primary_key=True)
     access_level: Mapped[AccessLevel | None]
     permission_overrides: Mapped[list[SQLPermissionOverrideTable]] = relationship(
-        cascade="all, delete-orphan", passive_deletes=True, uselist=True, lazy="selectin"
+        cascade="all, delete-orphan", passive_deletes=True, lazy="selectin"
     )
     tag: Mapped[str | None] = mapped_column(String(128))
     colour: Mapped[int | None]
-
-    __table_args__ = (PrimaryKeyConstraint("bot_id", "profile_id", "profile_type", name="profile_pk"),)

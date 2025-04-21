@@ -23,14 +23,14 @@ __all__ = ["about_command"]
     fallback=_("ftl-cmd-about-fallback-name"),
     description=_("ftl-cmd-about-description"),
 )
-async def about_command(self: Utility, ctx: commands.Context[Bot]) -> None:
+async def about_command(cog: Utility, ctx: commands.Context[Bot]) -> None:
     """Show information about the Modmail bot.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
     """
-    await self.reply(ctx, "Modmail!")
+    await cog.reply(ctx, "Modmail!")
 
 
 @about_command.command(
@@ -38,11 +38,11 @@ async def about_command(self: Utility, ctx: commands.Context[Bot]) -> None:
     description=_("ftl-cmd-about-version-description"),
     with_app_command=False,
 )
-async def about_version_command(self: Utility, ctx: commands.Context[Bot]) -> None:
+async def about_version_command(cog: Utility, ctx: commands.Context[Bot]) -> None:
     """Show the version of the Modmail bot.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
     """
-    await self.reply(ctx, _("ftl-cmd-about-version-message", version=self.bot.version))
+    await cog.reply(ctx, _("ftl-cmd-about-version-message", version=cog.bot.version))

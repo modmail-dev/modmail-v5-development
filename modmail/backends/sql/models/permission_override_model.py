@@ -8,7 +8,7 @@ or denied for that group.
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKeyConstraint, PrimaryKeyConstraint, String
+from sqlalchemy import ForeignKeyConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from modmail.enum import PermissionOverrideValue, ProfileType
@@ -35,20 +35,18 @@ class SQLPermissionOverrideTable(SQLBase):
 
     __tablename__ = "permission_override"
 
-    bot_id: Mapped[int]
-    profile_id: Mapped[int]
-    profile_type: Mapped[ProfileType]
-    command_name: Mapped[str] = mapped_column(String(256))
+    bot_id: Mapped[int] = mapped_column(primary_key=True)
+    profile_id: Mapped[int] = mapped_column(primary_key=True)
+    profile_type: Mapped[ProfileType] = mapped_column(primary_key=True)
+    command_name: Mapped[str] = mapped_column(String(256), primary_key=True)
     override_value: Mapped[PermissionOverrideValue]
 
     __table_args__ = (
-        PrimaryKeyConstraint(
-            "bot_id", "profile_id", "profile_type", "command_name", name="pk_permission_override"
-        ),
         ForeignKeyConstraint(
             ["bot_id", "profile_id", "profile_type"],
             ["profile.bot_id", "profile.profile_id", "profile.profile_type"],
             name="fk_permission_override_profile",
             ondelete="CASCADE",
+            onupdate="CASCADE",
         ),
     )

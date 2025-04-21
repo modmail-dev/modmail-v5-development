@@ -179,6 +179,7 @@ exclude = [
     "**/.venv",
     "**/.env",
     "dist",
+    "tests",  # Tests are disabled for now
 ]
 reportUnnecessaryTypeIgnoreComment = "warning"
 reportPropertyTypeMismatch = "error"

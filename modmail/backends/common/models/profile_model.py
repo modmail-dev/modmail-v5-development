@@ -9,10 +9,10 @@ from pydantic import BaseModel, ConfigDict
 
 from modmail.enum import AccessLevel, PermissionOverrideValue, ProfileType
 
-__all__ = ["Profile"]
+__all__ = ["ProfileModel"]
 
 
-class Profile(BaseModel):
+class ProfileModel(BaseModel):
     """Profile data model.
 
     Attributes:

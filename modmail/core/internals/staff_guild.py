@@ -7,6 +7,7 @@ for the bot and handles various operations related to it.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any
@@ -14,9 +15,11 @@ from typing import TYPE_CHECKING, Any
 import discord
 
 from ... import CONFIG
-from ...enum import ProfileType
-from ...errors import NoStaffGuildError
+from ...backends.common import ThreadModel, ThreadUserModel
+from ...enum import ProfileType, ThreadStatus
+from ...errors import BadPermissionsError, NoModmailCategoryError, NoStaffGuildError
 from ..translator import _
+from .thread_view import ThreadView
 
 if TYPE_CHECKING:
     from ..bot import Bot
@@ -101,7 +104,10 @@ class StaffGuild:
         Returns:
             True if the guild is valid, False otherwise.
         """
-        return self.bot.get_guild(self.guild_id) is not None
+        try:
+            return bool(self.guild)
+        except NoStaffGuildError:
+            return False
 
     @property
     def guild(self) -> discord.Guild:
@@ -119,27 +125,34 @@ class StaffGuild:
         return guild
 
     @property
-    def category(self) -> discord.CategoryChannel | None:
+    def category(self) -> discord.CategoryChannel:
         """Get the modmail category.
 
         Returns:
             The modmail category if it exists, otherwise None.
+
+        Raises:
+            NoModmailCategoryError: If the modmail category is not found.
+            NoStaffGuildError: If the staff guild is not found.
+            BadPermissionsError: If the bot does not have the required permissions.
         """
         if not self.exists:  # Check if the guild exists
-            return None
+            raise NoStaffGuildError(f"Staff guild with ID {self.guild_id} not found.")
 
         category_id = self.bot.database_client.settings_model.main_category_id
         if category_id is None:
-            return None
+            raise NoModmailCategoryError("No modmail category found in the database.")
 
         category = discord.utils.get(self.guild.categories, id=category_id)
         if category is None:
-            return None
+            raise NoModmailCategoryError("Modmail category not found in the guild.")
 
         perms = category.permissions_for(category.guild.me)
         if perms & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
             logger.critical("Some permissions were missing from the main category, category is unusable.")
-            return None
+            raise BadPermissionsError(
+                "Some permissions were missing from the main category, category is unusable."
+            )
         return category
 
     @property
@@ -196,7 +209,10 @@ class StaffGuild:
         Returns:
             True if the guild is configured, False otherwise.
         """
-        return self.exists and self.category is not None
+        try:
+            return self.exists and bool(self.category)
+        except (NoStaffGuildError, NoModmailCategoryError, BadPermissionsError):
+            return False
 
     async def setup(
         self,
@@ -225,7 +241,6 @@ class StaffGuild:
         """
         if not self.is_configured():
             return
-        assert self.category is not None, "Category should be configured before granting access"
 
         if profile_id == CONFIG.bot.bot_id:
             logger.debug("Not granting access to the bot itself")
@@ -272,7 +287,6 @@ class StaffGuild:
         """
         if not self.is_configured():
             return
-        assert self.category is not None, "Category should be configured before revoking access"
 
         if profile_id == CONFIG.bot.bot_id:
             logger.debug("Not revoking access from the bot itself")
@@ -314,3 +328,109 @@ class StaffGuild:
                 )
         if coros:
             await asyncio.gather(*coros)
+
+    async def get_thread(
+        self, /, user_or_channel: discord.User | discord.Member | discord.abc.MessageableChannel
+    ) -> ThreadView | None:
+        """Get an open thread for a user or channel.
+
+        Args:
+            user_or_channel: The user or channel to get the thread for.
+
+        Returns:
+            The thread for the user or channel, or None if it doesn't exist.
+        """
+        if isinstance(user_or_channel, discord.User | discord.Member):
+            thread_model = await self.bot.database_client.get_thread_by_recipient(user_or_channel.id)
+        else:
+            thread_model = await self.bot.database_client.get_thread_by_channel(user_or_channel.id, only_open=True)
+
+        if thread_model is None:
+            logger.debug("No thread found for %s", user_or_channel)
+            return None
+
+        channel = self.guild.get_channel(thread_model.channel_id)
+        if channel is None:
+            return None  # TODO: Thread channel does not exist
+
+        recipients: list[discord.User | discord.Member] = []
+        for recipient in thread_model.recipients:
+            try:
+                user = await self.bot.fetch_user(recipient.user_id)  # TODO: Implement some caching
+            except discord.NotFound:  # TODO: Handle this better (show to user)
+                logger.info("User %s not found in guild", recipient.user_id)
+                continue
+            except discord.HTTPException:
+                logger.warning("Failed to fetch user %s", recipient.user_id)
+                continue
+            recipients.append(user)
+
+        return ThreadView(self, thread_model, recipients)
+
+    @staticmethod
+    def _make_channel_name(*users: discord.User | discord.Member) -> str:
+        """Generate a channel name for the thread.
+
+        Args:
+            *users: The users of the thread.
+
+        Returns:
+            The generated channel name.
+        """
+        # TODO: Add more options for channel names
+        return "-".join([str(user.name) for user in users])
+
+    async def create_thread(
+        self,
+        *recipients: discord.User | discord.Member,
+        created_by: discord.User | discord.Member,
+    ) -> ThreadView:
+        """Create a new thread for the given users.
+
+        Args:
+            *recipients: The users to create the thread for.
+            created_by: The user who created the thread.
+
+        Returns:
+            The created thread view.
+
+        Raises:
+            NoStaffGuildError: If the staff guild is not configured.
+            ValueError: If no users are provided.
+        """
+        if not self.is_configured():
+            raise NoStaffGuildError("Staff guild is not configured")
+
+        if not recipients:
+            raise ValueError("At least one user must be provided")
+
+        reason = await self.bot.translator.translate(
+            _("ftl-msg-new-thread-reason", users=", ".join(str(user) for user in recipients)),
+            CONFIG.default_locale,
+        )
+        channel = await self.category.create_text_channel(name=self._make_channel_name(*recipients), reason=reason)
+
+        thread = ThreadModel(
+            bot_id=CONFIG.bot.bot_id,
+            key=ThreadModel.generate_key(),
+            recipients=[ThreadUserModel.from_user(user) for user in recipients],
+            channel_id=channel.id,
+            created_at=datetime.datetime.now(datetime.UTC),
+            created_by=ThreadUserModel.from_user(created_by),
+            status=ThreadStatus.open,
+        )
+        try:
+            await self.bot.database_client.create_thread(thread)
+            view = ThreadView(self, thread, list(recipients))
+            await view.send_initial_staff_message()
+        except Exception:
+            logger.exception("Failed to create thread or send initial message.")
+            # Send a message to the channel indicating the failure
+            try:
+                await channel.send(
+                    await self.bot.translator.translate(_("ftl-msg-create-thread-failed"), CONFIG.default_locale)
+                )
+            except discord.HTTPException:
+                logger.exception("Failed to send error message to channel %s", channel.id)
+            raise
+        return view

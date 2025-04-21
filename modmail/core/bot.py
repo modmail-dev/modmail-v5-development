@@ -16,7 +16,7 @@ from discord.ext import commands
 from packaging.version import Version
 
 from .. import CONFIG, __version__, utils
-from ..backends.common import Activity, DBClientBase, Profile
+from ..backends.common import ActivityModel, DBClientBase, ProfileModel
 from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
 from ..errors import DatabaseError, NoStaffGuildError
 from .internals import StaffGuild
@@ -86,8 +86,8 @@ class Bot(commands.Bot):
 
         super().__init__(*args, **kwargs)
 
-        self.translator = Translator()
-        self.staff_guild = StaffGuild(self)
+        self.translator: Translator = Translator()
+        self.staff_guild: StaffGuild = StaffGuild(self)
 
         self._bot_initialized_event = asyncio.Event()
 
@@ -430,12 +430,13 @@ class Bot(commands.Bot):
                 )
 
         if db_status:
+            # noinspection PyTypeChecker
             dc_status = discord.Status[db_status.name]
 
         return dc_activity, dc_status
 
     async def set_bot_presence(
-        self, *, activity: Activity | None = None, status: StatusType | None = None
+        self, *, activity: ActivityModel | None = None, status: StatusType | None = None
     ) -> None:
         """Update the bot's Discord presence.
 
@@ -606,7 +607,7 @@ class Bot(commands.Bot):
         # If no access level is set, then everyone can use the command.
         return default_access_level if default_access_level is not None else RequiredAccessLevel.everyone
 
-    def get_all_user_profiles(self, user: discord.User | discord.Member) -> list[Profile]:
+    def get_all_user_profiles(self, user: discord.User | discord.Member) -> list[ProfileModel]:
         """Retrieve all applicable profiles for a user.
 
         Args:
@@ -616,7 +617,7 @@ class Bot(commands.Bot):
             List of profiles ordered from most to least significant,
             including user profile and role profiles if applicable.
         """
-        all_profiles: list[Profile] = []  # All profiles to check for permission overrides
+        all_profiles: list[ProfileModel] = []  # All profiles to check for permission overrides
 
         user_profile = self.database_client.get_profile(user.id, ProfileType.user)
         if isinstance(user, discord.Member):  # Command invoked in a guild

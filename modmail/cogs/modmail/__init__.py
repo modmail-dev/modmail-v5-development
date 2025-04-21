@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from modmail.core import Bot, Cog, create_cog
 
 from .commands import all_commands
+from .listeners import all_listeners
 
 if TYPE_CHECKING:
 
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
         """Core Modmail commands cog for the Modmail bot."""
 
 else:
-    Modmail = create_cog("Modmail", all_commands)
+    Modmail = create_cog("Modmail", all_commands=all_commands, other_methods=all_listeners)
 
 
 __all__ = ["Modmail", "setup"]

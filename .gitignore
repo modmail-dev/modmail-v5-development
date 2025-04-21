@@ -6,6 +6,7 @@ modmail.log.*
 data/
 config.yaml
 modmail.db
+tests/
 
 ### VisualStudioCode template
 .vscode/*

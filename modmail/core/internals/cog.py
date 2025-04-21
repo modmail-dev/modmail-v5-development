@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, cast
 
 import discord
 from discord import app_commands
@@ -64,7 +65,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         Returns:
             The sent Discord message object.
         """
-        # Same reply logic as ctx.send()
+        # Same reply logic as ctx.reply()
         if ctx.interaction is None:
             if kwargs.get("reference") is None:
                 kwargs["reference"] = ctx.message
@@ -73,7 +74,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
 
     async def send(
         self,
-        ctx: commands.Context[Bot],
+        ctx: commands.Context[Bot] | discord.abc.Messageable,
         content: str | app_commands.locale_str | None,
         *,
         auto_embed: bool = True,
@@ -86,7 +87,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         proper context-based sending.
 
         Args:
-            ctx: The command context to use for sending.
+            ctx: The command context to use for sending or a messageable object.
             content: The message content to send.
             auto_embed: Whether to automatically convert the content to an embed.
             original_message: The original message if editing a message instead of sending a new one.
@@ -95,10 +96,14 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         Returns:
             The sent Discord message object.
         """
-        if ctx.interaction:
-            locale: discord.Locale | str = ctx.interaction.locale
-        else:
-            locale = CONFIG.default_locale
+        locale: discord.Locale | str = CONFIG.default_locale
+
+        if isinstance(ctx, commands.Context):
+            if TYPE_CHECKING:
+                ctx = cast(commands.Context[Bot], ctx)
+            # Only use user locale if ephemeral and has interaction
+            if ctx.interaction is not None and kwargs.get("ephemeral"):
+                locale = ctx.interaction.locale
 
         if auto_embed:
             if "embed" in kwargs or "embeds" in kwargs:
@@ -113,7 +118,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
 
         # Translate the message if it's a locale_str
         if isinstance(content, app_commands.locale_str):
-            content = await self.translate(ctx, content)
+            content = await self.translate(ctx, content, locale=locale)
 
         # Translate embed and embeds in kwargs
         if "embed" in kwargs:
@@ -136,22 +141,33 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         return await ctx.send(content, **kwargs)
 
     # TODO: implement caching
-    async def translate(self, ctx: commands.Context[Bot], string: app_commands.locale_str) -> str:
+    async def translate(
+        self,
+        ctx: commands.Context[Bot] | discord.abc.Messageable,
+        string: app_commands.locale_str,
+        *,
+        locale: discord.Locale | str | None = None,
+    ) -> str:
         """Translate a message using the bot's Translator.
 
         Determines the appropriate locale from the context and translates the string.
 
         Args:
-            ctx: The command context containing locale information.
+            ctx: The command context containing locale information or a messageable object.
             string: The locale string to translate.
+            locale: The locale to use for translation. If None, uses the context's locale.
 
         Returns:
             The translated string or the original message if translation fails.
         """
-        if ctx.interaction:
-            locale: discord.Locale | str = ctx.interaction.locale
-        else:
+        if locale is None:
             locale = CONFIG.default_locale
+            if isinstance(ctx, commands.Context):
+                if TYPE_CHECKING:
+                    ctx = cast(commands.Context[Bot], ctx)
+                if ctx.interaction is not None:
+                    locale = ctx.interaction.locale
+
         message = await self.bot.translator.translate(string, locale)
         if message is None:
             logger.warning("Failed to translate message: %s", string)
@@ -385,7 +401,12 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
     # TODO: Add a before invoke hook (here or in bot) that checks if using ctx.send() and warns to use cog.send().
 
 
-def create_cog(name: str, all_commands: list[LazyHybridCommand[Any]]) -> type[Cog]:
+def create_cog(
+    name: str,
+    *,
+    all_commands: list[LazyHybridCommand[Any]] | None = None,
+    other_methods: list[Callable[..., Any]] | None = None,
+) -> type[Cog]:
     """Create a new Cog class dynamically at runtime.
 
     This function allows for programmatic creation of Cogs, which can be useful
@@ -394,14 +415,23 @@ def create_cog(name: str, all_commands: list[LazyHybridCommand[Any]]) -> type[Co
     Args:
         name: The name to give the created cog.
         all_commands: A list of LazyHybridCommand objects to add to the cog.
+        other_methods: A list of callable methods to add to the cog.
 
     Returns:
         A new Cog subclass with the specified name and commands.
     """
-    methods: dict[str, commands.HybridCommand[Any, Any, Any] | commands.HybridGroup[Any, Any, Any]] = {}
+    methods: dict[
+        str,
+        commands.HybridCommand[Any, Any, Any] | commands.HybridGroup[Any, Any, Any] | Callable[..., Any],
+    ] = {}
 
-    for command in all_commands:
-        methods.update(command.get_commands(name))
+    if all_commands:
+        for command in all_commands:
+            methods.update(command.get_commands(name))
+
+    if other_methods:
+        for method in other_methods:
+            methods[method.__name__] = method
 
     # noinspection PyTypeChecker
     return type(name, (Cog,), methods, group_auto_locale_strings=False)

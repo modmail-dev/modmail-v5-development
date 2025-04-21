@@ -9,5 +9,5 @@ Note:
 
 from __future__ import annotations
 
-from .abc import *
+from .client_base import *
 from .models import *

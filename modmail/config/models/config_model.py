@@ -49,6 +49,7 @@ class Config(BaseSettings):
     bot: BotConfig
     allowed_locales: set[SupportedLocales] = Field({"en", "de"}, min_length=1)
     default_locale: SupportedLocales = Field("en", validate_default=True)
+    log_url: str
     database_type: SupportedDatabases
     sql_config: SQLDatabaseConfig | None = Field(None, validate_default=True)
     mongodb_config: MongoDBDatabaseConfig | None = Field(None, validate_default=True)
@@ -210,3 +211,22 @@ class Config(BaseSettings):
         return v
 
     # TODO: Add a validator to check if the dependencies for the database type is installed
+
+    @field_validator("log_url")
+    @classmethod
+    def check_log_url(cls, v: str) -> str:
+        """Validates the log URL format.
+
+        Args:
+            v: The log URL to validate.
+
+        Returns:
+            The validated log URL.
+
+        Raises:
+            ValueError: If the log URL is not valid.
+        """
+        v = v.strip()
+        if not v.startswith("https://"):
+            raise ValueError("Log URL must start with 'https://'")
+        return v.strip("/ ")  # Remove trailing slash if present

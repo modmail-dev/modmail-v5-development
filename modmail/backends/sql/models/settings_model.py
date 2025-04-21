@@ -43,7 +43,7 @@ class SQLSettingsTable(SQLBase):
 
     __tablename__ = "settings"
 
-    bot_id: Mapped[int] = mapped_column(primary_key=True, unique=True)
+    bot_id: Mapped[int] = mapped_column(primary_key=True)
     last_ran_version: Mapped[str | None] = mapped_column(String(32))
     last_ran_locale: Mapped[str | None] = mapped_column(String(8))
     last_slash_synced_version: Mapped[str | None] = mapped_column(String(32))

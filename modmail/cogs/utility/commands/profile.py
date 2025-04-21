@@ -17,8 +17,8 @@ import discord
 from discord.ext import commands
 
 from modmail import CONFIG, utils
-from modmail.backends.common import Profile
-from modmail.core import Bot, Str, _, lazy_hybrid_group
+from modmail.backends.common import ProfileModel
+from modmail.core import Bot, Str, _, lazy_hybrid_group, wrap
 from modmail.enum import AccessLevel, PermissionOverrideValue, ProfileType, RequiredAccessLevel
 
 if TYPE_CHECKING:
@@ -105,7 +105,7 @@ def _check_is_bot(user_or_role: discord.Member | discord.User | discord.Role) ->
 
 
 async def make_profile_customize_view(
-    cog: Utility, ctx: commands.Context[Bot], profile_detail: ProfileDetail, profile: Profile
+    cog: Utility, ctx: commands.Context[Bot], profile_detail: ProfileDetail, profile: ProfileModel
 ) -> type[ProfileCustomizeView]:
     """Create a UI view for customizing profiles.
 
@@ -316,7 +316,7 @@ async def make_profile_customize_view(
     fallback=_("ftl-cmd-profile-fallback-name"),
     description=_("ftl-cmd-profile-description"),
 )
-async def profile_command(self: Utility, ctx: commands.Context[Bot]) -> None:
+async def profile_command(cog: Utility, ctx: commands.Context[Bot]) -> None:
     """View and manage profile settings.
 
     This group command provides access to all profile management functionality
@@ -324,14 +324,16 @@ async def profile_command(self: Utility, ctx: commands.Context[Bot]) -> None:
     permission overrides.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
     """
 
 
+@wrap(discord.app_commands.rename, user_or_role=_("ftl-cmd-profile-add-param-user-or-role-name"))
+@wrap(discord.app_commands.describe, user_or_role=_("ftl-cmd-profile-add-param-user-or-role-description"))
 @profile_command.command(name=_("ftl-cmd-profile-add-name"), description=_("ftl-cmd-profile-add-description"))
 async def profile_add_command(
-    self: Utility, ctx: commands.Context[Bot], user_or_role: discord.Member | discord.User | discord.Role
+    cog: Utility, ctx: commands.Context[Bot], user_or_role: discord.Member | discord.User | discord.Role
 ) -> None:
     """Create a new profile for a user or role.
 
@@ -339,12 +341,12 @@ async def profile_add_command(
     through an interactive view.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
-        user_or_role: The user or role to create a profile for.
+        user_or_role: The user or role whose profile should be created.
     """
     if _check_is_bot(user_or_role):
-        await self.reply(ctx, _("ftl-cmd-profile-no-bot"))
+        await cog.reply(ctx, _("ftl-cmd-profile-no-bot"))
         return
 
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
@@ -354,28 +356,30 @@ async def profile_add_command(
     assert profile_detail.profile_type is not None
 
     # Check if the user/role already have a profile
-    existing_profile = self.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
+    existing_profile = cog.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
     if existing_profile is not None:
-        await self.reply(ctx, _("ftl-cmd-profile-add-already-exists", name=profile_detail.mention))
+        await cog.reply(ctx, _("ftl-cmd-profile-add-already-exists", name=profile_detail.mention))
         return
 
-    new_profile = Profile(
+    new_profile = ProfileModel(
         bot_id=CONFIG.bot.bot_id,
         profile_id=profile_detail.profile_id,
         profile_type=profile_detail.profile_type,
     )
-    await self.bot.database_client.update_profile(new_profile)
+    await cog.bot.database_client.update_profile(new_profile)
 
-    view = (await make_profile_customize_view(self, ctx, profile_detail, new_profile))()
-    message = await self.reply(ctx, _("ftl-cmd-profile-add-success", name=profile_detail.mention), view=view)
+    view = (await make_profile_customize_view(cog, ctx, profile_detail, new_profile))()
+    message = await cog.reply(ctx, _("ftl-cmd-profile-add-success", name=profile_detail.mention), view=view)
     view.set_original_message(message)
 
 
+@wrap(discord.app_commands.rename, user_or_role=_("ftl-cmd-profile-delete-param-user-or-role-name"))
+@wrap(discord.app_commands.describe, user_or_role=_("ftl-cmd-profile-delete-param-user-or-role-description"))
 @profile_command.command(
     name=_("ftl-cmd-profile-delete-name"), description=_("ftl-cmd-profile-delete-description")
 )
 async def profile_delete_command(
-    self: Utility,
+    cog: Utility,
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role | None,
     id_: int | None,  # in case role/user was deleted TODO: auto delete on bot start so this isn't necessary
@@ -386,31 +390,33 @@ async def profile_delete_command(
     from the database.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
         user_or_role: The user or role whose profile should be deleted.
         id_: The profile ID to delete if the user/role is no longer accessible.
     """
     if user_or_role is not None and id_ is not None:
-        await self.reply(ctx, _("ftl-cmd-profile-delete-both"))
+        await cog.reply(ctx, _("ftl-cmd-profile-delete-both"))
         return
 
     profile_detail = _get_profile_detail(user_or_role=user_or_role, id_=id_)
     if profile_detail is None:
-        await self.reply(ctx, _("ftl-cmd-profile-delete-none"))
+        await cog.reply(ctx, _("ftl-cmd-profile-delete-none"))
         return
 
-    await self.bot.database_client.delete_profile(profile_id=profile_detail.profile_id)
+    await cog.bot.database_client.delete_profile(profile_id=profile_detail.profile_id)
     if profile_detail.profile_type is not None and user_or_role is not None and not _check_is_bot(user_or_role):
         # Remove access from the Modmail category if not a bot
-        await self.bot.staff_guild.revoke_access(profile_detail.profile_id, profile_detail.profile_type)
+        await cog.bot.staff_guild.revoke_access(profile_detail.profile_id, profile_detail.profile_type)
 
-    await self.reply(ctx, _("ftl-cmd-profile-delete-success", name=profile_detail.mention))
+    await cog.reply(ctx, _("ftl-cmd-profile-delete-success", name=profile_detail.mention))
 
 
+@wrap(discord.app_commands.rename, user_or_role=_("ftl-cmd-profile-edit-param-user-or-role-name"))
+@wrap(discord.app_commands.describe, user_or_role=_("ftl-cmd-profile-edit-param-user-or-role-description"))
 @profile_command.command(name=_("ftl-cmd-profile-edit-name"), description=_("ftl-cmd-profile-edit-description"))
 async def profile_edit_command(
-    self: Utility,
+    cog: Utility,
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
 ) -> None:
@@ -420,12 +426,12 @@ async def profile_edit_command(
     access level. Creates a new profile if one doesn't exist.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
         user_or_role: The user or role whose profile should be edited.
     """
     if _check_is_bot(user_or_role):
-        await self.reply(ctx, _("ftl-cmd-profile-no-bot"))
+        await cog.reply(ctx, _("ftl-cmd-profile-no-bot"))
         return
 
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
@@ -435,23 +441,23 @@ async def profile_edit_command(
     assert profile_detail.profile_type is not None
 
     # Check if the user/role has an existing profile
-    profile = self.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
+    profile = cog.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
     if profile is None:
         # Create a new profile if it doesn't exist
-        profile = Profile(
+        profile = ProfileModel(
             bot_id=CONFIG.bot.bot_id,
             profile_id=profile_detail.profile_id,
             profile_type=profile_detail.profile_type,
         )
-        await self.bot.database_client.update_profile(profile)
+        await cog.bot.database_client.update_profile(profile)
 
-    view = (await make_profile_customize_view(self, ctx, profile_detail, profile))()
-    message = await self.reply(ctx, _("ftl-cmd-profile-edit-message", name=profile_detail.mention), view=view)
+    view = (await make_profile_customize_view(cog, ctx, profile_detail, profile))()
+    message = await cog.reply(ctx, _("ftl-cmd-profile-edit-message", name=profile_detail.mention), view=view)
     view.set_original_message(message)
 
 
 async def _update_permission_override(
-    self: Utility,
+    cog: Utility,
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
     command_name: Str,
@@ -463,14 +469,14 @@ async def _update_permission_override(
     permissions for specific users or roles.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
         user_or_role: The user or role to update permissions for.
         command_name: The command name to override permissions for.
         override_value: The permission value to set (allow or deny).
     """
     if _check_is_bot(user_or_role):
-        await self.reply(ctx, _("ftl-cmd-profile-no-bot"))
+        await cog.reply(ctx, _("ftl-cmd-profile-no-bot"))
         return
 
     # Sanitize the command name
@@ -478,22 +484,22 @@ async def _update_permission_override(
     command_name_no_wildcard = command_name.split("+")[0].strip()
 
     # Check if the command name is valid
-    for bot_command in self.bot.walk_commands():
+    for bot_command in cog.bot.walk_commands():
         bot_command_name = utils.get_command_name(bot_command)
 
         if bot_command_name == command_name_no_wildcard:
             if "+" in command_name and not isinstance(bot_command, commands.Group):
                 command_name = command_name_no_wildcard  # Remove the wildcard
 
-            if self.bot.get_command_access_level(bot_command) == RequiredAccessLevel.owner:
+            if cog.bot.get_command_access_level(bot_command) == RequiredAccessLevel.owner:
                 # Trying to override an owner-only command
-                if not await self.bot.is_owner(ctx.author):
-                    await self.reply(ctx, _("ftl-cmd-profile-override-owner-command", command=command_name))
+                if not await cog.bot.is_owner(ctx.author):
+                    await cog.reply(ctx, _("ftl-cmd-profile-override-owner-command", command=command_name))
                     return
             break  # Command found, exit the loop
     else:
         # Command not found
-        await self.reply(ctx, _("ftl-cmd-profile-override-command-not-found", command=command_name))
+        await cog.reply(ctx, _("ftl-cmd-profile-override-command-not-found", command=command_name))
         return
 
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
@@ -503,10 +509,10 @@ async def _update_permission_override(
     assert profile_detail.profile_type is not None
 
     # Check if the profile exists in the database
-    profile = self.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
+    profile = cog.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
     if profile is None:
         # Create a new profile if it doesn't exist
-        profile = Profile(
+        profile = ProfileModel(
             bot_id=CONFIG.bot.bot_id,
             profile_id=profile_detail.profile_id,
             profile_type=profile_detail.profile_type,
@@ -517,18 +523,26 @@ async def _update_permission_override(
     overrides[command_name] = override_value
     new_profile = profile.model_copy(deep=True, update={"permission_overrides": overrides})
 
-    await self.bot.database_client.update_profile(new_profile)
+    await cog.bot.database_client.update_profile(new_profile)
     if override_value == PermissionOverrideValue.allow:
-        await self.reply(
-            ctx, _("ftl-cmd-profile-allow-success", name=profile_detail.mention, command=command_name)
-        )
+        await cog.reply(ctx, _("ftl-cmd-profile-allow-success", name=profile_detail.mention, command=command_name))
     else:
-        await self.reply(ctx, _("ftl-cmd-profile-deny-success", name=profile_detail.mention, command=command_name))
+        await cog.reply(ctx, _("ftl-cmd-profile-deny-success", name=profile_detail.mention, command=command_name))
 
 
+@wrap(
+    discord.app_commands.rename,
+    user_or_role=_("ftl-cmd-profile-allow-param-user-or-role-name"),
+    command_name=_("ftl-cmd-profile-allow-param-command-name-name"),
+)
+@wrap(
+    discord.app_commands.describe,
+    user_or_role=_("ftl-cmd-profile-allow-param-user-or-role-description"),
+    command_name=_("ftl-cmd-profile-allow-param-command-name-description"),
+)
 @profile_command.command(name=_("ftl-cmd-profile-allow-name"), description=_("ftl-cmd-profile-allow-description"))
 async def profile_allow_command(
-    self: Utility,
+    cog: Utility,
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
     *,
@@ -541,17 +555,27 @@ async def profile_allow_command(
     specific higher-level commands.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
         user_or_role: The user or role to grant permission to.
-        command_name: The command to allow access to. Can include wildcards with "+" for command groups.
+        command_name: The command to allow access to. Can include wildcards using "+" for command groups.
     """
-    await _update_permission_override(self, ctx, user_or_role, command_name, PermissionOverrideValue.allow)
+    await _update_permission_override(cog, ctx, user_or_role, command_name, PermissionOverrideValue.allow)
 
 
+@wrap(
+    discord.app_commands.rename,
+    user_or_role=_("ftl-cmd-profile-deny-param-user-or-role-name"),
+    command_name=_("ftl-cmd-profile-deny-param-command-name-name"),
+)
+@wrap(
+    discord.app_commands.describe,
+    user_or_role=_("ftl-cmd-profile-deny-param-user-or-role-description"),
+    command_name=_("ftl-cmd-profile-deny-param-command-name-description"),
+)
 @profile_command.command(name=_("ftl-cmd-profile-deny-name"), description=_("ftl-cmd-profile-deny-description"))
 async def profile_deny_command(
-    self: Utility,
+    cog: Utility,
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
     *,
@@ -563,17 +587,27 @@ async def profile_deny_command(
     the required access level to use it.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
         user_or_role: The user or role to deny permission to.
-        command_name: The command to deny access to. Can include wildcards with "+" for command groups.
+        command_name: The command to deny access to. Can include wildcards using "+" for command groups.
     """
-    await _update_permission_override(self, ctx, user_or_role, command_name, PermissionOverrideValue.deny)
+    await _update_permission_override(cog, ctx, user_or_role, command_name, PermissionOverrideValue.deny)
 
 
+@wrap(
+    discord.app_commands.rename,
+    user_or_role=_("ftl-cmd-profile-unset-param-user-or-role-name"),
+    command_name=_("ftl-cmd-profile-unset-param-command-name-name"),
+)
+@wrap(
+    discord.app_commands.describe,
+    user_or_role=_("ftl-cmd-profile-unset-param-user-or-role-description"),
+    command_name=_("ftl-cmd-profile-unset-param-command-name-description"),
+)
 @profile_command.command(name=_("ftl-cmd-profile-unset-name"), description=_("ftl-cmd-profile-unset-description"))
 async def profile_unset_command(
-    self: Utility,
+    cog: Utility,
     ctx: commands.Context[Bot],
     user_or_role: discord.Member | discord.User | discord.Role,
     *,
@@ -585,13 +619,13 @@ async def profile_unset_command(
     to their default access level requirements for the specified user or role.
 
     Args:
-        self: The Utility cog instance.
+        cog: The Utility cog instance.
         ctx: The command context.
         user_or_role: The user or role to remove overrides for.
         command_name: The specific command override to remove, or None to remove all overrides.
     """
     if _check_is_bot(user_or_role):
-        await self.reply(ctx, _("ftl-cmd-profile-no-bot"))
+        await cog.reply(ctx, _("ftl-cmd-profile-no-bot"))
         return
 
     profile_detail = _get_profile_detail(user_or_role=user_or_role)
@@ -601,9 +635,9 @@ async def profile_unset_command(
     assert profile_detail.profile_type is not None
 
     # Check if the profile exists in the database
-    profile = self.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
+    profile = cog.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
     if profile is None:
-        await self.reply(ctx, _("ftl-cmd-profile-unset-profile-not-found", name=profile_detail.mention))
+        await cog.reply(ctx, _("ftl-cmd-profile-unset-profile-not-found", name=profile_detail.mention))
         return
 
     if command_name is not None:
@@ -612,7 +646,7 @@ async def profile_unset_command(
 
         # Check if the command override exists
         if command_name not in profile.permission_overrides:
-            await self.reply(
+            await cog.reply(
                 ctx,
                 _("ftl-cmd-profile-unset-override-not-found", name=profile_detail.mention, command=command_name),
             )
@@ -626,5 +660,5 @@ async def profile_unset_command(
         overrides = {}
     new_profile = profile.model_copy(deep=True, update={"permission_overrides": overrides})
 
-    await self.bot.database_client.update_profile(new_profile)
-    await self.reply(ctx, _("ftl-cmd-profile-unset-success", name=profile_detail.mention, command=command_name))
+    await cog.bot.database_client.update_profile(new_profile)
+    await cog.reply(ctx, _("ftl-cmd-profile-unset-success", name=profile_detail.mention, command=command_name))

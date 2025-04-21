@@ -70,6 +70,9 @@ bot:
   # Must install the jishaku package with "pdm install -G debug" to enable.
   # enable_jishaku: false
 
+# Required: The URL to the bot's logviewer address.
+log_url: "https://example.com/"
+
 # Which locales the bot should support. This is used to determine the languages used by the bot.
 # Currently supported locales are:
 #   * en (English)

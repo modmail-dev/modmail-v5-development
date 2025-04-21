@@ -19,7 +19,7 @@ if TYPE_CHECKING:
         """Utility commands cog for the Modmail bot."""
 
 else:
-    Utility = create_cog("Utility", all_commands)
+    Utility = create_cog("Utility", all_commands=all_commands)
 
 
 __all__ = ["Utility", "setup"]

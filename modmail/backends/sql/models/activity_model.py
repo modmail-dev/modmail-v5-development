@@ -31,7 +31,9 @@ class SQLActivityTable(SQLBase):
 
     __tablename__ = "activity"
 
-    bot_id: Mapped[int] = mapped_column(ForeignKey("settings.bot_id", ondelete="CASCADE"), primary_key=True)
+    bot_id: Mapped[int] = mapped_column(
+        ForeignKey("settings.bot_id", ondelete="CASCADE", onupdate="CASCADE"), primary_key=True
+    )
     type: Mapped[ActivityType]
     name: Mapped[str] = mapped_column(String(128))
     url: Mapped[str | None] = mapped_column(String(2048))

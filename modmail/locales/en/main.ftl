@@ -12,10 +12,41 @@ ftl-access-level-admin = Admin
 ftl-access-level-owner = Owner
 
 ftl-msg-permission-denied = You do not have permission to use this command.
-ftl-msg-command-invoke-error = An unknown error occurred while trying to process your command. Please try again later. If the problem persists, please report it to the Modmail team.
+ftl-msg-command-invoke-error = An unknown error occurred while processing your command, try again later.
+                               If the problem persists, please check your logs and report the error to the Modmail team.
 
 ftl-view-prompt-cancel-label = Cancel
 ftl-msg-prompt-timeout = Timed out. Please rerun the command to try again.
+
+ftl-dm-received-not-configured = Modmail has not been configured. Please contact the server owner to configure Modmail for the server.
+# :param $recipients: a comma-separated list of recipients who did not receive the message
+ftl-dm-received-failed-recipients = The following recipients did not receive this message: { $recipients }.
+                                    They may have disabled DMs, blocked me, or does not share any servers with me.
+
+# :param $users: a comma-separated list of usernames
+ftl-msg-new-thread-reason = New Modmail thread for: { $users }
+# :param $created: the date the account was created
+ftl-msg-new-thread-initial-embed-description = Account created { $created }.
+# :param $user_id: the user ID of the user (string)
+ftl-msg-new-thread-initial-embed-footer = User ID: { $user_id }
+# :param $joined: the date the user joined the server
+# :param $roles: a comma-separated list of roles
+# :param $has_role: whether the user has a role in the server (true) or not (false)
+ftl-msg-new-thread-initial-embed-guild-field-value = Joined { $joined }.
+                                                     Roles: { $has_role ->
+    *[true]  { $roles }
+     [false] None
+}
+ftl-msg-new-thread-initial-embed-past-threads-field-name = Past Threads
+# :param $count: the number of past threads
+ftl-msg-new-thread-initial-embed-past-threads-field-value = { $count ->
+     [one] 1 past thread
+    *[other] { $count } past threads
+}
+ftl-msg-create-thread-failed = Something went wrong while creating this Modmail thread. Please check my logs for more information.
+
+# :param $message_id: the message ID of the message (string)
+ftl-msg-thread-channel-embed-footer = Message ID: { $message_id }
 
 ### ========================
 ###         Commands
@@ -39,6 +70,7 @@ ftl-cmd-about-version-message = Modmail v{ $version }
 ftl-cmd-status-name = status
 ftl-cmd-status-fallback-name = set
 ftl-cmd-status-description = Set the status of the Modmail bot.
+ftl-cmd-status-param-status-name = status
 ftl-cmd-status-param-status-description = The status to set.
 
 ## Subcommand: Utility.status.clear
@@ -74,6 +106,8 @@ ftl-view-profile-select-level-success = { $level ->
 
 ftl-cmd-profile-add-name = add
 ftl-cmd-profile-add-description = Create a profile for a user or role.
+ftl-cmd-profile-add-param-user-or-role-name = user_or_role
+ftl-cmd-profile-add-param-user-or-role-description = The user or role whose profile should be created.
 # The following params can be used for the next 2 lines
 # :param $name: the name of the user or role
 ftl-cmd-profile-add-already-exists = { $name } already has a profile.
@@ -83,6 +117,8 @@ ftl-cmd-profile-add-success = Successfully created a profile for { $name }.
 
 ftl-cmd-profile-delete-name = delete
 ftl-cmd-profile-delete-description = Delete a profile.
+ftl-cmd-profile-delete-param-user-or-role-name = user_or_role
+ftl-cmd-profile-delete-param-user-or-role-description = The user or role whose profile should be deleted.
 ftl-cmd-profile-delete-both = Please only enter a user, role, or ID.
 ftl-cmd-profile-delete-none = Please provide a user, role, or ID.
 # :param $name: the name of the user or role or ID
@@ -92,6 +128,8 @@ ftl-cmd-profile-delete-success = Deleted the profile of { $name }.
 
 ftl-cmd-profile-edit-name = edit
 ftl-cmd-profile-edit-description = Customize the profile.
+ftl-cmd-profile-edit-param-user-or-role-name = user_or_role
+ftl-cmd-profile-edit-param-user-or-role-description = The user or role whose profile should be customized.
 # :param $name: the name of the user or role
 ftl-cmd-profile-edit-message = Customizing the profile of { $name }.
 
@@ -99,6 +137,10 @@ ftl-cmd-profile-edit-message = Customizing the profile of { $name }.
 
 ftl-cmd-profile-allow-name = allow
 ftl-cmd-profile-allow-description = Allow users of this profile to use a command.
+ftl-cmd-profile-allow-param-user-or-role-name = user_or_role
+ftl-cmd-profile-allow-param-user-or-role-description = The user or role to allow.
+ftl-cmd-profile-allow-param-command-name-name = command-name
+ftl-cmd-profile-allow-param-command-name-description = The command to allow. Can include wildcards using "+" for command groups.
 # :param $name: the name of the user or role
 # :param $command: the name of the command
 ftl-cmd-profile-allow-success = Allowed { $name } to use { $command }.
@@ -111,6 +153,10 @@ ftl-cmd-profile-override-command-not-found = Command { $command } not found.
 
 ftl-cmd-profile-deny-name = deny
 ftl-cmd-profile-deny-description = Deny users of this profile from using a command.
+ftl-cmd-profile-deny-param-user-or-role-name = user_or_role
+ftl-cmd-profile-deny-param-user-or-role-description = The user or role to deny.
+ftl-cmd-profile-deny-param-command-name-name = command-name
+ftl-cmd-profile-deny-param-command-name-description = The command to deny. Can include wildcards using "+" for command groups.
 # :param $name: the name of the user or role
 # :param $command: the name of the command
 ftl-cmd-profile-deny-success = Denied { $name } from using { $command }.
@@ -119,6 +165,10 @@ ftl-cmd-profile-deny-success = Denied { $name } from using { $command }.
 
 ftl-cmd-profile-unset-name = unset
 ftl-cmd-profile-unset-description = Remove an allow/deny override from this profile on a command.
+ftl-cmd-profile-unset-param-user-or-role-name = user_or_role
+ftl-cmd-profile-unset-param-user-or-role-description = The user or role to remove the override from.
+ftl-cmd-profile-unset-param-command-name-name = command-name
+ftl-cmd-profile-unset-param-command-name-description = The command to remove the override from. Leave blank to remove all overrides.
 # The following params can be used for the next 3 lines
 # :param $name: the name of the user or role
 # :param $command: the name of the command
@@ -156,6 +206,22 @@ ftl-cmd-setup-storage-channel-create-reason = Storage channel for Modmail.
 # :param $log_channel: the name of the Modmail log channel
 # :param $storage_channel: the name of the Modmail storage channel
 ftl-cmd-setup-complete = Successfully setup Modmail. Your Modmail category is { $category }. I have also created a channel called { $log_channel } for Modmail logs and { $storage_channel } for storing some of my internal data. Feel free to rename and move these channels, but please do not delete them! Please check the permissions of the category and channels to make sure they are correct.
+
+
+## Command: Modmail.reply
+
+ftl-cmd-reply-name = reply
+ftl-cmd-reply-description = Reply to a Modmail thread.
+ftl-cmd-reply-param-attachment-name = attachment
+ftl-cmd-reply-param-attachment-description = The attachment to send. Can be a file or an image.
+ftl-cmd-reply-param-message-name = message
+ftl-cmd-reply-param-message-description = The message to send.
+ftl-cmd-reply-message-empty = Please enter a message to send.
+flt-cmd-reply-message-sending = Sending the message...
+# :param $recipients: a comma-separated list of recipients who did not receive the message
+ftl-cmd-reply-message-failed-recipients = Failed to send this message to the following recipients: { $recipients }.
+                                          They may have disabled DMs, blocked me, or does not share any servers with me.
+ftl-cmd-reply-message-failed = Failed to send the reply, please check my logs for more information.
 
 ### ========================
 ###         Messages

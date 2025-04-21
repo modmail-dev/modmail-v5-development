@@ -12,6 +12,30 @@ from typing import NamedTuple
 from discord import app_commands
 
 
+class ThreadMessageType(enum.Enum):
+    """The type of the thread message.
+
+    Represents the different types of messages that can be sent in a thread,
+    including reply messages, DM messages, and internal messages.
+    """
+
+    reply = "reply"
+    dm = "dm"
+    internal = "internal"
+
+
+class ThreadStatus(enum.Enum):
+    """Status of a thread.
+
+    Represents the different states a thread can be in, such as open, closed,
+    archived, or deleted.
+    """
+
+    open = "open"
+    closed_by_command = "closed_by_command"
+    closed_by_deletion = "closed_by_deletion"
+
+
 class AccessLevel(enum.IntEnum):
     """Permission access levels assignable to a profile.
 
@@ -85,8 +109,8 @@ class ProfileType(enum.Enum):
     Indicates whether a profile belongs to an individual user or a role.
     """
 
-    user = 1
-    role = 2
+    user = "user"
+    role = "role"
 
 
 class PermissionOverrideValue(enum.Enum):
@@ -95,8 +119,8 @@ class PermissionOverrideValue(enum.Enum):
     Represents whether a permission is explicitly allowed or denied.
     """
 
-    allow = 1
-    deny = 2
+    allow = "allow"
+    deny = "deny"
 
 
 # Technically, this is not an enum, but storing in this file for consistency.
@@ -121,12 +145,12 @@ class ActivityType(enum.Enum):
     in a Discord presence (Playing, Streaming, Listening to, etc.).
     """
 
-    playing = 0
-    streaming = 1
-    listening = 2
-    watching = 3
-    custom = 4
-    competing = 5
+    playing = "playing"
+    streaming = "streaming"
+    listening = "listening"
+    watching = "watching"
+    custom = "custom"
+    competing = "competing"
 
     def __locale_str__(self) -> app_commands.locale_str:
         """Get a localized string representation of the activity prefix.
@@ -161,10 +185,10 @@ class StatusType(enum.Enum):
     Represents the different visibility states a user can have on Discord.
     """
 
-    online = 0
-    idle = 1
-    dnd = 2
-    offline = 3
+    online = "online"
+    idle = "idle"
+    dnd = "dnd"
+    offline = "offline"
 
     def __str__(self) -> str:
         """Get a string representation of the status.

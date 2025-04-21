@@ -7,17 +7,22 @@ into the __qualname__ of callback functions so discord.py thinks the command bel
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from ... import CONFIG
+from ...errors import NotInThreadError, StaffGuildNotConfiguredError
+
+if TYPE_CHECKING:
+    from ..bot import Bot
 
 __all__ = [
     "LazyHybridCommand",
     "LazyHybridGroup",
+    "in_modmail_thread",
     "lazy_hybrid_command",
     "lazy_hybrid_group",
     "wrap",
@@ -277,3 +282,40 @@ def wrap[T](dpy_func: Any, *args: Any, **kwargs: Any) -> Callable[[T], T]:
         return func  # pyright: ignore [reportUnknownVariableType]
 
     return decorator
+
+
+def in_modmail_thread() -> Any:
+    """Check if the command is being invoked in a Modmail thread.
+
+    This decorator also applies the guild_only decorator to ensure the command is only
+    available in servers.
+
+    Returns:
+        A check function that returns True if the command is in a Modmail thread.
+    """
+
+    async def predicate(ctx: commands.Context[Bot]) -> bool:
+        """Check if the command is being invoked in a Modmail thread.
+
+        Args:
+            ctx: The command context.
+
+        Returns:
+            True if the command is in a Modmail thread, False otherwise.
+
+        Raises:
+            NotInThreadError: If the command is not in a Modmail thread.
+            StaffGuildNotConfiguredError: If Modmail is not configured.
+        """
+        if not ctx.bot.staff_guild.is_configured():
+            raise StaffGuildNotConfiguredError("Modmail is not configured.")
+
+        if ctx.guild is None or ctx.guild.id != ctx.bot.staff_guild.guild_id:
+            raise NotInThreadError("This command can only be used in Modmail threads.")
+
+        thread_model = await ctx.bot.database_client.get_thread_by_channel(ctx.channel.id, only_open=True)
+        if thread_model is None:
+            raise NotInThreadError("This command can only be used in Modmail threads.")
+        return True
+
+    return wrap(commands.guild_only)(wrap(lambda: commands.check(predicate)))

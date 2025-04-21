@@ -9,12 +9,12 @@ from pydantic import BaseModel, ConfigDict
 
 from modmail.enum import StatusType
 
-from .activity_model import Activity
+from .activity_model import ActivityModel
 
-__all__ = ["Settings"]
+__all__ = ["SettingsModel"]
 
 
-class Settings(BaseModel):
+class SettingsModel(BaseModel):
     """Settings model for bot configuration.
 
     Attributes:
@@ -43,4 +43,4 @@ class Settings(BaseModel):
     log_channel_id: int | None = None
     storage_channel_id: int | None = None
     status: StatusType | None = None
-    activity: Activity | None = None
+    activity: ActivityModel | None = None
