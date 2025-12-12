@@ -9,11 +9,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Literal, overload
 
+from modmail.enum import ProfileType, ThreadStatus
+
 if TYPE_CHECKING:
     from modmail.config import Config
-    from modmail.enum import ProfileType
 
-    from .models import ProfileModel, SettingsModel, ThreadMessageModel, ThreadModel
+    from .models import ProfileModel, SettingsModel, ThreadMessageModel, ThreadModel, ThreadUserModel
 
 __all__ = ["DBClientBase"]
 
@@ -141,22 +142,25 @@ class DBClientBase(ABC):  # pragma: no cover
         """
 
     @overload
-    async def get_all_threads_by_recipient(self, recipient_id: int, count: Literal[True] = True) -> int: ...
+    async def get_all_threads_by_recipient(
+        self, recipient_id: int, *, count: Literal[True] = True, only_closed: bool = False
+    ) -> int: ...
 
     @overload
     async def get_all_threads_by_recipient(
-        self, recipient_id: int, count: Literal[False] = False
+        self, recipient_id: int, *, count: Literal[False] = False, only_closed: bool = False
     ) -> list[ThreadModel]: ...
 
     @abstractmethod
     async def get_all_threads_by_recipient(
-        self, recipient_id: int, count: bool = False
+        self, recipient_id: int, *, count: bool = False, only_closed: bool = False
     ) -> int | list[ThreadModel]:
         """Retrieves all threads by recipient ID.
 
         Args:
             recipient_id: The identifier of the recipient.
             count: Whether to return the count of threads or the list of thread objects.
+            only_closed: Whether to only include closed threads.
 
         Returns:
             A list of threads associated with the recipient or the count of threads if count is True.
@@ -206,4 +210,23 @@ class DBClientBase(ABC):  # pragma: no cover
 
         Raises:
             ThreadNotFoundError: If the thread is not found.
+        """
+
+    @abstractmethod
+    async def close_thread(
+        self,
+        thread_key: str,
+        closer: ThreadUserModel,
+        *,
+        thread_status: ThreadStatus = ThreadStatus.closed_by_command,
+    ) -> None:
+        """Closes a thread in the database.
+
+        Args:
+            thread_key: The key of the thread to close.
+            closer: The user who is closing the thread.
+            thread_status: The status of the thread after closing.
+
+        Raises:
+            ThreadNotFoundError: If the thread is not found in the database or isn't currently open.
         """

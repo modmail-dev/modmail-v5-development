@@ -10,7 +10,7 @@ import asyncio
 import datetime
 import logging
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import discord
 
@@ -57,6 +57,9 @@ class StaffGuild:
 
         When changing this, make sure to also change the localization files.
         (ftl-cmd-setup-not-enough-guild-permissions, etc.)
+
+        The view audit-log permission is highly recommended, but not required.
+        It help logs the closer when they manually delete a thread channel.
 
         Returns:
             The discord.Permissions of the minimum permissions for Modmail.
@@ -330,7 +333,7 @@ class StaffGuild:
             await asyncio.gather(*coros)
 
     async def get_thread(
-        self, /, user_or_channel: discord.User | discord.Member | discord.abc.MessageableChannel
+        self, /, user_or_channel: discord.User | discord.Member | discord.abc.GuildChannel
     ) -> ThreadView | None:
         """Get an open thread for a user or channel.
 
@@ -351,7 +354,15 @@ class StaffGuild:
 
         channel = self.guild.get_channel(thread_model.channel_id)
         if channel is None:
-            return None  # TODO: Thread channel does not exist
+            logger.warning(
+                "Thread channel %s does not exist, closing thread %s", thread_model.channel_id, thread_model.key
+            )
+            await self.bot.database_client.close_thread(
+                thread_model.key,
+                ThreadUserModel.from_user(cast(discord.ClientUser, self.bot.user)),
+                thread_status=ThreadStatus.closed_by_deletion,
+            )
+            return None
 
         recipients: list[discord.User | discord.Member] = []
         for recipient in thread_model.recipients:
@@ -423,6 +434,7 @@ class StaffGuild:
             await self.bot.database_client.create_thread(thread)
             view = ThreadView(self, thread, list(recipients))
             await view.send_initial_staff_message()
+            # TODO: send initial recipient message
         except Exception:
             logger.exception("Failed to create thread or send initial message.")
             # Send a message to the channel indicating the failure

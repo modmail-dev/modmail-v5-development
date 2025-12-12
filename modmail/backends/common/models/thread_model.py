@@ -6,8 +6,9 @@ status, and metadata.
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime
-from secrets import token_urlsafe
+from string import ascii_letters, digits
 
 from pydantic import BaseModel, ConfigDict
 
@@ -63,4 +64,5 @@ class ThreadModel(BaseModel):
         Returns:
             A unique key for the thread.
         """
-        return token_urlsafe(16)[:12]
+        length = 12
+        return "".join(secrets.choice(ascii_letters + digits) for _ in range(length))

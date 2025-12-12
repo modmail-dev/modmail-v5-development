@@ -9,7 +9,7 @@ authors = [
     {name = "Taaku18", email = "taku@modmail.dev"},
 ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 license = "AGPL-3.0-or-later"
 license-files = ["LICEN[CS]E*"]
 dynamic = ["version"]
@@ -24,8 +24,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Communications :: Chat",
     "Topic :: Communications :: Conferencing",
     "Typing :: Typed",
@@ -34,8 +33,8 @@ classifiers = [
 dependencies = [
     "discord.py==2.5.2",
     "rich~=13.9.4",
-    "pydantic[dotenv]<2.11,>=2.10.6",
-    "pydantic-settings<2.9,>=2.8.1",
+    "pydantic[dotenv]<=2.13",
+    "pydantic-settings<=2.13",
     "packaging",  # For version parsing.
     "pyyaml~=6.0.2",
     "fluent-runtime<0.5,>=0.4.0",
@@ -51,7 +50,7 @@ sqlite = [
     "alembic<1.16,>=1.15.1"
 ]
 mongodb = [
-    "beanie[srv] @ git+https://github.com/Taaku18/beanie@change-toml-dependency",
+    "beanie[srv]==1.30.0",
 ]
 all = [
     "modmail[speed,sqlite,mongodb]",
@@ -148,6 +147,7 @@ ignore = [
     "PLR0913", # Too many arguments
     "PLR0912", # Too many branches
     "PLR0911", # Too many return statements
+    "PLR0904", # Too many public methods
     "PLR1702", # Too many nested blocks (preview)
     "PLR5501", # Use `elif` instead of `else` then `if`
     "PLW2901", # `for` loop variable `value` overwritten by assignment target

@@ -82,5 +82,13 @@ class MongoDBThreadMessageDocument(Document):
                 [("bot_id", ASCENDING), ("thread_key", ASCENDING), ("message_id", ASCENDING)],
                 unique=True,
                 name="thread_message_unique",
-            )
+            ),
+            IndexModel(
+                [("bot_id", ASCENDING), ("thread_key", ASCENDING), ("type", ASCENDING)],
+                name="thread_message_type_lookup",
+            ),
+            IndexModel(
+                [("bot_id", ASCENDING), ("thread_key", ASCENDING), ("author", ASCENDING)],
+                name="thread_message_author_lookup",
+            ),
         ]

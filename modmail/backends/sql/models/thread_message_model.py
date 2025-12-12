@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, ForeignKeyConstraint, String, UniqueConstraint
+from sqlalchemy import ForeignKey, ForeignKeyConstraint, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from modmail.enum import ThreadMessageType
@@ -91,4 +91,6 @@ class SQLThreadMessageTable(SQLBase):
             ondelete="CASCADE",
             onupdate="CASCADE",
         ),
+        Index("ix_thread_message_type", "bot_id", "thread_key", "type"),
+        Index("ix_thread_message_author", "bot_id", "thread_key", "author_id"),
     )

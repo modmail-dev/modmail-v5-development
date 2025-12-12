@@ -29,7 +29,7 @@ class ThreadUserModel(BaseModel):
     user_name: str
 
     @classmethod
-    def from_user(cls, user: discord.User | discord.Member) -> ThreadUserModel:
+    def from_user(cls, user: discord.User | discord.Member | discord.ClientUser) -> ThreadUserModel:
         """Creates a ThreadUserModel from a discord user or member.
 
         Args:

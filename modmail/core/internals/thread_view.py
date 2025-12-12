@@ -19,7 +19,7 @@ from discord.ext import commands
 from modmail.backends.common import ThreadDMMessageModel, ThreadMessageModel, ThreadModel, ThreadUserModel
 
 from ... import CONFIG
-from ...enum import ThreadMessageType
+from ...enum import ThreadMessageType, ThreadStatus
 from ...errors import BadPermissionsError, NoStaffGuildError, NoThreadChannelError
 from ..translator import _
 from .embed import EmbedProxy
@@ -156,11 +156,15 @@ class ThreadView:
             for member in members:
                 roles = [role.mention for role in member.roles if not role.is_default()]
                 roles_str = ", ".join(roles) if roles else ""
+                if member.joined_at:
+                    joined_time = discord.utils.format_dt(member.joined_at, "R")
+                else:
+                    joined_time = _("ftl-msg-new-thread-initial-embed-guild-field-value-no-join-date")
                 embed.add_field(
                     name=member.guild.name,
                     value=_(
                         "ftl-msg-new-thread-initial-embed-guild-field-value",
-                        joined=discord.utils.format_dt(member.joined_at, "R"),
+                        joined=joined_time,
                         roles=roles_str,
                         has_role=str(bool(roles)).lower(),
                     ),
@@ -168,7 +172,9 @@ class ThreadView:
                 )
 
             past_threads_count = await self.bot.database_client.get_all_threads_by_recipient(
-                recipient.id, count=True
+                recipient.id,
+                count=True,
+                only_closed=True,
             )
             embed.add_field(
                 name=_("ftl-msg-new-thread-initial-embed-past-threads-field-name"),
@@ -202,6 +208,8 @@ class ThreadView:
         Returns:
             The formatted embed proxy.
         """
+        # TODO: format close embed: ThreadMessageType = close, sclose
+
         if isinstance(original_message, tuple):
             ctx, content = original_message
             author = ctx.author
@@ -243,6 +251,8 @@ class ThreadView:
         Returns:
             The formatted embed proxy.
         """
+        # TODO: format close embed: ThreadMessageType = close
+
         if isinstance(original_message, tuple):
             ctx, content = original_message
             author = ctx.author
@@ -335,9 +345,9 @@ class ThreadView:
         return failed_recipients
 
     async def process_reply_message(
-        self, ctx: commands.Context[Bot], message: str
+        self, ctx: commands.Context[Bot], message: str, message_type: ThreadMessageType = ThreadMessageType.reply
     ) -> list[discord.User | discord.Member]:
-        """Process a reply message and send it to the DM channel.
+        """Process a reply, close, or note message and send it to the DM channel if applicable.
 
         This method uses message as the content of the reply message.
         Although ctx.message.content may be empty, ctx.message is still used to get the author and
@@ -346,26 +356,29 @@ class ThreadView:
         Args:
             ctx: The command context containing information about the invocation.
             message: The message to send as a reply.
+            message_type: The type of the message (e.g., reply, close, etc.).
 
         Returns:
             A list of recipients to whom the reply message failed to send.
         """
-        logger.debug("Processing reply message in thread %s: %s", self.model.key, message)
+        logger.debug("Processing %s message in thread %s: %s", message_type, self.model.key, message)
         channel = self.channel  # This checks for permissions and validity
-        embed_proxy = self.format_thread_channel_embed((ctx, message), ThreadMessageType.reply)
+        embed_proxy = self.format_thread_channel_embed((ctx, message), message_type)
         embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
 
         coros: list[Awaitable[Any]] = [channel.send(embed=embed)]
 
-        embed_proxy = self.format_dm_channel_embed((ctx, message), ThreadMessageType.reply)
-        embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
-        coros.extend([recipient.send(embed=embed) for recipient in self.recipients])
+        # Send the message to all recipients in the thread
+        if message_type in {ThreadMessageType.reply, ThreadMessageType.close}:
+            embed_proxy = self.format_dm_channel_embed((ctx, message), message_type)
+            embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
+            coros.extend([recipient.send(embed=embed) for recipient in self.recipients])
 
         sent_messages = await asyncio.gather(*coros, return_exceptions=True)
 
         thread_channel_message = sent_messages[0]
         if not isinstance(thread_channel_message, discord.Message):
-            logger.warning("Failed to send message to thread channel: %s", thread_channel_message)
+            logger.error("Failed to send %s message to thread channel: %s", message_type, thread_channel_message)
             raise thread_channel_message
 
         dm_channel_messages: list[ThreadDMMessageModel] = []
@@ -382,7 +395,7 @@ class ThreadView:
                     )
                 )
             else:
-                logger.error("Failed to send DM message to %s: %s", recipient, sent_message)
+                logger.error("Failed to send %s DM message to %s: %s", message_type, recipient, sent_message)
                 failed_recipients.append(recipient)
 
         thread_message_model = ThreadMessageModel(
@@ -393,12 +406,41 @@ class ThreadView:
             author=ThreadUserModel.from_user(ctx.author),
             content=message,
             created_at=ctx.message.created_at,
-            type=ThreadMessageType.reply,
+            type=message_type,
         )
         task = asyncio.create_task(self.bot.database_client.save_message(thread_message_model))
         task.add_done_callback(
-            lambda t: logger.warning("Error saving message for thread %s", self.model.key, exc_info=t.exception())
+            lambda t: logger.error(
+                "Error saving %s message for thread %s", message_type, self.model.key, exc_info=t.exception()
+            )
             if t.exception()
             else None
         )
         return failed_recipients
+
+    async def close(self, closer: discord.User | discord.Member, thread_status: ThreadStatus) -> None:
+        """Close the thread and perform any necessary cleanup.
+
+        Args:
+            closer: The user who is closing the thread.
+            thread_status: The status of the thread after closing (by command, by deletion).
+
+        Raises:
+            ValueError: If an invalid thread status is provided for closing.
+        """
+        logger.debug("Closing thread %s: %s", self.model.key, thread_status)
+
+        if thread_status not in {
+            ThreadStatus.closed_by_command,
+            ThreadStatus.closed_by_deletion,
+        }:
+            raise ValueError("Invalid thread status for closing.")
+
+        closer_model = ThreadUserModel.from_user(closer)
+        await self.staff_guild.bot.database_client.close_thread(
+            self.model.key, closer_model, thread_status=thread_status
+        )
+
+        # TODO: config
+        # await self.channel.delete(reason=_("ftl-msg-thread-closed-reason", user=closer.name))
+        logger.info("Closed thread %s for %s.", self.model.key, self.model.recipients)

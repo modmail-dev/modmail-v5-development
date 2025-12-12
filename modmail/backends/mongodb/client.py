@@ -7,6 +7,7 @@ errors, and perform database operations required by the Modmail bot.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
@@ -17,11 +18,16 @@ from beanie import init_beanie  # pyright: ignore [reportUnknownVariableType]
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from modmail.enum import ProfileKey, ProfileType, ThreadStatus
-from modmail.errors import DatabaseConnectionError, ThreadCreationError, ThreadRecipientOccupiedError
+from modmail.errors import (
+    DatabaseConnectionError,
+    ThreadCreationError,
+    ThreadNotFoundError,
+    ThreadRecipientOccupiedError,
+)
 from modmail.utils import MultiKeyCollection
 
-from ..common import DBClientBase, ProfileModel, SettingsModel, ThreadMessageModel, ThreadModel
-from .convert import thread_message_model_to_document, thread_model_to_document
+from ..common import DBClientBase, ProfileModel, SettingsModel, ThreadMessageModel, ThreadModel, ThreadUserModel
+from .convert import get_or_create_thread_user, thread_message_model_to_document, thread_model_to_document
 from .migration import do_migration
 from .models import (
     MongoDBActivityModel,
@@ -527,37 +533,40 @@ class MongoDBClient(DBClientBase):
         return None
 
     @overload
-    async def get_all_threads_by_recipient(self, recipient_id: int, count: Literal[True] = True) -> int: ...
+    async def get_all_threads_by_recipient(
+        self, recipient_id: int, *, count: Literal[True] = True, only_closed: bool = False
+    ) -> int: ...
 
     @overload
     async def get_all_threads_by_recipient(
-        self, recipient_id: int, count: Literal[False] = False
+        self, recipient_id: int, *, count: Literal[False] = False, only_closed: bool = False
     ) -> list[ThreadModel]: ...
 
     async def get_all_threads_by_recipient(
-        self, recipient_id: int, count: bool = False
+        self, recipient_id: int, *, count: bool = False, only_closed: bool = False
     ) -> int | list[ThreadModel]:
         """Get all threads by recipient ID.
 
         Args:
             recipient_id: The recipient ID of the threads to retrieve.
             count: Whether to return only the count of threads.
+            only_closed: Whether to only include closed threads.
 
         Returns:
             A list of thread models associated with the recipient or the count of threads if count is True.
         """
-        if count:
-            return await MongoDBThreadDocument.find(
-                MongoDBThreadDocument.bot_id == self._config.bot.bot_id
-                and cast(MongoDBThreadUserDocument, MongoDBThreadDocument.recipients).id == recipient_id,
-                fetch_links=True,
-            ).count()
-
-        thread_documents = await MongoDBThreadDocument.find(
+        query = (
             MongoDBThreadDocument.bot_id == self._config.bot.bot_id
-            and cast(MongoDBThreadUserDocument, MongoDBThreadDocument.recipients).id == recipient_id,
-            fetch_links=True,
-        ).to_list()
+            and cast(MongoDBThreadUserDocument, MongoDBThreadDocument.recipients).id == recipient_id
+        )
+
+        if only_closed:
+            query = query and MongoDBThreadDocument.status != ThreadStatus.open
+
+        if count:
+            return await MongoDBThreadDocument.find(query, fetch_links=True).count()
+
+        thread_documents = await MongoDBThreadDocument.find(query, fetch_links=True).to_list()
         return await asyncio.gather(*[thread_document.get_model() for thread_document in thread_documents])
 
     async def save_message(self, thread_message: ThreadMessageModel) -> None:
@@ -585,3 +594,52 @@ class MongoDBClient(DBClientBase):
             logger.error("Failed to save message in MongoDB: %s", e)
             raise DatabaseConnectionError("Something went wrong while saving the message.") from e
         logger.debug("Saved message %s in thread %s.", thread_message.message_id, thread_message.thread_key)
+
+    async def close_thread(
+        self,
+        thread_key: str,
+        closer: ThreadUserModel,
+        *,
+        thread_status: ThreadStatus = ThreadStatus.closed_by_command,
+    ) -> None:
+        """Close a thread in the database.
+
+        Args:
+            thread_key: The key of the thread to close.
+            closer: The user who is closing the thread.
+            thread_status: The status to set for the thread (default is closed_by_command).
+
+        Raises:
+            ThreadNotFoundError: If the thread is not found in the database or isn't currently open.
+        """
+        assert thread_status != ThreadStatus.open, "Thread status cannot be 'open' when closing a thread."
+
+        # Find the thread document
+        thread_document = await MongoDBThreadDocument.find_one(
+            MongoDBThreadDocument.bot_id == self._config.bot.bot_id and MongoDBThreadDocument.key == thread_key,
+            fetch_links=True,
+        )
+
+        if thread_document is None:
+            raise ThreadNotFoundError("Thread not found in database.")
+
+        if thread_document.status != ThreadStatus.open:
+            raise ThreadNotFoundError("Thread is not currently open.")
+
+        closer_document = await get_or_create_thread_user(closer)
+
+        # Update the thread status and set closer information
+        thread_document.status = thread_status
+        thread_document.closed_at = datetime.datetime.now(tz=datetime.UTC)
+        thread_document.closed_by = closer_document
+
+        # Save the updated thread document
+        # noinspection PyArgumentList
+        await thread_document.replace()
+
+        # Remove the thread from the open threads cache
+        try:
+            self.__open_threads_cache.remove("key", thread_key)
+        except KeyError:
+            logger.debug("Thread %s not found in cache.", thread_key)
+        logger.debug("Closed thread %s in MongoDB.", thread_key)

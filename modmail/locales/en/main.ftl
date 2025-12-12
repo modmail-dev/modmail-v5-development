@@ -37,6 +37,7 @@ ftl-msg-new-thread-initial-embed-guild-field-value = Joined { $joined }.
     *[true]  { $roles }
      [false] None
 }
+ftl-msg-new-thread-initial-embed-guild-field-value-no-join-date = [Unknown]
 ftl-msg-new-thread-initial-embed-past-threads-field-name = Past Threads
 # :param $count: the number of past threads
 ftl-msg-new-thread-initial-embed-past-threads-field-value = { $count ->
@@ -207,7 +208,6 @@ ftl-cmd-setup-storage-channel-create-reason = Storage channel for Modmail.
 # :param $storage_channel: the name of the Modmail storage channel
 ftl-cmd-setup-complete = Successfully setup Modmail. Your Modmail category is { $category }. I have also created a channel called { $log_channel } for Modmail logs and { $storage_channel } for storing some of my internal data. Feel free to rename and move these channels, but please do not delete them! Please check the permissions of the category and channels to make sure they are correct.
 
-
 ## Command: Modmail.reply
 
 ftl-cmd-reply-name = reply
@@ -222,6 +222,30 @@ flt-cmd-reply-message-sending = Sending the message...
 ftl-cmd-reply-message-failed-recipients = Failed to send this message to the following recipients: { $recipients }.
                                           They may have disabled DMs, blocked me, or does not share any servers with me.
 ftl-cmd-reply-message-failed = Failed to send the reply, please check my logs for more information.
+
+## Command: Modmail.close
+
+ftl-cmd-close-name = close
+ftl-cmd-close-description = Close a Modmail thread.
+ftl-cmd-close-param-attachment-name = attachment
+ftl-cmd-close-param-attachment-description = The attachment to send. Can be a file or an image.
+ftl-cmd-close-param-message-name = message
+ftl-cmd-close-param-message-description = The message to send.
+ftl-cmd-close-message-sending = Closing the thread...
+# :param $recipients: a comma-separated list of recipients who did not receive the message
+ftl-cmd-close-message-failed-recipients = Failed to send the close message to the following recipients: { $recipients }.
+                                          They may have disabled DMs, blocked me, or does not share any servers with me.
+ftl-cmd-close-message-failed = Failed to send the close message, please check my logs for more information.
+
+## Command: Modmail.sclose
+
+ftl-cmd-sclose-name = sclose
+ftl-cmd-sclose-description = Silently close a Modmail thread.
+ftl-cmd-sclose-param-attachment-name = attachment
+ftl-cmd-sclose-param-attachment-description = The attachment to store with the close message. Can be a file or an image.
+ftl-cmd-sclose-param-message-name = message
+ftl-cmd-sclose-param-message-description = The message to store as the close message.
+ftl-cmd-sclose-message-sending = Closing the thread...
 
 ### ========================
 ###         Messages

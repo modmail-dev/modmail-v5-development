@@ -21,10 +21,10 @@ from .models import (
 )
 
 __all__ = [
+    "get_or_create_thread_user",
     "thread_dm_message_model_to_document",
     "thread_message_model_to_document",
     "thread_model_to_document",
-    "thread_user_model_to_document",
 ]
 
 

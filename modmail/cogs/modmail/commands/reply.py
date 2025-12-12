@@ -61,7 +61,7 @@ async def reply_command(
         message: The message to send as a reply.
 
     Raises:
-        ModmailError: If the command is invoked outside of a Modmail thread (exception caught internally).
+        ModmailError: If the command is invoked outside a Modmail thread (exception caught internally).
     """
     # TODO: Support sending stickers
     if not message and not attachment:
@@ -71,11 +71,12 @@ async def reply_command(
     if ctx.interaction is not None:
         await cog.reply(ctx, _("flt-cmd-reply-message-sending"), delete_after=3, ephemeral=True, auto_embed=False)
 
-    try:
-        thread = await cog.bot.staff_guild.get_thread(ctx.channel)
-        if thread is None:
-            raise ModmailError("Thread should not be None here.")
+    assert isinstance(ctx.channel, discord.abc.GuildChannel)
+    thread = await cog.bot.staff_guild.get_thread(ctx.channel)
+    if thread is None:
+        raise ModmailError("Thread should not be None here.")
 
+    try:
         failed_recipients = await thread.process_reply_message(ctx, message)
 
         if failed_recipients:

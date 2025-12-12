@@ -257,7 +257,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         # Similar to bot.wait_for(), but we're doing creating the wait_for manually here to allow future.cancel()
         future = self.bot.loop.create_future()
         try:
-            listeners: list[Any] = self.bot._listeners["message"]  # pyright: ignore [reportUnknownMemberType, reportPrivateUsage]
+            listeners: list[Any] = self.bot._listeners["message"]  # pyright: ignore [reportUnknownVariableType, reportUnknownMemberType, reportPrivateUsage]
         except KeyError:
             listeners = []
             self.bot._listeners["message"] = listeners  # pyright: ignore [reportUnknownMemberType, reportPrivateUsage]

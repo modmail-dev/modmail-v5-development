@@ -96,6 +96,9 @@ class Translator(app_commands.Translator):
             if hasattr(value, "__locale_str__"):
                 # If the value is a locale_str, translate it (recursive call)
                 string.extras[key] = await self.translate(value.__locale_str__(), locale, context)
+            elif isinstance(value, locale_str):
+                # TODO: check if this works
+                string.extras[key] = await self.translate(value, locale, context)
             elif isinstance(value, FluentTypes):
                 string.extras[key] = value
             else:
@@ -104,7 +107,7 @@ class Translator(app_commands.Translator):
         return l10n.format_value(message, string.extras)
 
 
-def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr) -> locale_str:
+def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> locale_str:
     """Translate string to default locale and prepare for multi-locale support.
 
     This function handles the initial translation to the default locale and stores
@@ -126,8 +129,11 @@ def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr) -> locale_str:
     temp_kwargs: dict[str, FluentTypes] = {}
 
     for key, value in kwargs.items():
-        if hasattr(value, "__locale_str__"):  # If the value is a locale_str, use the default message
+        # If the value can be converted to a locale_str, use the default message
+        if hasattr(value, "__locale_str__"):
             temp_kwargs[key] = value.__locale_str__().message  # pyright: ignore [reportUnknownMemberType, reportOptionalMemberAccess, reportAttributeAccessIssue]
+        elif isinstance(value, locale_str):
+            temp_kwargs[key] = value.message
         elif isinstance(value, FluentTypes):
             temp_kwargs[key] = value
         else:

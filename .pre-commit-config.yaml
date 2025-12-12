@@ -47,4 +47,4 @@ repos:
       - id: pdm-lock-check
 
 default_language_version:
-    python: python3.12
+    python: python3.13

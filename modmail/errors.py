@@ -19,6 +19,7 @@ __all__ = [
     "NotInThreadError",
     "StaffGuildNotConfiguredError",
     "ThreadCreationError",
+    "ThreadNotFoundError",
     "ThreadRecipientOccupiedError",
 ]
 
@@ -84,6 +85,13 @@ class ThreadRecipientOccupiedError(ThreadCreationError):
     """Exception for when the recipient is already in another open thread.
 
     Raised when an operation attempts to create a thread with an occupied recipient.
+    """
+
+
+class ThreadNotFoundError(ModmailError):
+    """Exception for when a thread is not found.
+
+    Raised when an operation requires a thread but it cannot be found in the database.
     """
 
 

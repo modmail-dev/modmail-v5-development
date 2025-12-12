@@ -22,6 +22,8 @@ class ThreadMessageType(enum.Enum):
     reply = "reply"
     dm = "dm"
     internal = "internal"
+    close = "close"
+    sclose = "sclose"
 
 
 class ThreadStatus(enum.Enum):

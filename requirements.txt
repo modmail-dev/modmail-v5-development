@@ -2,13 +2,13 @@
 # Please do not edit it manually.
 
 alembic<1.16,>=1.15.1
-beanie[srv] @ git+https://github.com/Taaku18/beanie@change-toml-dependency
+beanie[srv]==1.30.0
 discord-py==2.5.2
 discord-py[speed]==2.5.2
 fluent-runtime<0.5,>=0.4.0
 packaging
-pydantic-settings<2.9,>=2.8.1
-pydantic[dotenv]<2.11,>=2.10.6
+pydantic-settings<=2.13
+pydantic[dotenv]<=2.13
 pyyaml~=6.0.2
 rich~=13.9.4
 sqlalchemy[aiosqlite,asyncio]<2.1,>=2.0.39

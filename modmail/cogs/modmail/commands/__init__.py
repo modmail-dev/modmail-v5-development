@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from .close import close_command
 from .reply import reply_command
+from .sclose import sclose_command
 from .setup import setup_command
 
 if TYPE_CHECKING:
@@ -22,4 +24,6 @@ __all__ = [
 all_commands: list[LazyHybridCommand[Any]] = [
     setup_command,
     reply_command,
+    close_command,
+    sclose_command,
 ]

@@ -7,6 +7,7 @@ handling initialization and settings management for the Modmail bot.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 from collections.abc import Awaitable
 from concurrent.futures import ProcessPoolExecutor
@@ -17,7 +18,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from modmail.enum import ProfileKey, ProfileType, ThreadStatus
-from modmail.errors import DatabaseConnectionError, ThreadCreationError, ThreadRecipientOccupiedError
+from modmail.errors import (
+    DatabaseConnectionError,
+    ThreadCreationError,
+    ThreadNotFoundError,
+    ThreadRecipientOccupiedError,
+)
 from modmail.utils import MultiKeyCollection
 
 from ..common import DBClientBase, ProfileModel, SettingsModel, ThreadMessageModel, ThreadModel, ThreadUserModel
@@ -640,21 +646,24 @@ class SQLClient(DBClientBase):
         return None
 
     @overload
-    async def get_all_threads_by_recipient(self, recipient_id: int, count: Literal[True] = True) -> int: ...
+    async def get_all_threads_by_recipient(
+        self, recipient_id: int, *, count: Literal[True] = True, only_closed: bool = False
+    ) -> int: ...
 
     @overload
     async def get_all_threads_by_recipient(
-        self, recipient_id: int, count: Literal[False] = False
+        self, recipient_id: int, *, count: Literal[False] = False, only_closed: bool = False
     ) -> list[ThreadModel]: ...
 
     async def get_all_threads_by_recipient(
-        self, recipient_id: int, count: bool = False
+        self, recipient_id: int, *, count: bool = False, only_closed: bool = False
     ) -> int | list[ThreadModel]:
         """Get all threads by recipient ID.
 
         Args:
             recipient_id: The recipient ID to search for.
             count: If True, return the count of threads. If False, return the list of threads.
+            only_closed: If True, only include closed threads.
 
         Returns:
             The count of threads if count is True, otherwise the list of thread models.
@@ -662,16 +671,25 @@ class SQLClient(DBClientBase):
         assert self._async_session is not None, "Session is not initialized."
 
         async with self._async_session() as session:
+            if only_closed:
+                join_clause = and_(
+                    SQLThreadTable.key == SQLThreadRecipientTable.thread_key,
+                    SQLThreadTable.bot_id == SQLThreadRecipientTable.bot_id,
+                    SQLThreadTable.status != ThreadStatus.open,
+                )
+            else:
+                join_clause = and_(
+                    SQLThreadTable.key == SQLThreadRecipientTable.thread_key,
+                    SQLThreadTable.bot_id == SQLThreadRecipientTable.bot_id,
+                )
+
             if count:  # Count the rows instead of returning the objects
                 query = (
                     select(func.count())
                     .select_from(SQLThreadTable)
                     .join(
                         SQLThreadRecipientTable,
-                        and_(
-                            SQLThreadTable.key == SQLThreadRecipientTable.thread_key,
-                            SQLThreadTable.bot_id == SQLThreadRecipientTable.bot_id,
-                        ),
+                        join_clause,
                     )
                     .where(
                         and_(
@@ -687,10 +705,7 @@ class SQLClient(DBClientBase):
                 select(SQLThreadTable)
                 .join(
                     SQLThreadRecipientTable,
-                    and_(
-                        SQLThreadTable.key == SQLThreadRecipientTable.thread_key,
-                        SQLThreadTable.bot_id == SQLThreadRecipientTable.bot_id,
-                    ),
+                    join_clause,
                 )
                 .where(
                     and_(
@@ -768,3 +783,53 @@ class SQLClient(DBClientBase):
                 logger.error("Failed to save message in SQL Database: %s", e)
                 raise DatabaseConnectionError("Something went wrong while saving the message.") from e
         logger.debug("Saved message %s in thread %s.", thread_message.message_id, thread_message.thread_key)
+
+    async def close_thread(
+        self,
+        thread_key: str,
+        closer: ThreadUserModel,
+        *,
+        thread_status: ThreadStatus = ThreadStatus.closed_by_command,
+    ) -> None:
+        """Close a thread in the database.
+
+        Args:
+            thread_key: The key of the thread to close.
+            closer: The user who is closing the thread.
+            thread_status: The status to set for the thread (default is closed_by_command).
+
+        Raises:
+            ThreadNotFoundError: If the thread is not found in the database or isn't currently open.
+        """
+        assert self._async_session is not None, "Session is not initialized."
+        assert thread_status != ThreadStatus.open, "Thread status cannot be 'open' when closing a thread."
+
+        async with self._async_session() as session:
+            query = select(SQLThreadTable).where(
+                and_(
+                    SQLThreadTable.bot_id == self._config.bot.bot_id,
+                    SQLThreadTable.key == thread_key,
+                )
+            )
+            result = await session.execute(query)
+            thread_row = result.scalar_one_or_none()
+            if thread_row is None:
+                raise ThreadNotFoundError("Thread not found in database.")
+            if thread_row.status != ThreadStatus.open:
+                raise ThreadNotFoundError("Thread is not currently open.")
+
+            sql_closer = await self.get_or_create_users(closer)
+            for user in sql_closer.values():
+                await session.merge(user)
+
+            # Update the thread status and closer
+            thread_row.status = thread_status
+            thread_row.closed_at = datetime.datetime.now(tz=datetime.UTC)
+            thread_row.closed_by_id = closer.user_id
+            await session.commit()
+
+        try:
+            self.__open_threads_cache.remove("key", thread_key)
+        except KeyError:
+            logger.debug("Thread %s not found in cache.", thread_key)
+        logger.debug("Closed thread %s in SQL database.", thread_key)
