@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Final, NamedTuple
+from typing import TYPE_CHECKING, Any, Final, NamedTuple, cast
 
 import discord
 from discord.ext import commands
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from .. import Utility
 
     # A "stub" for type hinting
-    class ProfileCustomizeView(discord.ui.View):
+    class _ProfileCustomizeView(discord.ui.View):
         _original_message: discord.Message | None
 
         def set_original_message(self, message: discord.Message) -> None: ...
@@ -106,7 +106,7 @@ def _check_is_bot(user_or_role: discord.Member | discord.User | discord.Role) ->
 
 async def make_profile_customize_view(
     cog: Utility, ctx: commands.Context[Bot], profile_detail: ProfileDetail, profile: ProfileModel
-) -> type[ProfileCustomizeView]:
+) -> type[_ProfileCustomizeView]:
     """Create a UI view for customizing profiles.
 
     Args:
@@ -307,6 +307,10 @@ async def make_profile_customize_view(
         ) -> None:
             """Open the modal for profile customization."""
             await interaction.response.send_modal(ProfileCustomizeModal())
+
+    if TYPE_CHECKING:
+        # This is quite ugly, but until Protocol intersection is supported we have to do this
+        ProfileCustomizeView = cast(type[_ProfileCustomizeView], ProfileCustomizeView)  # noqa: N806
 
     return ProfileCustomizeView
 

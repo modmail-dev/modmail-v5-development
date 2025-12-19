@@ -58,7 +58,7 @@ class LazyHybridCommand[T: Co]:
             args: Positional arguments for the command constructor.
             kwargs: Keyword arguments for the command constructor.
         """
-        self.base_func: Callable[..., Callable[[T], HcHg]] = staticmethod(commands.hybrid_command)
+        self.base_func: Callable[..., Callable[[T], HcHg]] = commands.hybrid_command
         self.callback = func
         self.args = args
         self.kwargs = kwargs
@@ -140,7 +140,7 @@ class LazyHybridGroup[T: Co](LazyHybridCommand[T]):
             kwargs: Keyword arguments for the group command constructor.
         """
         super().__init__(func, args, kwargs)
-        self.base_func: Callable[..., Callable[[T], HcHg]] = staticmethod(commands.hybrid_group)
+        self.base_func: Callable[..., Callable[[T], HcHg]] = commands.hybrid_group
         self.children: list[LazyHybridCommand[Any]] = []
 
     def get_commands(self, cog_name: str) -> dict[str, HcHg]:

@@ -185,7 +185,7 @@ class ThreadView:
 
         embed_proxies.sort(key=lambda x: x[0])  # Sort by recipient name
         embeds = await asyncio.gather(*[
-            embed.to_embed(self.bot.translator, CONFIG.default_locale) for x, embed in embed_proxies
+            embed.to_embed(self.bot.translator, CONFIG.default_locale) for _x, embed in embed_proxies
         ])
 
         # Set the timestamp for the first embed

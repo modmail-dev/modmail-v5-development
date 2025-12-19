@@ -41,7 +41,7 @@ class LoggingConfig(BaseModel):
     console_level: int = logging.INFO
     logfile_level: int = logging.DEBUG
     stdout_format: str = "%(message)s"
-    logfile: str | None = Field("logs/modmail.log", validate_default=True)
+    logfile: str | None = Field(default="logs/modmail.log", validate_default=True)
     logfile_format: str = "%(asctime)s %(levelname)s %(name)s:%(lineno)d %(message)s"
     logfile_max_size: NonNegativeInt = 1024 * 1024 * 10  # 10 MB
     logfile_backup_count: NonNegativeInt = 3

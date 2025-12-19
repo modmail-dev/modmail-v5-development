@@ -71,7 +71,7 @@ class MongoDBClient(DBClientBase):
         """
         super().__init__(config)
         self.db_name = self._mongodb_config.database
-        self._client: AsyncMongoClient | None = None
+        self._client: AsyncMongoClient[dict[str, Any]] | None = None
 
         # the loaded settings model from the database
         self.__settings_document: MongoDBSettingsDocument | None = None
@@ -634,7 +634,7 @@ class MongoDBClient(DBClientBase):
         # Update the thread status and set closer information
         thread_document.status = thread_status
         thread_document.closed_at = datetime.datetime.now(tz=datetime.UTC)
-        thread_document.closed_by = closer_document
+        thread_document.closed_by = closer_document  # pyright: ignore [reportAttributeAccessIssue]  # not sure why beanie expects a Link[] here
 
         # Save the updated thread document
         # noinspection PyArgumentList

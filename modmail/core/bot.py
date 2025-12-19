@@ -471,7 +471,7 @@ class Bot(commands.Bot):
         await self.database_client.update_settings(activity=None, status=None)
         await self.set_bot_presence()
 
-    async def on_command_error(self, context: commands.Context[Bot], exception: commands.CommandError, /) -> None:
+    async def on_command_error(self, context: commands.Context[Any], exception: commands.CommandError, /) -> None:
         """Handle command execution errors.
 
         Ignores CommandNotFound and CheckFailure errors, passes others to parent handler.
