@@ -164,7 +164,7 @@ logging:
   # stdout_format: "%(message)s"
 
   # The logging file location, set to "" to disable logging to a file.
-  # logfile: "modmail.log"
+  # logfile: "logs/modmail.log"
 
   # The logging format for the logfile.
   # See the possible variables here: https://docs.python.org/3/library/logging.html#logrecord-attributes.

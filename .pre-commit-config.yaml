@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-ast
       - id: check-builtin-literals
@@ -27,24 +27,23 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/pycqa/isort
-    rev: 6.0.1
+    rev: 7.0.0
     hooks:
       - id: isort
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.2
+    rev: v0.14.10
     hooks:
       - id: ruff
         args: [ --fix ]
       - id: ruff-format
 
-  - repo: https://github.com/pdm-project/pdm
-    rev: 2.22.3
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.18
     hooks:
-      - id: pdm-export
-        args: ["--pyproject", "--without-hashes", "--prod", "-G:all", "-o", "requirements.txt"]
-        files: ^pdm.lock$
-      - id: pdm-lock-check
+      - id: uv-lock
+      - id: uv-export
+        args: ["--frozen", "--output-file=requirements.txt", "--all-extras", "--no-default-groups", "--no-hashes", "--quiet"]
 
 default_language_version:
-    python: python3.13
+    python: python3.14

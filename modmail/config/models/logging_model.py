@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from pydantic import BaseModel, NonNegativeInt, field_validator
+from pydantic import BaseModel, Field, NonNegativeInt, field_validator
 
 __all__ = [
     "LoggingConfig",
@@ -41,7 +41,7 @@ class LoggingConfig(BaseModel):
     console_level: int = logging.INFO
     logfile_level: int = logging.DEBUG
     stdout_format: str = "%(message)s"
-    logfile: str | None = "modmail.log"
+    logfile: str | None = Field("logs/modmail.log", validate_default=True)
     logfile_format: str = "%(asctime)s %(levelname)s %(name)s:%(lineno)d %(message)s"
     logfile_max_size: NonNegativeInt = 1024 * 1024 * 10  # 10 MB
     logfile_backup_count: NonNegativeInt = 3
@@ -128,7 +128,9 @@ class LoggingConfig(BaseModel):
         if not v:
             return None
         try:
-            with Path(v).open("a", encoding="utf-8"):
+            path = Path(v)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8"):
                 pass
         except IsADirectoryError as e:
             raise ValueError(

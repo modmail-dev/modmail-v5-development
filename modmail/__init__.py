@@ -7,17 +7,18 @@ that logging is properly configured.
 
 from __future__ import annotations
 
-__version__ = "5.0a1"
-
 import datetime
 import logging as _logging
 import sys
+from importlib.metadata import version
 from textwrap import dedent
 from typing import NoReturn
 
 from .config import Config, load_config
 
 __all__ = ["__version__", "init", "run_bot"]
+
+__version__ = version("modmail.py")
 
 logger = _logging.getLogger(__name__)
 
@@ -101,8 +102,3 @@ def run_bot() -> NoReturn:
 
     bot = Bot()
     bot.run_bot()
-
-
-if __name__ == "__main__":
-    init()  # TODO: get file path from argv
-    run_bot()

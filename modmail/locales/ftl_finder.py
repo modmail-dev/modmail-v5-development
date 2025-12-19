@@ -27,7 +27,7 @@ class FTLStringFinder(ast.NodeVisitor):
         """
         self.ftl_strings: dict[str, list[tuple[int, int]]] = {}  # string -> [(line, col)]
 
-    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+    def visit_Call(self, node: ast.Call) -> None:
         """Visit function calls to catch _("ftl-...") and _(f"ftl-...") patterns.
 
         Args:

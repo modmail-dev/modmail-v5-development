@@ -338,9 +338,11 @@ class ThreadView:
         )
         task = asyncio.create_task(self.bot.database_client.save_message(thread_message_model))
         task.add_done_callback(
-            lambda t: logger.warning("Error saving message for thread %s", self.model.key, exc_info=t.exception())
-            if t.exception()
-            else None
+            lambda t: (
+                logger.warning("Error saving message for thread %s", self.model.key, exc_info=t.exception())
+                if t.exception()
+                else None
+            )
         )
         return failed_recipients
 
@@ -410,11 +412,13 @@ class ThreadView:
         )
         task = asyncio.create_task(self.bot.database_client.save_message(thread_message_model))
         task.add_done_callback(
-            lambda t: logger.error(
-                "Error saving %s message for thread %s", message_type, self.model.key, exc_info=t.exception()
+            lambda t: (
+                logger.error(
+                    "Error saving %s message for thread %s", message_type, self.model.key, exc_info=t.exception()
+                )
+                if t.exception()
+                else None
             )
-            if t.exception()
-            else None
         )
         return failed_recipients
 

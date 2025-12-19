@@ -1,14 +1,15 @@
-"""Modmail bot entrypoint script.
+"""Modmail bot external entrypoint script.
 
-This script serves as the main entry point for starting the Modmail bot.
-It imports and calls the necessary initialization and run functions
-from the modmail package.
+This script serves as an entry point for starting the Modmail bot
+when executed directly. It uses the runpy module to run the
+modmail package as a module (i.e., python -m modmail).
 """
 
 from __future__ import annotations
 
-import modmail
+import multiprocessing
+import runpy
 
 if __name__ == "__main__":
-    modmail.init()
-    modmail.run_bot()
+    multiprocessing.freeze_support()
+    runpy.run_module("modmail")

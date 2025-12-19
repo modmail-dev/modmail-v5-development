@@ -13,9 +13,10 @@ import os
 from concurrent.futures import ProcessPoolExecutor
 from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
+# pymongo installed + required by beanie
 import pymongo.errors
 from beanie import init_beanie  # pyright: ignore [reportUnknownVariableType]
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from modmail.enum import ProfileKey, ProfileType, ThreadStatus
 from modmail.errors import (
@@ -70,7 +71,7 @@ class MongoDBClient(DBClientBase):
         """
         super().__init__(config)
         self.db_name = self._mongodb_config.database
-        self._client: AsyncIOMotorClient[dict[str, Any]] | None = None
+        self._client: AsyncMongoClient | None = None
 
         # the loaded settings model from the database
         self.__settings_document: MongoDBSettingsDocument | None = None
@@ -137,11 +138,13 @@ class MongoDBClient(DBClientBase):
         Raises:
             DatabaseConnectionError: If connection to MongoDB fails for any reason.
         """
-        self._client = AsyncIOMotorClient(
+        self._client = AsyncMongoClient(
             self._mongodb_config.uri.get_secret_value(),
             connectTimeoutMS=4000,
             serverSelectionTimeoutMS=5000,
             tlsAllowInvalidCertificates=self._mongodb_config.tls_allow_invalid_certificates,
+            compressors="zstd,zlib",
+            zlibCompressionLevel=1,
         )
         try:
             await self._client.server_info()
@@ -220,7 +223,7 @@ class MongoDBClient(DBClientBase):
         Closes the connection to the MongoDB database if a connection exists.
         """
         if self._client:
-            self._client.close()
+            await self._client.close()
             self._client = None
             logger.debug("Disconnected from MongoDB.")
 

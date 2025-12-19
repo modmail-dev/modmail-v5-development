@@ -1,18 +1,18 @@
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["uv_build"]
+build-backend = "uv_build"
 
 [project]
-name = "modmail"
+name = "modmail.py"
 description = "A Discord Modmail bot."
+version = "5.0a1"
 authors = [
     {name = "Taaku18", email = "taku@modmail.dev"},
 ]
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = "==3.14.*"
 license = "AGPL-3.0-or-later"
 license-files = ["LICEN[CS]E*"]
-dynamic = ["version"]
 
 keywords = ["discord", "discord-bot", "modmail", "python", "discord.py", "discord-modmail"]
 classifiers = [
@@ -31,66 +31,65 @@ classifiers = [
 ]
 
 dependencies = [
-    "discord.py==2.5.2",
-    "rich~=13.9.4",
-    "pydantic[dotenv]<=2.13",
-    "pydantic-settings<=2.13",
-    "packaging",  # For version parsing.
-    "pyyaml~=6.0.2",
-    "fluent-runtime<0.5,>=0.4.0",
+    "discord.py==2.6.4",  # Ensure to keep in sync with [project.optional-dependencies.speed]
+    "rich~=14.2.0",
+    "pydantic~=2.12.0",
+    "pydantic-settings~=2.12.0",
+    "packaging",  # For version parsing, should be installed by default but just in case
+    "pyyaml~=6.0.3",
+    "fluent-runtime~=0.4.0",
 ]
 
 [project.optional-dependencies]
 speed = [
-    "discord.py[speed]==2.5.2",
-    "uvloop>=0.21.0; platform_system != \"Windows\"",
+    "discord.py[speed]==2.6.4",
+    "uvloop>=0.22.1; platform_system != \"Windows\"",
 ]
 sqlite = [
-    "sqlalchemy[asyncio,aiosqlite]<2.1,>=2.0.39",
-    "alembic<1.16,>=1.15.1"
+    "sqlalchemy[asyncio,aiosqlite]~=2.0.45",
+    "alembic~=1.17.2"
 ]
 mongodb = [
-    "beanie[srv]==1.30.0",
-]
-all = [
-    "modmail[speed,sqlite,mongodb]",
+    "beanie[zstd]~=2.0.0",
 ]
 
 [dependency-groups]
 dev = [
-    "modmail[all]",  # All dependencies are needed for development
-    "ruff>=0.11.2",
-    "pyright>=1.1.396",
-    "isort>=6.0.1",
-    "pre-commit<5,>=4.1.0",
-    "pytest<9,>=8.3.5",
-    "python-dotenv>=1.0.0",
+    "ruff==0.14.10",  # When updating ruff version, update it in .pre-commit-config.yaml too
+    "pyright==1.1.407",
+    "isort==7.0.0",  # When updating isort version, update it in .pre-commit-config.yaml too
+    "pre-commit<5,>=4.5.1",  # When updating pre-commit version, update it in the tox "lint" section too
+    "python-dotenv>=1.2.1",  # TODO: .env isn't supported/tested yet
     # When updating pytest plugins, update it below in the pytest "required_plugins" section too
-    "pytest-mock<4,>=3.14.0",
-    "pytest-asyncio<0.27.0,>=0.26.0",
-    "pytest-cov<7,>=6.0.0",
+    # TODO: unit testing and tox are currently disabled
+    "tox<5,>=4.32.0",  # When updating tox version, update it below in the [tool.tox] section too
+    "pytest==9.0.2",
+    "pytest-mock==3.15.1",
+    "pytest-asyncio==1.3.0",
+    "pytest-cov==7.0.0",
 ]
 debug = [
-    "jishaku<2.7,>=2.6.0",
+    "jishaku~=2.6.3",
 ]
+packaging = [
+    "pyinstaller~=6.17.0",
+]
+# TODO: set up git hooks and configure pyinstaller
+# this command kind of works: uv run pyinstaller --onefile --nowindow --clean --name modmail --copy-metadata modmail.py --collect-all modmail --hidden-import=logging.config start.py
 
 [project.urls]
 Documentation = "https://docs.modmail.dev"
 Repository = "https://github.com/modmail-dev/modmail"
 Issues = "https://github.com/modmail-dev/modmail/issues"
 Changelog = "https://github.com/modmail-dev/Modmail/blob/master/CHANGELOG.md"
-# TODO: add Funding = "..."
+Funding = "https://buymeacoffee.com/modmaildev"
 
-# PDM build system configs.
-[tool.pdm]
-distribution = true
+[tool.uv]
+default-groups = "all"
 
-[tool.pdm.version]
-source = "file"
-path = "modmail/__init__.py"
-
-[tool.pdm.build]
-includes = ["modmail"]
+[tool.uv.build-backend]
+module-name = "modmail"
+module-root = ""  # default expects src/, we have everything in the root
 
 [tool.isort]
 profile = "black"  # ruff uses black profile
@@ -101,7 +100,7 @@ combine_star = true
 [tool.ruff]
 line-length = 115
 preview = true
-namespace-packages = ["modmail/cogs", "modmail/backends"]
+namespace-packages = ["modmail", "modmail/cogs", "modmail/backends"]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -131,7 +130,6 @@ select = [
     "N",       # pep8-naming
     "DOC",     # pydoclint (preview)
     "D",       # pydocstyle
-    "F",       # pyflakes
     "PL",      # pylint
     "UP",      # pyupgrade
     "RUF",     # Ruff-specific rules
@@ -183,7 +181,7 @@ exclude = [
 ]
 reportUnnecessaryTypeIgnoreComment = "warning"
 reportPropertyTypeMismatch = "error"
-pythonVersion = "3.12"
+pythonVersion = "3.14"
 pythonPlatform = "All"
 typeCheckingMode = "strict"
 executionEnvironments = [
@@ -194,9 +192,9 @@ executionEnvironments = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "module"
 asyncio_default_test_loop_scope = "module"
-addopts = "--cov=modmail --cov=modmail/backends --cov-report html"
+addopts = "--cov=modmail --cov=modmail/cogs --cov=modmail/backends --cov-report html"
 testpaths = ["tests"]
-required_plugins = ["pytest-mock<4,>=3.14.0", "pytest-asyncio<1,>=0.25.3", "pytest-cov<7,>=6.0.0"]
+required_plugins = ["pytest-mock==3.15.1", "pytest-asyncio==1.3.0", "pytest-cov==7.0.0"]
 filterwarnings = [
     "ignore:.*'audioop' is deprecated.*:DeprecationWarning", # discord.py uses audioop, which is deprecated
 ]
@@ -215,11 +213,9 @@ exclude_also = [  # Exclude files from coverage report, regex patterns
     "raise AssertionError",
 ]
 
-# To run tox development automation: `pip install tox tox-pdm`, then run `tox`.
 [tool.tox]
-min_version = "4"
-requires = ["tox-pdm"]
-envlist = ["py12", "py13", "lint", "pyright"]
+requires = ["tox<5,>=4.32.0"]
+envlist = ["3.14", "lint", "type"]
 
 [tool.tox.env_run_base]
 description = "Run test under {base_python}"
@@ -229,11 +225,11 @@ commands = [["pytest"]]
 [tool.tox.env.lint]
 description = "run linters (pre-commit)"
 skip_install = true
-deps = ["pre-commit<5,>=4.1.0"]
+deps = ["pre-commit<5,>=4.5.1"]
 commands = [["pre-commit", { replace = "posargs", default = ["run", "--all-files"], extend = true} ]]
 
-[tool.tox.env.pyright]
-description = "run pyright"
+[tool.tox.env.type]
+description = "run type check (pyright)"
 groups = ["all"]
 commands = [
     ["pyright", { replace = "posargs", extend = true}],

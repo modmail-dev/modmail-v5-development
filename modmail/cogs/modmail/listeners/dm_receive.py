@@ -64,7 +64,7 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
                 await message.reply(msg)
                 if error_emoji:
                     await message.add_reaction(error_emoji)
-            except (discord.HTTPException, TypeError):
+            except discord.HTTPException, TypeError:
                 logger.exception("Failed to send DM or attach emoji to %s", message.author)
         return
 
@@ -73,7 +73,7 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
         try:
             if ctx.command is not None and await ctx.command.can_run(ctx):
                 return  # Ignore if the message is a valid command
-        except (commands.CommandError, ModmailError):
+        except commands.CommandError, ModmailError:
             pass  # Meaning the command is not valid or not allowed, proceed to process the DM
 
         thread = await staff_guild.get_thread(message.author)
@@ -95,11 +95,11 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
         if error_emoji:
             try:
                 await message.add_reaction(error_emoji)
-            except (discord.HTTPException, TypeError):
+            except discord.HTTPException, TypeError:
                 logger.exception("Failed to add error emoji to %s", message.author)
     else:
         if success_emoji:
             try:
                 await message.add_reaction(success_emoji)
-            except (discord.HTTPException, TypeError):
+            except discord.HTTPException, TypeError:
                 logger.exception("Failed to add success emoji to %s", message.author)

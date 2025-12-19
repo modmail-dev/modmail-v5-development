@@ -214,7 +214,7 @@ class StaffGuild:
         """
         try:
             return self.exists and bool(self.category)
-        except (NoStaffGuildError, NoModmailCategoryError, BadPermissionsError):
+        except NoStaffGuildError, NoModmailCategoryError, BadPermissionsError:
             return False
 
     async def setup(
