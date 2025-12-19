@@ -1,7 +1,7 @@
-"""Defines the ThreadUserModel class for representing a user in a thread.
+"""Defines the TicketUserModel class for representing a user in a ticket.
 
-This module contains the ThreadUserModel class, which represents a user
-involved in a thread. This model is used to store information about
+This module contains the TicketUserModel class, which represents a user
+involved in a ticket. This model is used to store information about
 users, including their ID and name.
 """
 
@@ -10,11 +10,11 @@ from __future__ import annotations
 import discord
 from pydantic import BaseModel, ConfigDict
 
-__all__ = ["ThreadUserModel"]
+__all__ = ["TicketUserModel"]
 
 
-class ThreadUserModel(BaseModel):
-    """Represents a user involved in a thread.
+class TicketUserModel(BaseModel):
+    """Represents a user involved in a ticket.
 
     This model contains information about the user, including their ID and name.
 
@@ -29,13 +29,13 @@ class ThreadUserModel(BaseModel):
     user_name: str
 
     @classmethod
-    def from_user(cls, user: discord.User | discord.Member | discord.ClientUser) -> ThreadUserModel:
-        """Creates a ThreadUserModel from a discord user or member.
+    def from_user(cls, user: discord.User | discord.Member | discord.ClientUser) -> TicketUserModel:
+        """Creates a TicketUserModel from a discord user or member.
 
         Args:
             user: The discord user or member.
 
         Returns:
-            A ThreadUserModel instance.
+            A TicketUserModel instance.
         """
         return cls(user_id=user.id, user_name=user.name)

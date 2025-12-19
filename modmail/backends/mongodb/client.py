@@ -18,25 +18,25 @@ import pymongo.errors
 from beanie import init_beanie  # pyright: ignore [reportUnknownVariableType]
 from pymongo import AsyncMongoClient
 
-from modmail.enum import ProfileKey, ProfileType, ThreadStatus
+from modmail.enum import ProfileKey, ProfileType, TicketStatus
 from modmail.errors import (
     DatabaseConnectionError,
-    ThreadCreationError,
-    ThreadNotFoundError,
-    ThreadRecipientOccupiedError,
+    TicketCreationError,
+    TicketNotFoundError,
+    TicketRecipientOccupiedError,
 )
 from modmail.utils import MultiKeyCollection
 
-from ..common import DBClientBase, ProfileModel, SettingsModel, ThreadMessageModel, ThreadModel, ThreadUserModel
-from .convert import get_or_create_thread_user, thread_message_model_to_document, thread_model_to_document
+from ..common import DBClientBase, ProfileModel, SettingsModel, TicketMessageModel, TicketModel, TicketUserModel
+from .convert import get_or_create_ticket_user, ticket_message_model_to_document, ticket_model_to_document
 from .migration import do_migration
 from .models import (
     MongoDBActivityModel,
     MongoDBProfileDocument,
     MongoDBSettingsDocument,
-    MongoDBThreadDocument,
-    MongoDBThreadMessageDocument,
-    MongoDBThreadUserDocument,
+    MongoDBTicketDocument,
+    MongoDBTicketMessageDocument,
+    MongoDBTicketUserDocument,
 )
 
 if TYPE_CHECKING:
@@ -58,9 +58,9 @@ class MongoDBClient(DBClientBase):
     _document_models = [
         MongoDBSettingsDocument,
         MongoDBProfileDocument,
-        MongoDBThreadDocument,
-        MongoDBThreadUserDocument,
-        MongoDBThreadMessageDocument,
+        MongoDBTicketDocument,
+        MongoDBTicketUserDocument,
+        MongoDBTicketMessageDocument,
     ]
 
     def __init__(self, config: Config) -> None:
@@ -77,9 +77,9 @@ class MongoDBClient(DBClientBase):
         self.__settings_document: MongoDBSettingsDocument | None = None
         self.__settings_model: SettingsModel | None = None  # a read-only view of the settings model
 
-        # Profiles and threads are cached from the database on startup.
+        # Profiles and tickets are cached from the database on startup.
         self.__profiles_cache: dict[ProfileKey, tuple[MongoDBProfileDocument, ProfileModel]] = {}
-        self.__open_threads_cache = MultiKeyCollection[MongoDBThreadDocument]("key", "channel_id")
+        self.__open_tickets_cache = MultiKeyCollection[MongoDBTicketDocument]("key", "channel_id")
 
     @property
     def _settings_document(self) -> MongoDBSettingsDocument:
@@ -247,7 +247,7 @@ class MongoDBClient(DBClientBase):
 
         await self.sync_settings()
         await self.sync_profiles()
-        await self.sync_open_threads()
+        await self.sync_open_tickets()
 
     async def sync_settings(self) -> None:
         """Synchronize settings with the database.
@@ -395,254 +395,254 @@ class MongoDBClient(DBClientBase):
 
         logger.debug("Deleted profile ID=%d from MongoDB.", profile_id)
 
-    # THREADS
+    # TICKETS
 
-    async def sync_open_threads(self) -> None:
-        """Sync open threads from the database to the local cache."""
-        open_threads_cache = MultiKeyCollection[MongoDBThreadDocument]("key", "channel_id")
+    async def sync_open_tickets(self) -> None:
+        """Sync open tickets from the database to the local cache."""
+        open_tickets_cache = MultiKeyCollection[MongoDBTicketDocument]("key", "channel_id")
 
-        async for thread_document in MongoDBThreadDocument.find(
-            MongoDBThreadDocument.bot_id == self._config.bot.bot_id
-            and MongoDBThreadDocument.status == ThreadStatus.open,
+        async for ticket_document in MongoDBTicketDocument.find(
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id
+            and MongoDBTicketDocument.status == TicketStatus.open,
             fetch_links=True,
         ):
-            open_threads_cache.add(thread_document, key=thread_document.key, channel_id=thread_document.channel_id)
+            open_tickets_cache.add(ticket_document, key=ticket_document.key, channel_id=ticket_document.channel_id)
 
-        self.__open_threads_cache = open_threads_cache
-        logger.debug("Synced %d open threads from MongoDB.", len(self.__open_threads_cache))
+        self.__open_tickets_cache = open_tickets_cache
+        logger.debug("Synced %d open tickets from MongoDB.", len(self.__open_tickets_cache))
 
-    async def get_open_threads(self) -> list[ThreadModel]:
-        """Get the list of open threads from the cache.
+    async def get_open_tickets(self) -> list[TicketModel]:
+        """Get the list of open tickets from the cache.
 
         Returns:
-            A list of open threads.
+            A list of open tickets.
         """
         return await asyncio.gather(*[
-            thread_document.get_model() for thread_document in self.__open_threads_cache
+            ticket_document.get_model() for ticket_document in self.__open_tickets_cache
         ])
 
-    async def create_thread(self, thread: ThreadModel) -> None:
-        """Create a new thread in the database.
+    async def create_ticket(self, ticket: TicketModel) -> None:
+        """Create a new ticket in the database.
 
         Args:
-            thread: The thread model to create.
+            ticket: The ticket model to create.
 
         Raises:
-            ThreadCreationError: If a thread with a duplicate key or channel.
-            ThreadRecipientOccupiedError: If a thread with the same recipient already exists.
+            TicketCreationError: If a ticket with a duplicate key or channel.
+            TicketRecipientOccupiedError: If a ticket with the same recipient already exists.
         """
-        # Check if the thread has conflicting channel or recipients.
-        for thread_document in self.__open_threads_cache:
-            # Fetch all links for the thread document to ensure recipients are populated.
-            if thread_document.recipients and not isinstance(
-                thread_document.recipients[0], MongoDBThreadUserDocument
+        # Check if the ticket has conflicting channel or recipients.
+        for ticket_document in self.__open_tickets_cache:
+            # Fetch all links for the ticket document to ensure recipients are populated.
+            if ticket_document.recipients and not isinstance(
+                ticket_document.recipients[0], MongoDBTicketUserDocument
             ):
-                await thread_document.fetch_all_links()
+                await ticket_document.fetch_all_links()
                 logger.debug(
-                    "[yellow]Fetched all links for thread %s in create_thread, "
+                    "[yellow]Fetched all links for ticket %s in create_ticket, "
                     "links should be prefetched instead.",
-                    thread_document.key,
+                    ticket_document.key,
                     extra={"markup": True},
                 )
 
-            if thread_document.channel_id == thread.channel_id:
-                raise ThreadCreationError("Thread with this channel ID already exists.")
+            if ticket_document.channel_id == ticket.channel_id:
+                raise TicketCreationError("Ticket with this channel ID already exists.")
             if any(
-                new_recipient.user_id == cast(MongoDBThreadUserDocument, old_recipient).id
-                for old_recipient in thread_document.recipients
-                for new_recipient in thread.recipients
+                new_recipient.user_id == cast(MongoDBTicketUserDocument, old_recipient).id
+                for old_recipient in ticket_document.recipients
+                for new_recipient in ticket.recipients
             ):
-                raise ThreadRecipientOccupiedError("An open thread with this recipient already exists.")
+                raise TicketRecipientOccupiedError("An open ticket with this recipient already exists.")
 
-        # Create the thread in the database.
-        thread_document = await thread_model_to_document(thread)
+        # Create the ticket in the database.
+        ticket_document = await ticket_model_to_document(ticket)
         # TODO: Handle key collision.
         # noinspection PyArgumentList
-        await thread_document.insert()
-        if thread.status == ThreadStatus.open:
-            self.__open_threads_cache.add(
-                thread_document, key=thread_document.key, channel_id=thread_document.channel_id
+        await ticket_document.insert()
+        if ticket.status == TicketStatus.open:
+            self.__open_tickets_cache.add(
+                ticket_document, key=ticket_document.key, channel_id=ticket_document.channel_id
             )
-        logger.info("Created thread %s for %s.", thread.key, thread.recipients)
+        logger.info("Created ticket %s for %s.", ticket.key, ticket.recipients)
 
-    async def get_thread_by_channel(self, channel_id: int, *, only_open: bool = True) -> ThreadModel | None:
-        """Get a thread by channel ID.
+    async def get_ticket_by_channel(self, channel_id: int, *, only_open: bool = True) -> TicketModel | None:
+        """Get a ticket by channel ID.
 
         Args:
-            channel_id: The channel ID of the thread to retrieve.
-            only_open: Whether to only search for open threads.
+            channel_id: The channel ID of the ticket to retrieve.
+            only_open: Whether to only search for open tickets.
 
         Returns:
-            The thread model if found, None otherwise.
+            The ticket model if found, None otherwise.
         """
         if only_open:
-            # Open threads are always cached.
-            thread_document = self.__open_threads_cache.get(channel_id=channel_id)
-            if thread_document is not None:
-                return await thread_document.get_model()
+            # Open tickets are always cached.
+            ticket_document = self.__open_tickets_cache.get(channel_id=channel_id)
+            if ticket_document is not None:
+                return await ticket_document.get_model()
             return None
 
-        thread_document = await MongoDBThreadDocument.find_one(
-            MongoDBThreadDocument.bot_id == self._config.bot.bot_id
-            and MongoDBThreadDocument.channel_id == channel_id,
+        ticket_document = await MongoDBTicketDocument.find_one(
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id
+            and MongoDBTicketDocument.channel_id == channel_id,
             fetch_links=True,
         )
-        if thread_document is not None:
-            return await thread_document.get_model()
+        if ticket_document is not None:
+            return await ticket_document.get_model()
         return None
 
-    async def get_thread_by_key(self, key: str, *, only_open: bool = True) -> ThreadModel | None:
-        """Get a thread by its key.
+    async def get_ticket_by_key(self, key: str, *, only_open: bool = True) -> TicketModel | None:
+        """Get a ticket by its key.
 
         Args:
-            key: The key of the thread to retrieve.
-            only_open: Whether to only search for open threads.
+            key: The key of the ticket to retrieve.
+            only_open: Whether to only search for open tickets.
 
         Returns:
-            The thread model if found, None otherwise.
+            The ticket model if found, None otherwise.
         """
         if only_open:
-            # Open threads are always cached.
-            thread_document = self.__open_threads_cache.get(key=key)
-            if thread_document is not None:
-                return await thread_document.get_model()
+            # Open tickets are always cached.
+            ticket_document = self.__open_tickets_cache.get(key=key)
+            if ticket_document is not None:
+                return await ticket_document.get_model()
             return None
 
-        thread_document = await MongoDBThreadDocument.find_one(
-            MongoDBThreadDocument.bot_id == self._config.bot.bot_id and MongoDBThreadDocument.key == key,
+        ticket_document = await MongoDBTicketDocument.find_one(
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id and MongoDBTicketDocument.key == key,
             fetch_links=True,
         )
-        if thread_document is not None:
-            return await thread_document.get_model()
+        if ticket_document is not None:
+            return await ticket_document.get_model()
         return None
 
-    async def get_thread_by_recipient(self, recipient_id: int) -> ThreadModel | None:
-        """Get an open thread by recipient ID.
+    async def get_ticket_by_recipient(self, recipient_id: int) -> TicketModel | None:
+        """Get an open ticket by recipient ID.
 
         Args:
-            recipient_id: The recipient ID of the thread to retrieve.
+            recipient_id: The recipient ID of the ticket to retrieve.
 
         Returns:
-            The thread model if found, None otherwise.
+            The ticket model if found, None otherwise.
         """
-        for thread_document in self.__open_threads_cache:
-            await thread_document.fetch_all_links()
-            # Check if the recipient ID is in the thread's recipients.
+        for ticket_document in self.__open_tickets_cache:
+            await ticket_document.fetch_all_links()
+            # Check if the recipient ID is in the ticket's recipients.
             if any(
-                cast(MongoDBThreadUserDocument, recipient).id == recipient_id
-                for recipient in thread_document.recipients
+                cast(MongoDBTicketUserDocument, recipient).id == recipient_id
+                for recipient in ticket_document.recipients
             ):
-                return await thread_document.get_model()
+                return await ticket_document.get_model()
         return None
 
     @overload
-    async def get_all_threads_by_recipient(
+    async def get_all_tickets_by_recipient(
         self, recipient_id: int, *, count: Literal[True] = True, only_closed: bool = False
     ) -> int: ...
 
     @overload
-    async def get_all_threads_by_recipient(
+    async def get_all_tickets_by_recipient(
         self, recipient_id: int, *, count: Literal[False] = False, only_closed: bool = False
-    ) -> list[ThreadModel]: ...
+    ) -> list[TicketModel]: ...
 
-    async def get_all_threads_by_recipient(
+    async def get_all_tickets_by_recipient(
         self, recipient_id: int, *, count: bool = False, only_closed: bool = False
-    ) -> int | list[ThreadModel]:
-        """Get all threads by recipient ID.
+    ) -> int | list[TicketModel]:
+        """Get all tickets by recipient ID.
 
         Args:
-            recipient_id: The recipient ID of the threads to retrieve.
-            count: Whether to return only the count of threads.
-            only_closed: Whether to only include closed threads.
+            recipient_id: The recipient ID of the tickets to retrieve.
+            count: Whether to return only the count of tickets.
+            only_closed: Whether to only include closed tickets.
 
         Returns:
-            A list of thread models associated with the recipient or the count of threads if count is True.
+            A list of ticket models associated with the recipient or the count of tickets if count is True.
         """
         query = (
-            MongoDBThreadDocument.bot_id == self._config.bot.bot_id
-            and cast(MongoDBThreadUserDocument, MongoDBThreadDocument.recipients).id == recipient_id
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id
+            and cast(MongoDBTicketUserDocument, MongoDBTicketDocument.recipients).id == recipient_id
         )
 
         if only_closed:
-            query = query and MongoDBThreadDocument.status != ThreadStatus.open
+            query = query and MongoDBTicketDocument.status != TicketStatus.open
 
         if count:
-            return await MongoDBThreadDocument.find(query, fetch_links=True).count()
+            return await MongoDBTicketDocument.find(query, fetch_links=True).count()
 
-        thread_documents = await MongoDBThreadDocument.find(query, fetch_links=True).to_list()
-        return await asyncio.gather(*[thread_document.get_model() for thread_document in thread_documents])
+        ticket_documents = await MongoDBTicketDocument.find(query, fetch_links=True).to_list()
+        return await asyncio.gather(*[ticket_document.get_model() for ticket_document in ticket_documents])
 
-    async def save_message(self, thread_message: ThreadMessageModel) -> None:
-        """Save a thread message to the database.
+    async def save_message(self, ticket_message: TicketMessageModel) -> None:
+        """Save a ticket message to the database.
 
         Args:
-            thread_message: The thread message model to save.
+            ticket_message: The ticket message model to save.
 
         Raises:
             DatabaseConnectionError: If the save operation fails.
         """
-        thread_document = await self.get_thread_by_key(thread_message.thread_key)
-        if thread_document is None:
-            logger.error("Thread %s not found in database.", thread_message.thread_key)
+        ticket_document = await self.get_ticket_by_key(ticket_message.ticket_key)
+        if ticket_document is None:
+            logger.error("Ticket %s not found in database.", ticket_message.ticket_key)
             return
 
-        # Create the thread message document.
-        thread_message_document = await thread_message_model_to_document(thread_message)
+        # Create the ticket message document.
+        ticket_message_document = await ticket_message_model_to_document(ticket_message)
 
-        # Save the thread message document.
+        # Save the ticket message document.
         try:
             # noinspection PyArgumentList
-            await thread_message_document.insert()
+            await ticket_message_document.insert()
         except Exception as e:
             logger.error("Failed to save message in MongoDB: %s", e)
             raise DatabaseConnectionError("Something went wrong while saving the message.") from e
-        logger.debug("Saved message %s in thread %s.", thread_message.message_id, thread_message.thread_key)
+        logger.debug("Saved message %s in ticket %s.", ticket_message.message_id, ticket_message.ticket_key)
 
-    async def close_thread(
+    async def close_ticket(
         self,
-        thread_key: str,
-        closer: ThreadUserModel,
+        ticket_key: str,
+        closer: TicketUserModel,
         *,
-        thread_status: ThreadStatus = ThreadStatus.closed_by_command,
+        ticket_status: TicketStatus = TicketStatus.closed_by_command,
     ) -> None:
-        """Close a thread in the database.
+        """Close a ticket in the database.
 
         Args:
-            thread_key: The key of the thread to close.
-            closer: The user who is closing the thread.
-            thread_status: The status to set for the thread (default is closed_by_command).
+            ticket_key: The key of the ticket to close.
+            closer: The user who is closing the ticket.
+            ticket_status: The status to set for the ticket (default is closed_by_command).
 
         Raises:
-            ThreadNotFoundError: If the thread is not found in the database or isn't currently open.
+            TicketNotFoundError: If the ticket is not found in the database or isn't currently open.
         """
-        assert thread_status != ThreadStatus.open, "Thread status cannot be 'open' when closing a thread."
+        assert ticket_status != TicketStatus.open, "Ticket status cannot be 'open' when closing a ticket."
 
-        # Find the thread document
-        thread_document = await MongoDBThreadDocument.find_one(
-            MongoDBThreadDocument.bot_id == self._config.bot.bot_id and MongoDBThreadDocument.key == thread_key,
+        # Find the ticket document
+        ticket_document = await MongoDBTicketDocument.find_one(
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id and MongoDBTicketDocument.key == ticket_key,
             fetch_links=True,
         )
 
-        if thread_document is None:
-            raise ThreadNotFoundError("Thread not found in database.")
+        if ticket_document is None:
+            raise TicketNotFoundError("Ticket not found in database.")
 
-        if thread_document.status != ThreadStatus.open:
-            raise ThreadNotFoundError("Thread is not currently open.")
+        if ticket_document.status != TicketStatus.open:
+            raise TicketNotFoundError("Ticket is not currently open.")
 
-        closer_document = await get_or_create_thread_user(closer)
+        closer_document = await get_or_create_ticket_user(closer)
 
-        # Update the thread status and set closer information
-        thread_document.status = thread_status
-        thread_document.closed_at = datetime.datetime.now(tz=datetime.UTC)
-        thread_document.closed_by = closer_document  # pyright: ignore [reportAttributeAccessIssue]  # not sure why beanie expects a Link[] here
+        # Update the ticket status and set closer information
+        ticket_document.status = ticket_status
+        ticket_document.closed_at = datetime.datetime.now(tz=datetime.UTC)
+        ticket_document.closed_by = closer_document  # pyright: ignore [reportAttributeAccessIssue]  # not sure why beanie expects a Link[] here
 
-        # Save the updated thread document
+        # Save the updated ticket document
         # noinspection PyArgumentList
-        await thread_document.replace()
+        await ticket_document.replace()
 
-        # Remove the thread from the open threads cache
+        # Remove the ticket from the open tickets cache
         try:
-            self.__open_threads_cache.remove("key", thread_key)
+            self.__open_tickets_cache.remove("key", ticket_key)
         except KeyError:
-            logger.debug("Thread %s not found in cache.", thread_key)
-        logger.debug("Closed thread %s in MongoDB.", thread_key)
+            logger.debug("Ticket %s not found in cache.", ticket_key)
+        logger.debug("Closed ticket %s in MongoDB.", ticket_key)

@@ -17,27 +17,27 @@ from sqlalchemy import and_, delete, event, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from modmail.enum import ProfileKey, ProfileType, ThreadStatus
+from modmail.enum import ProfileKey, ProfileType, TicketStatus
 from modmail.errors import (
     DatabaseConnectionError,
-    ThreadCreationError,
-    ThreadNotFoundError,
-    ThreadRecipientOccupiedError,
+    TicketCreationError,
+    TicketNotFoundError,
+    TicketRecipientOccupiedError,
 )
 from modmail.utils import MultiKeyCollection
 
-from ..common import DBClientBase, ProfileModel, SettingsModel, ThreadMessageModel, ThreadModel, ThreadUserModel
+from ..common import DBClientBase, ProfileModel, SettingsModel, TicketMessageModel, TicketModel, TicketUserModel
 from .migration import do_migration
 from .models import (
     SQLActivityTable,
     SQLPermissionOverrideTable,
     SQLProfileTable,
     SQLSettingsTable,
-    SQLThreadDMMessageTable,
-    SQLThreadMessageTable,
-    SQLThreadRecipientTable,
-    SQLThreadTable,
-    SQLThreadUserTable,
+    SQLTicketDMMessageTable,
+    SQLTicketMessageTable,
+    SQLTicketRecipientTable,
+    SQLTicketTable,
+    SQLTicketUserTable,
 )
 
 if TYPE_CHECKING:
@@ -70,9 +70,9 @@ class SQLClient(DBClientBase):
         self.__settings_table: SQLSettingsTable | None = None
         self.__settings_model: SettingsModel | None = None
 
-        # Profiles are loaded and cached from the database on startup.
+        # Profiles and open tickets are loaded and cached from the database on startup.
         self.__profiles_cache: dict[ProfileKey, tuple[SQLProfileTable, ProfileModel]] = {}
-        self.__open_threads_cache = MultiKeyCollection[SQLThreadTable]("key", "channel_id")
+        self.__open_tickets_cache = MultiKeyCollection[SQLTicketTable]("key", "channel_id")
 
     @property
     def _settings_table(self) -> SQLSettingsTable:
@@ -180,7 +180,7 @@ class SQLClient(DBClientBase):
         # Load settings from the SQL database
         await self.sync_settings()
         await self.sync_profiles()
-        await self.sync_open_threads()
+        await self.sync_open_tickets()
 
     async def disconnect(self) -> None:
         """Disconnect from the SQL database.
@@ -429,61 +429,61 @@ class SQLClient(DBClientBase):
 
         logger.debug("Deleted profile from SQL database: %s", profile_id)
 
-    async def sync_open_threads(self) -> None:
-        """Sync open threads from the database to the local cache.
+    async def sync_open_tickets(self) -> None:
+        """Sync open tickets from the database to the local cache.
 
-        Fetches all open threads from the database and stores them in the local cache.
+        Fetches all open tickets from the database and stores them in the local cache.
         """
         assert self._async_session is not None, "Session is not initialized."
-        open_threads_cache: MultiKeyCollection[SQLThreadTable] = MultiKeyCollection("key", "channel_id")
+        open_tickets_cache: MultiKeyCollection[SQLTicketTable] = MultiKeyCollection("key", "channel_id")
         async with self._async_session() as session:
-            query = select(SQLThreadTable).where(
+            query = select(SQLTicketTable).where(
                 and_(
-                    SQLThreadTable.bot_id == self._config.bot.bot_id,
-                    SQLThreadTable.status == ThreadStatus.open,
+                    SQLTicketTable.bot_id == self._config.bot.bot_id,
+                    SQLTicketTable.status == TicketStatus.open,
                 )
             )
             results = (await session.execute(query)).scalars().fetchall()
-            for thread_row in results:
-                open_threads_cache.add(thread_row, key=thread_row.key, channel_id=thread_row.channel_id)
-                session.expunge(thread_row)
+            for ticket_row in results:
+                open_tickets_cache.add(ticket_row, key=ticket_row.key, channel_id=ticket_row.channel_id)
+                session.expunge(ticket_row)
 
-        self.__open_threads_cache = open_threads_cache
-        logger.debug("Synchronized open threads from SQL database.")
+        self.__open_tickets_cache = open_tickets_cache
+        logger.debug("Synchronized open tickets from SQL database.")
 
-    async def get_open_threads(self) -> list[ThreadModel]:
-        """Get all open threads from the local cache.
+    async def get_open_tickets(self) -> list[TicketModel]:
+        """Get all open tickets from the local cache.
 
         Returns:
-            A list of open thread models.
+            A list of open ticket models.
         """
-        return await asyncio.gather(*[thread_model.get_model() for thread_model in self.__open_threads_cache])
+        return await asyncio.gather(*[ticket_model.get_model() for ticket_model in self.__open_tickets_cache])
 
-    async def get_or_create_users(self, *thread_users: ThreadUserModel) -> dict[int, SQLThreadUserTable]:
-        """Convert thread users to SQLThreadUserTable objects.
+    async def get_or_create_users(self, *ticket_users: TicketUserModel) -> dict[int, SQLTicketUserTable]:
+        """Convert ticket users to SQLTicketUserTable objects.
 
         Args:
-            *thread_users: Thread users to convert.
+            *ticket_users: Ticket users to convert.
 
         Returns:
-            A dictionary mapping user IDs to SQLThreadUserTable objects.
+            A dictionary mapping user IDs to SQLTicketUserTable objects.
         """
         assert self._async_session is not None, "Session is not initialized."
-        user_ids = {user.user_id for user in thread_users}
-        thread_users_mapping = {user.user_id: user for user in thread_users}  # Avoid duplicates
-        all_users: dict[int, SQLThreadUserTable] = {}
+        user_ids = {user.user_id for user in ticket_users}
+        ticket_users_mapping = {user.user_id: user for user in ticket_users}  # Avoid duplicates
+        all_users: dict[int, SQLTicketUserTable] = {}
 
         async with self._async_session() as session:
-            query = select(SQLThreadUserTable).where(SQLThreadUserTable.user_id.in_(user_ids))
+            query = select(SQLTicketUserTable).where(SQLTicketUserTable.user_id.in_(user_ids))
             result = await session.execute(query)
             existing_users = {user.user_id: user for user in result.scalars().all()}
 
             # Create missing users and track all user records
-            for user_id, user in thread_users_mapping.items():
+            for user_id, user in ticket_users_mapping.items():
                 if user_id in existing_users:
                     all_users[user_id] = existing_users[user_id]
                 else:
-                    new_user_row = SQLThreadUserTable(
+                    new_user_row = SQLTicketUserTable(
                         user_id=user_id,
                         user_name=user.user_name,
                     )
@@ -496,58 +496,58 @@ class SQLClient(DBClientBase):
                 session.expunge(user)
         return all_users
 
-    async def create_thread(self, thread: ThreadModel) -> None:
-        """Create a new thread in the database.
+    async def create_ticket(self, ticket: TicketModel) -> None:
+        """Create a new ticket in the database.
 
         Args:
-            thread: The thread model to create.
+            ticket: The ticket model to create.
 
         Raises:
-            ThreadCreationError: If a thread with a duplicate key or channel.
-            ThreadRecipientOccupiedError: If a thread with the same recipient already exists.
+            TicketCreationError: If a ticket with a duplicate key or channel.
+            TicketRecipientOccupiedError: If a ticket with the same recipient already exists.
         """
         assert self._async_session is not None, "Session is not initialized."
 
-        # Check if the thread has conflicting channel or recipients.
-        for thread_model in self.__open_threads_cache:
-            if thread_model.channel_id == thread.channel_id:
-                raise ThreadCreationError("Thread with this channel ID already exists.")
+        # Check if the ticket has conflicting channel or recipients.
+        for ticket_model in self.__open_tickets_cache:
+            if ticket_model.channel_id == ticket.channel_id:
+                raise TicketCreationError("Ticket with this channel ID already exists.")
             if any(
                 new_recipient.user_id == old_recipient.user.user_id
-                for old_recipient in thread_model.recipients
-                for new_recipient in thread.recipients
+                for old_recipient in ticket_model.recipients
+                for new_recipient in ticket.recipients
             ):
-                raise ThreadRecipientOccupiedError("An open thread with this recipient already exists.")
+                raise TicketRecipientOccupiedError("An open ticket with this recipient already exists.")
 
         all_users = await self.get_or_create_users(
-            thread.created_by, *thread.recipients, *([thread.closed_by] if thread.closed_by else [])
+            ticket.created_by, *ticket.recipients, *([ticket.closed_by] if ticket.closed_by else [])
         )
 
-        # Create the thread in the database.
+        # Create the ticket in the database.
         async with self._async_session() as session:
             for user in all_users.values():
                 await session.merge(user)
 
-            # Create thread with proper user references
-            thread_row = SQLThreadTable(
+            # Create ticket with proper user references
+            ticket_row = SQLTicketTable(
                 bot_id=self._config.bot.bot_id,
-                key=thread.key,
-                channel_id=thread.channel_id,
-                created_at=thread.created_at,
-                created_by_id=thread.created_by.user_id,
-                closed_at=thread.closed_at,
-                closed_by_id=thread.closed_by.user_id if thread.closed_by else None,
-                status=thread.status,
-                title=thread.title,
-                nsfw=thread.nsfw,
+                key=ticket.key,
+                channel_id=ticket.channel_id,
+                created_at=ticket.created_at,
+                created_by_id=ticket.created_by.user_id,
+                closed_at=ticket.closed_at,
+                closed_by_id=ticket.closed_by.user_id if ticket.closed_by else None,
+                status=ticket.status,
+                title=ticket.title,
+                nsfw=ticket.nsfw,
             )
-            session.add(thread_row)
+            session.add(ticket_row)
 
-            # Create recipient relationships using foreign keys to ThreadUserTable
-            for recipient in thread.recipients:
-                recipient_row = SQLThreadRecipientTable(
+            # Create recipient relationships using foreign keys to TicketUserTable
+            for recipient in ticket.recipients:
+                recipient_row = SQLTicketRecipientTable(
                     bot_id=self._config.bot.bot_id,
-                    thread_key=thread.key,
+                    ticket_key=ticket.key,
                     user_id=recipient.user_id,
                 )
                 session.add(recipient_row)
@@ -556,145 +556,145 @@ class SQLClient(DBClientBase):
             # Commit all changes in a single transaction
             await session.commit()
 
-            # Add to cache if it's an open thread
-            if thread.status == ThreadStatus.open:
-                await session.refresh(thread_row)
-                session.expunge(thread_row)
-                self.__open_threads_cache.add(thread_row, key=thread_row.key, channel_id=thread_row.channel_id)
-        logger.info("Created thread %s for %s.", thread.key, thread.recipients)
+            # Add to cache if it's an open ticket
+            if ticket.status == TicketStatus.open:
+                await session.refresh(ticket_row)
+                session.expunge(ticket_row)
+                self.__open_tickets_cache.add(ticket_row, key=ticket_row.key, channel_id=ticket_row.channel_id)
+        logger.info("Created ticket %s for %s.", ticket.key, ticket.recipients)
 
-    async def get_thread_by_channel(self, channel_id: int, *, only_open: bool = True) -> ThreadModel | None:
-        """Get a thread by channel ID.
+    async def get_ticket_by_channel(self, channel_id: int, *, only_open: bool = True) -> TicketModel | None:
+        """Get a ticket by channel ID.
 
         Args:
             channel_id: The channel ID to search for.
-            only_open: If True, only search for open threads.
+            only_open: If True, only search for open tickets.
 
         Returns:
-            The thread model if found, None otherwise.
+            The ticket model if found, None otherwise.
         """
         assert self._async_session is not None, "Session is not initialized."
 
         if only_open:
-            # Open threads are always cached.
-            thread_row = self.__open_threads_cache.get(channel_id=channel_id)
-            if thread_row is not None:
-                return await thread_row.get_model()
+            # Open tickets are always cached.
+            ticket_row = self.__open_tickets_cache.get(channel_id=channel_id)
+            if ticket_row is not None:
+                return await ticket_row.get_model()
             return None
 
         async with self._async_session() as session:
-            query = select(SQLThreadTable).where(
+            query = select(SQLTicketTable).where(
                 and_(
-                    SQLThreadTable.bot_id == self._config.bot.bot_id,
-                    SQLThreadTable.channel_id == channel_id,
+                    SQLTicketTable.bot_id == self._config.bot.bot_id,
+                    SQLTicketTable.channel_id == channel_id,
                 )
             )
             result = await session.execute(query)
-            thread_row = result.scalar_one_or_none()
-            if thread_row is not None:
-                session.expunge(thread_row)
-                return await thread_row.get_model()
+            ticket_row = result.scalar_one_or_none()
+            if ticket_row is not None:
+                session.expunge(ticket_row)
+                return await ticket_row.get_model()
         return None
 
-    async def get_thread_by_key(self, key: str, *, only_open: bool = True) -> ThreadModel | None:
-        """Get a thread by its key.
+    async def get_ticket_by_key(self, key: str, *, only_open: bool = True) -> TicketModel | None:
+        """Get a ticket by its key.
 
         Args:
-            key: The thread key to search for.
-            only_open: If True, only search for open threads.
+            key: The ticket key to search for.
+            only_open: If True, only search for open tickets.
 
         Returns:
-            The thread model if found, None otherwise.
+            The ticket model if found, None otherwise.
         """
         assert self._async_session is not None, "Session is not initialized."
 
         if only_open:
-            # Open threads are always cached.
-            thread_row = self.__open_threads_cache.get(key=key)
-            if thread_row is not None:
-                return await thread_row.get_model()
+            # Open tickets are always cached.
+            ticket_row = self.__open_tickets_cache.get(key=key)
+            if ticket_row is not None:
+                return await ticket_row.get_model()
             return None
 
         async with self._async_session() as session:
-            query = select(SQLThreadTable).where(
+            query = select(SQLTicketTable).where(
                 and_(
-                    SQLThreadTable.bot_id == self._config.bot.bot_id,
-                    SQLThreadTable.key == key,
+                    SQLTicketTable.bot_id == self._config.bot.bot_id,
+                    SQLTicketTable.key == key,
                 )
             )
             result = await session.execute(query)
-            thread_row = result.scalar_one_or_none()
-            if thread_row is not None:
-                session.expunge(thread_row)
-                return await thread_row.get_model()
+            ticket_row = result.scalar_one_or_none()
+            if ticket_row is not None:
+                session.expunge(ticket_row)
+                return await ticket_row.get_model()
         return None
 
-    async def get_thread_by_recipient(self, recipient_id: int) -> ThreadModel | None:
-        """Get an open thread by recipient ID.
+    async def get_ticket_by_recipient(self, recipient_id: int) -> TicketModel | None:
+        """Get an open ticket by recipient ID.
 
         Args:
             recipient_id: The recipient ID to search for.
 
         Returns:
-            The thread model if found, None otherwise.
+            The ticket model if found, None otherwise.
         """
         assert self._async_session is not None, "Session is not initialized."
 
-        for thread_row in self.__open_threads_cache:
-            if any(recipient.user_id == recipient_id for recipient in thread_row.recipients):
-                return await thread_row.get_model()
+        for ticket_row in self.__open_tickets_cache:
+            if any(recipient.user_id == recipient_id for recipient in ticket_row.recipients):
+                return await ticket_row.get_model()
         return None
 
     @overload
-    async def get_all_threads_by_recipient(
+    async def get_all_tickets_by_recipient(
         self, recipient_id: int, *, count: Literal[True] = True, only_closed: bool = False
     ) -> int: ...
 
     @overload
-    async def get_all_threads_by_recipient(
+    async def get_all_tickets_by_recipient(
         self, recipient_id: int, *, count: Literal[False] = False, only_closed: bool = False
-    ) -> list[ThreadModel]: ...
+    ) -> list[TicketModel]: ...
 
-    async def get_all_threads_by_recipient(
+    async def get_all_tickets_by_recipient(
         self, recipient_id: int, *, count: bool = False, only_closed: bool = False
-    ) -> int | list[ThreadModel]:
-        """Get all threads by recipient ID.
+    ) -> int | list[TicketModel]:
+        """Get all tickets by recipient ID.
 
         Args:
             recipient_id: The recipient ID to search for.
-            count: If True, return the count of threads. If False, return the list of threads.
-            only_closed: If True, only include closed threads.
+            count: If True, return the count of tickets. If False, return the list of tickets.
+            only_closed: If True, only include closed tickets.
 
         Returns:
-            The count of threads if count is True, otherwise the list of thread models.
+            The count of tickets if count is True, otherwise the list of ticket models.
         """
         assert self._async_session is not None, "Session is not initialized."
 
         async with self._async_session() as session:
             if only_closed:
                 join_clause = and_(
-                    SQLThreadTable.key == SQLThreadRecipientTable.thread_key,
-                    SQLThreadTable.bot_id == SQLThreadRecipientTable.bot_id,
-                    SQLThreadTable.status != ThreadStatus.open,
+                    SQLTicketTable.key == SQLTicketRecipientTable.ticket_key,
+                    SQLTicketTable.bot_id == SQLTicketRecipientTable.bot_id,
+                    SQLTicketTable.status != TicketStatus.open,
                 )
             else:
                 join_clause = and_(
-                    SQLThreadTable.key == SQLThreadRecipientTable.thread_key,
-                    SQLThreadTable.bot_id == SQLThreadRecipientTable.bot_id,
+                    SQLTicketTable.key == SQLTicketRecipientTable.ticket_key,
+                    SQLTicketTable.bot_id == SQLTicketRecipientTable.bot_id,
                 )
 
             if count:  # Count the rows instead of returning the objects
                 query = (
                     select(func.count())
-                    .select_from(SQLThreadTable)
+                    .select_from(SQLTicketTable)
                     .join(
-                        SQLThreadRecipientTable,
+                        SQLTicketRecipientTable,
                         join_clause,
                     )
                     .where(
                         and_(
-                            SQLThreadTable.bot_id == self._config.bot.bot_id,
-                            SQLThreadRecipientTable.user_id == recipient_id,
+                            SQLTicketTable.bot_id == self._config.bot.bot_id,
+                            SQLTicketRecipientTable.user_id == recipient_id,
                         )
                     )
                 )
@@ -702,49 +702,49 @@ class SQLClient(DBClientBase):
                 return result.scalar_one()
 
             query = (
-                select(SQLThreadTable)
+                select(SQLTicketTable)
                 .join(
-                    SQLThreadRecipientTable,
+                    SQLTicketRecipientTable,
                     join_clause,
                 )
                 .where(
                     and_(
-                        SQLThreadTable.bot_id == self._config.bot.bot_id,
-                        SQLThreadRecipientTable.user_id == recipient_id,
+                        SQLTicketTable.bot_id == self._config.bot.bot_id,
+                        SQLTicketRecipientTable.user_id == recipient_id,
                     )
                 )
             )
 
             result = await session.execute(query)
-            threads = result.scalars().all()
+            tickets = result.scalars().all()
 
-            coros: list[Awaitable[ThreadModel]] = []
-            for thread_row in threads:
-                session.expunge(thread_row)
-                coros.append(thread_row.get_model())
+            coros: list[Awaitable[TicketModel]] = []
+            for ticket_row in tickets:
+                session.expunge(ticket_row)
+                coros.append(ticket_row.get_model())
             return await asyncio.gather(*coros)
 
-    async def save_message(self, thread_message: ThreadMessageModel) -> None:
-        """Save a thread message to the database.
+    async def save_message(self, ticket_message: TicketMessageModel) -> None:
+        """Save a ticket message to the database.
 
         Args:
-            thread_message: The thread message model to save.
+            ticket_message: The ticket message model to save.
 
         Raises:
             DatabaseConnectionError: If an error occurs while saving the message.
         """
         assert self._async_session is not None, "Session is not initialized."
 
-        thread_row = await self.get_thread_by_key(thread_message.thread_key)
-        if thread_row is None:
-            logger.error("Thread %s not found in database.", thread_message.thread_key)
+        ticket_row = await self.get_ticket_by_key(ticket_message.ticket_key)
+        if ticket_row is None:
+            logger.error("Ticket %s not found in database.", ticket_message.ticket_key)
             return
 
         all_users = await self.get_or_create_users(
-            thread_message.author,
-            *[dm_message.recipient for dm_message in thread_message.dm_messages],
-            *([thread_message.edited_by] if thread_message.edited_by else []),
-            *([thread_message.deleted_by] if thread_message.deleted_by else []),
+            ticket_message.author,
+            *[dm_message.recipient for dm_message in ticket_message.dm_messages],
+            *([ticket_message.edited_by] if ticket_message.edited_by else []),
+            *([ticket_message.deleted_by] if ticket_message.deleted_by else []),
         )
 
         async with self._async_session() as session:
@@ -752,27 +752,27 @@ class SQLClient(DBClientBase):
                 await session.merge(user)
 
             # Create the message in the database
-            message_row = SQLThreadMessageTable(
+            message_row = SQLTicketMessageTable(
                 bot_id=self._config.bot.bot_id,
-                thread_key=thread_row.key,
-                message_id=thread_message.message_id,
-                author_id=thread_message.author.user_id,
-                content=thread_message.content,
-                created_at=thread_message.created_at,
-                edited_at=thread_message.edited_at,
-                edited_by_id=thread_message.edited_by.user_id if thread_message.edited_by else None,
-                deleted_at=thread_message.deleted_at,
-                deleted_by_id=thread_message.deleted_by.user_id if thread_message.deleted_by else None,
-                type=thread_message.type,
+                ticket_key=ticket_row.key,
+                message_id=ticket_message.message_id,
+                author_id=ticket_message.author.user_id,
+                content=ticket_message.content,
+                created_at=ticket_message.created_at,
+                edited_at=ticket_message.edited_at,
+                edited_by_id=ticket_message.edited_by.user_id if ticket_message.edited_by else None,
+                deleted_at=ticket_message.deleted_at,
+                deleted_by_id=ticket_message.deleted_by.user_id if ticket_message.deleted_by else None,
+                type=ticket_message.type,
             )
 
             session.add(message_row)
             await session.flush()  # Ensure the message_row has an ID before adding DM messages
 
-            for dm_message in thread_message.dm_messages:
-                dm_message_row = SQLThreadDMMessageTable(
+            for dm_message in ticket_message.dm_messages:
+                dm_message_row = SQLTicketDMMessageTable(
                     message_id=dm_message.message_id,
-                    thread_message_ref_id=message_row.id,
+                    ticket_message_ref_id=message_row.id,
                     recipient_id=dm_message.recipient.user_id,
                 )
                 session.add(dm_message_row)
@@ -782,54 +782,54 @@ class SQLClient(DBClientBase):
             except Exception as e:
                 logger.error("Failed to save message in SQL Database: %s", e)
                 raise DatabaseConnectionError("Something went wrong while saving the message.") from e
-        logger.debug("Saved message %s in thread %s.", thread_message.message_id, thread_message.thread_key)
+        logger.debug("Saved message %s in ticket %s.", ticket_message.message_id, ticket_message.ticket_key)
 
-    async def close_thread(
+    async def close_ticket(
         self,
-        thread_key: str,
-        closer: ThreadUserModel,
+        ticket_key: str,
+        closer: TicketUserModel,
         *,
-        thread_status: ThreadStatus = ThreadStatus.closed_by_command,
+        ticket_status: TicketStatus = TicketStatus.closed_by_command,
     ) -> None:
-        """Close a thread in the database.
+        """Close a ticket in the database.
 
         Args:
-            thread_key: The key of the thread to close.
-            closer: The user who is closing the thread.
-            thread_status: The status to set for the thread (default is closed_by_command).
+            ticket_key: The key of the ticket to close.
+            closer: The user who is closing the ticket.
+            ticket_status: The status to set for the ticket (default is closed_by_command).
 
         Raises:
-            ThreadNotFoundError: If the thread is not found in the database or isn't currently open.
+            TicketNotFoundError: If the ticket is not found in the database or isn't currently open.
         """
         assert self._async_session is not None, "Session is not initialized."
-        assert thread_status != ThreadStatus.open, "Thread status cannot be 'open' when closing a thread."
+        assert ticket_status != TicketStatus.open, "Ticket status cannot be 'open' when closing a ticket."
 
         async with self._async_session() as session:
-            query = select(SQLThreadTable).where(
+            query = select(SQLTicketTable).where(
                 and_(
-                    SQLThreadTable.bot_id == self._config.bot.bot_id,
-                    SQLThreadTable.key == thread_key,
+                    SQLTicketTable.bot_id == self._config.bot.bot_id,
+                    SQLTicketTable.key == ticket_key,
                 )
             )
             result = await session.execute(query)
-            thread_row = result.scalar_one_or_none()
-            if thread_row is None:
-                raise ThreadNotFoundError("Thread not found in database.")
-            if thread_row.status != ThreadStatus.open:
-                raise ThreadNotFoundError("Thread is not currently open.")
+            ticket_row = result.scalar_one_or_none()
+            if ticket_row is None:
+                raise TicketNotFoundError("Ticket not found in database.")
+            if ticket_row.status != TicketStatus.open:
+                raise TicketNotFoundError("Ticket is not currently open.")
 
             sql_closer = await self.get_or_create_users(closer)
             for user in sql_closer.values():
                 await session.merge(user)
 
-            # Update the thread status and closer
-            thread_row.status = thread_status
-            thread_row.closed_at = datetime.datetime.now(tz=datetime.UTC)
-            thread_row.closed_by_id = closer.user_id
+            # Update the ticket status and closer
+            ticket_row.status = ticket_status
+            ticket_row.closed_at = datetime.datetime.now(tz=datetime.UTC)
+            ticket_row.closed_by_id = closer.user_id
             await session.commit()
 
         try:
-            self.__open_threads_cache.remove("key", thread_key)
+            self.__open_tickets_cache.remove("key", ticket_key)
         except KeyError:
-            logger.debug("Thread %s not found in cache.", thread_key)
-        logger.debug("Closed thread %s in SQL database.", thread_key)
+            logger.debug("Ticket %s not found in cache.", ticket_key)
+        logger.debug("Closed ticket %s in SQL database.", ticket_key)

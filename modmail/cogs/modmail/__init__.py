@@ -1,6 +1,6 @@
 """The main Modmail cog module that provides core Modmail functionality.
 
-This module initializes the Modmail cog which handles thread creation, user messages,
+This module initializes the Modmail cog which handles ticket creation, user messages,
 and other primary Modmail functions. It serves as the entry point for the Modmail
 functionality and registers all related commands.
 """

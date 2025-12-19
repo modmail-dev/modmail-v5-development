@@ -12,9 +12,9 @@ from collections.abc import Callable
 from typing import Any
 
 from .dm_receive import dm_receive
-from .thread_channel_delete import thread_channel_delete
+from .ticket_channel_delete import ticket_channel_delete
 
 all_listeners: list[Callable[..., Any]] = [
     dm_receive,
-    thread_channel_delete,
+    ticket_channel_delete,
 ]

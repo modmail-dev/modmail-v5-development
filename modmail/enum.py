@@ -12,10 +12,10 @@ from typing import NamedTuple
 from discord import app_commands
 
 
-class ThreadMessageType(enum.Enum):
-    """The type of the thread message.
+class TicketMessageType(enum.Enum):
+    """The type of the ticket message.
 
-    Represents the different types of messages that can be sent in a thread,
+    Represents the different types of messages that can be sent in a ticket,
     including reply messages, DM messages, and internal messages.
     """
 
@@ -26,10 +26,10 @@ class ThreadMessageType(enum.Enum):
     sclose = "sclose"
 
 
-class ThreadStatus(enum.Enum):
-    """Status of a thread.
+class TicketStatus(enum.Enum):
+    """Status of a ticket.
 
-    Represents the different states a thread can be in, such as open, closed,
+    Represents the different states a ticket can be in, such as open, closed,
     archived, or deleted.
     """
 

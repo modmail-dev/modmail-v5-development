@@ -1,7 +1,7 @@
-"""ThreadView class for managing thread interactions.
+"""TicketView class for managing ticket interactions.
 
-This class handles the creation and management of threads, including sending
-messages to the thread channel and processing incoming messages.
+This class handles the creation and management of tickets, including sending
+messages to the ticket channel and processing incoming messages.
 """
 
 from __future__ import annotations
@@ -16,11 +16,11 @@ from typing import TYPE_CHECKING, Any
 import discord
 from discord.ext import commands
 
-from modmail.backends.common import ThreadDMMessageModel, ThreadMessageModel, ThreadModel, ThreadUserModel
+from modmail.backends.common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
 
 from ... import CONFIG
-from ...enum import ThreadMessageType, ThreadStatus
-from ...errors import BadPermissionsError, NoStaffGuildError, NoThreadChannelError
+from ...enum import TicketMessageType, TicketStatus
+from ...errors import BadPermissionsError, NoStaffGuildError, NoTicketChannelError
 from ..translator import _
 from .embed import EmbedProxy
 
@@ -28,48 +28,48 @@ if TYPE_CHECKING:
     from ..bot import Bot
     from .staff_guild import StaffGuild
 
-__all__ = ["ThreadView"]
+__all__ = ["TicketView"]
 
 logger = logging.getLogger(__name__)
 
 
-class ThreadView:
-    """ThreadView class for managing thread interactions.
+class TicketView:
+    """TicketView class for managing ticket interactions.
 
-    This class handles the creation and management of threads, including sending
-    messages to the thread channel and processing incoming messages.
+    This class handles the creation and management of tickets, including sending
+    messages to the ticket channel and processing incoming messages.
 
     Attributes:
-        staff_guild: The StaffGuild instance associated with the thread.
-        model: The ThreadModel instance representing the thread.
-        recipients: A list of recipients associated with the thread.
+        staff_guild: The StaffGuild instance associated with the ticket.
+        model: The TicketModel instance representing the ticket.
+        recipients: A list of recipients associated with the ticket.
     """
 
     def __init__(
-        self, staff_guild: StaffGuild, thread_model: ThreadModel, recipients: list[discord.User | discord.Member]
+        self, staff_guild: StaffGuild, ticket_model: TicketModel, recipients: list[discord.User | discord.Member]
     ) -> None:
-        """Initialize the ThreadView.
+        """Initialize the TicketView.
 
         Args:
-            staff_guild: The StaffGuild instance associated with the thread.
-            thread_model: The ThreadModel instance representing the thread.
-            recipients: A list of recipients associated with the thread.
+            staff_guild: The StaffGuild instance associated with the ticket.
+            ticket_model: The TicketModel instance representing the ticket.
+            recipients: A list of recipients associated with the ticket.
         """
         self.bot = staff_guild.bot
         self.staff_guild = staff_guild
-        self.model = thread_model
+        self.model = ticket_model
         self.recipients = recipients
 
     @property
     def channel(self) -> discord.TextChannel:
-        """Get the channel associated with the thread.
+        """Get the channel associated with the ticket.
 
         Returns:
-            The channel associated with the thread, or None if the channel does not exist.
+            The channel associated with the ticket, or None if the channel does not exist.
 
         Raises:
             NoStaffGuildError: If the staff guild is not set.
-            NoThreadChannelError: If the channel is not found in the staff guild.
+            NoTicketChannelError: If the channel is not found in the staff guild.
             BadPermissionsError: If the bot does not have the required permissions to access the channel.
         """
         try:
@@ -78,7 +78,7 @@ class ThreadView:
             logger.debug("Staff guild not set, cannot get channel.")
             raise
         if channel is None:
-            raise NoThreadChannelError("Thread channel not found.")
+            raise NoTicketChannelError("Ticket channel not found.")
 
         perms = channel.permissions_for(channel.guild.me)
         if perms & self.staff_guild.MIN_PERMISSIONS != self.staff_guild.MIN_PERMISSIONS:
@@ -86,10 +86,10 @@ class ThreadView:
         return channel
 
     # def dm_channel(self) -> discord.DMChannel | None:
-    #     """Get the DM channel associated with the thread.
+    #     """Get the DM channel associated with the ticket.
     #
     #     Returns:
-    #         The DM channel associated with the thread, or None if the DM channel does not exist.
+    #         The DM channel associated with the ticket, or None if the DM channel does not exist.
     #     """
     #     try:
     #         return self.staff_guild.bot(self.model.created_by.user_id).dm_channel
@@ -99,10 +99,10 @@ class ThreadView:
 
     @staticmethod
     def _get_log_url(key: str) -> str:
-        """Get a formatted log URL for the thread.
+        """Get a formatted log URL for the ticket.
 
         Args:
-            key: The key of the thread.
+            key: The key of the ticket.
 
         Returns:
             The formatted log URL.
@@ -110,7 +110,7 @@ class ThreadView:
         return f"{CONFIG.log_url}/{key}"
 
     async def send_initial_staff_message(self) -> None:
-        """Send the initial message to the thread chanel."""
+        """Send the initial message to the ticket chanel."""
         channel = self.channel  # This checks for permissions and validity
         log_url = self._get_log_url(self.model.key)
         embed_proxies: list[tuple[Any, EmbedProxy]] = []  # list of tuples (sort-key, embed)
@@ -145,10 +145,10 @@ class ThreadView:
             embed = EmbedProxy()
             embed.set_author(name=str(recipient), icon_url=str(recipient.avatar), url=log_url)
             embed.description = _(
-                "ftl-msg-new-thread-initial-embed-description",
+                "ftl-msg-new-ticket-initial-embed-description",
                 created=discord.utils.format_dt(recipient.created_at, "R"),
             )
-            embed.set_footer(text=_("ftl-msg-new-thread-initial-embed-footer", user_id=str(recipient.id)))
+            embed.set_footer(text=_("ftl-msg-new-ticket-initial-embed-footer", user_id=str(recipient.id)))
 
             members = members_mapping.get(recipient.id, [])
             members.sort(key=lambda m: m.guild.name)  # Sort by guild name
@@ -159,11 +159,11 @@ class ThreadView:
                 if member.joined_at:
                     joined_time = discord.utils.format_dt(member.joined_at, "R")
                 else:
-                    joined_time = _("ftl-msg-new-thread-initial-embed-guild-field-value-no-join-date")
+                    joined_time = _("ftl-msg-new-ticket-initial-embed-guild-field-value-no-join-date")
                 embed.add_field(
                     name=member.guild.name,
                     value=_(
-                        "ftl-msg-new-thread-initial-embed-guild-field-value",
+                        "ftl-msg-new-ticket-initial-embed-guild-field-value",
                         joined=joined_time,
                         roles=roles_str,
                         has_role=str(bool(roles)).lower(),
@@ -171,14 +171,14 @@ class ThreadView:
                     inline=False,
                 )
 
-            past_threads_count = await self.bot.database_client.get_all_threads_by_recipient(
+            past_tickets_count = await self.bot.database_client.get_all_tickets_by_recipient(
                 recipient.id,
                 count=True,
                 only_closed=True,
             )
             embed.add_field(
-                name=_("ftl-msg-new-thread-initial-embed-past-threads-field-name"),
-                value=_("ftl-msg-new-thread-initial-embed-past-threads-field-value", count=past_threads_count),
+                name=_("ftl-msg-new-ticket-initial-embed-past-tickets-field-name"),
+                value=_("ftl-msg-new-ticket-initial-embed-past-tickets-field-value", count=past_tickets_count),
                 inline=False,
             )
             embed_proxies.append((recipient.name, embed))
@@ -192,23 +192,23 @@ class ThreadView:
         embeds[0].timestamp = datetime.datetime.now(datetime.UTC)
         await channel.send(embeds=embeds)
 
-    def format_thread_channel_embed(
+    def format_ticket_channel_embed(
         self,
         original_message: discord.Message | tuple[commands.Context[Bot], str],
-        message_type: ThreadMessageType,
+        message_type: TicketMessageType,
     ) -> EmbedProxy:
-        """Format the embed for the given message that is sent to the thread channel.
+        """Format the embed for the given message that is sent to the ticket channel.
 
         If the message is invoked within a command, the context and the message are passed as a tuple.
 
         Args:
             original_message: The original message to format.
-            message_type: The type of the message (e.g., ThreadMessageType.dm).
+            message_type: The type of the message (e.g., TicketMessageType.dm).
 
         Returns:
             The formatted embed proxy.
         """
-        # TODO: format close embed: ThreadMessageType = close, sclose
+        # TODO: format close embed: TicketMessageType = close, sclose
 
         if isinstance(original_message, tuple):
             ctx, content = original_message
@@ -227,10 +227,10 @@ class ThreadView:
         embed.description = content
         embed.timestamp = created_at
 
-        if message_type == ThreadMessageType.dm:
+        if message_type == TicketMessageType.dm:
             embed.colour = discord.Color.blue()
-            embed.set_footer(text=_("ftl-msg-thread-channel-embed-footer", message_id=str(message_id)))
-        elif message_type == ThreadMessageType.reply:
+            embed.set_footer(text=_("ftl-msg-ticket-channel-embed-footer", message_id=str(message_id)))
+        elif message_type == TicketMessageType.reply:
             embed.colour = discord.Color.green()
             # TODO
         return embed
@@ -238,20 +238,20 @@ class ThreadView:
     def format_dm_channel_embed(
         self,
         original_message: discord.Message | tuple[commands.Context[Bot], str],
-        message_type: ThreadMessageType,
+        message_type: TicketMessageType,
     ) -> EmbedProxy:
-        """Format the thread embed for the given message that is sent to the DM channel.
+        """Format the ticket embed for the given message that is sent to the DM channel.
 
         If the message is invoked within a command, the context and the message are passed as a tuple.
 
         Args:
             original_message: The original message to format.
-            message_type: The type of the message (e.g., ThreadMessageType.dm).
+            message_type: The type of the message (e.g., TicketMessageType.dm).
 
         Returns:
             The formatted embed proxy.
         """
-        # TODO: format close embed: ThreadMessageType = close
+        # TODO: format close embed: TicketMessageType = close
 
         if isinstance(original_message, tuple):
             ctx, content = original_message
@@ -267,15 +267,15 @@ class ThreadView:
         embed.description = content
         embed.timestamp = created_at
 
-        if message_type == ThreadMessageType.dm:
+        if message_type == TicketMessageType.dm:
             embed.colour = discord.Color.orange()
-        elif message_type == ThreadMessageType.reply:
+        elif message_type == TicketMessageType.reply:
             embed.colour = discord.Color.green()
             # TODO
         return embed
 
     async def process_dm_message(self, message: discord.Message) -> list[discord.User | discord.Member]:
-        """Process a DM message and send it to the thread channel.
+        """Process a DM message and send it to the ticket channel.
 
         Args:
             message: The DM message to process.
@@ -285,29 +285,29 @@ class ThreadView:
         """
         logger.debug("Processing DM message from %s: %s", message.author, message.content)
         channel = self.channel  # This checks for permissions and validity
-        embed_proxy = self.format_thread_channel_embed(message, ThreadMessageType.dm)
+        embed_proxy = self.format_ticket_channel_embed(message, TicketMessageType.dm)
         embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
         coros: list[Awaitable[Any]] = [channel.send(embed=embed)]
 
-        # Send the message to all other recipients in the thread
+        # Send the message to all other recipients in the ticket
         other_recipients = [recipient for recipient in self.recipients if recipient != message.author]
         if other_recipients:
-            embed_proxy = self.format_dm_channel_embed(message, ThreadMessageType.dm)
+            embed_proxy = self.format_dm_channel_embed(message, TicketMessageType.dm)
             embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
             coros.extend([recipient.send(embed=embed) for recipient in other_recipients])
 
         sent_messages = await asyncio.gather(*coros, return_exceptions=True)
-        thread_channel_message = sent_messages[0]
-        if not isinstance(thread_channel_message, discord.Message):
-            logger.warning("Failed to send message to thread channel: %s", thread_channel_message)
-            raise thread_channel_message
+        ticket_channel_message = sent_messages[0]
+        if not isinstance(ticket_channel_message, discord.Message):
+            logger.warning("Failed to send message to ticket channel: %s", ticket_channel_message)
+            raise ticket_channel_message
 
         # The received DM message is the first message in the list
-        dm_channel_messages: list[ThreadDMMessageModel] = [
-            ThreadDMMessageModel(
+        dm_channel_messages: list[TicketDMMessageModel] = [
+            TicketDMMessageModel(
                 message_id=message.id,
-                thread_message_id=thread_channel_message.id,
-                recipient=ThreadUserModel.from_user(message.author),
+                ticket_message_id=ticket_channel_message.id,
+                recipient=TicketUserModel.from_user(message.author),
             )
         ]
         failed_recipients: list[discord.User | discord.Member] = []
@@ -316,30 +316,30 @@ class ThreadView:
             recipient = other_recipients[i]
             if isinstance(sent_message, discord.Message):
                 dm_channel_messages.append(
-                    ThreadDMMessageModel(
+                    TicketDMMessageModel(
                         message_id=sent_message.id,
-                        thread_message_id=thread_channel_message.id,
-                        recipient=ThreadUserModel.from_user(recipient),
+                        ticket_message_id=ticket_channel_message.id,
+                        recipient=TicketUserModel.from_user(recipient),
                     )
                 )
             else:
                 logger.error("Failed to send DM message to %s: %s", recipient, sent_message)
                 failed_recipients.append(recipient)
 
-        thread_message_model = ThreadMessageModel(
+        ticket_message_model = TicketMessageModel(
             bot_id=self.model.bot_id,
-            thread_key=self.model.key,
-            message_id=thread_channel_message.id,
+            ticket_key=self.model.key,
+            message_id=ticket_channel_message.id,
             dm_messages=dm_channel_messages,
-            author=ThreadUserModel.from_user(message.author),
+            author=TicketUserModel.from_user(message.author),
             content=message.content,
             created_at=message.created_at,
-            type=ThreadMessageType.dm,
+            type=TicketMessageType.dm,
         )
-        task = asyncio.create_task(self.bot.database_client.save_message(thread_message_model))
+        task = asyncio.create_task(self.bot.database_client.save_message(ticket_message_model))
         task.add_done_callback(
             lambda t: (
-                logger.warning("Error saving message for thread %s", self.model.key, exc_info=t.exception())
+                logger.warning("Error saving message for ticket %s", self.model.key, exc_info=t.exception())
                 if t.exception()
                 else None
             )
@@ -347,7 +347,7 @@ class ThreadView:
         return failed_recipients
 
     async def process_reply_message(
-        self, ctx: commands.Context[Bot], message: str, message_type: ThreadMessageType = ThreadMessageType.reply
+        self, ctx: commands.Context[Bot], message: str, message_type: TicketMessageType = TicketMessageType.reply
     ) -> list[discord.User | discord.Member]:
         """Process a reply, close, or note message and send it to the DM channel if applicable.
 
@@ -363,58 +363,58 @@ class ThreadView:
         Returns:
             A list of recipients to whom the reply message failed to send.
         """
-        logger.debug("Processing %s message in thread %s: %s", message_type, self.model.key, message)
+        logger.debug("Processing %s message in ticket %s: %s", message_type, self.model.key, message)
         channel = self.channel  # This checks for permissions and validity
-        embed_proxy = self.format_thread_channel_embed((ctx, message), message_type)
+        embed_proxy = self.format_ticket_channel_embed((ctx, message), message_type)
         embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
 
         coros: list[Awaitable[Any]] = [channel.send(embed=embed)]
 
-        # Send the message to all recipients in the thread
-        if message_type in {ThreadMessageType.reply, ThreadMessageType.close}:
+        # Send the message to all recipients in the ticket
+        if message_type in {TicketMessageType.reply, TicketMessageType.close}:
             embed_proxy = self.format_dm_channel_embed((ctx, message), message_type)
             embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
             coros.extend([recipient.send(embed=embed) for recipient in self.recipients])
 
         sent_messages = await asyncio.gather(*coros, return_exceptions=True)
 
-        thread_channel_message = sent_messages[0]
-        if not isinstance(thread_channel_message, discord.Message):
-            logger.error("Failed to send %s message to thread channel: %s", message_type, thread_channel_message)
-            raise thread_channel_message
+        ticket_channel_message = sent_messages[0]
+        if not isinstance(ticket_channel_message, discord.Message):
+            logger.error("Failed to send %s message to ticket channel: %s", message_type, ticket_channel_message)
+            raise ticket_channel_message
 
-        dm_channel_messages: list[ThreadDMMessageModel] = []
+        dm_channel_messages: list[TicketDMMessageModel] = []
         failed_recipients: list[discord.User | discord.Member] = []
 
         for i, sent_message in enumerate(sent_messages[1:]):
             recipient = self.recipients[i]
             if isinstance(sent_message, discord.Message):
                 dm_channel_messages.append(
-                    ThreadDMMessageModel(
+                    TicketDMMessageModel(
                         message_id=sent_message.id,
-                        thread_message_id=thread_channel_message.id,
-                        recipient=ThreadUserModel.from_user(recipient),
+                        ticket_message_id=ticket_channel_message.id,
+                        recipient=TicketUserModel.from_user(recipient),
                     )
                 )
             else:
                 logger.error("Failed to send %s DM message to %s: %s", message_type, recipient, sent_message)
                 failed_recipients.append(recipient)
 
-        thread_message_model = ThreadMessageModel(
+        ticket_message_model = TicketMessageModel(
             bot_id=self.model.bot_id,
-            thread_key=self.model.key,
-            message_id=thread_channel_message.id,
+            ticket_key=self.model.key,
+            message_id=ticket_channel_message.id,
             dm_messages=dm_channel_messages,
-            author=ThreadUserModel.from_user(ctx.author),
+            author=TicketUserModel.from_user(ctx.author),
             content=message,
             created_at=ctx.message.created_at,
             type=message_type,
         )
-        task = asyncio.create_task(self.bot.database_client.save_message(thread_message_model))
+        task = asyncio.create_task(self.bot.database_client.save_message(ticket_message_model))
         task.add_done_callback(
             lambda t: (
                 logger.error(
-                    "Error saving %s message for thread %s", message_type, self.model.key, exc_info=t.exception()
+                    "Error saving %s message for ticket %s", message_type, self.model.key, exc_info=t.exception()
                 )
                 if t.exception()
                 else None
@@ -422,29 +422,29 @@ class ThreadView:
         )
         return failed_recipients
 
-    async def close(self, closer: discord.User | discord.Member, thread_status: ThreadStatus) -> None:
-        """Close the thread and perform any necessary cleanup.
+    async def close(self, closer: discord.User | discord.Member, ticket_status: TicketStatus) -> None:
+        """Close the ticket and perform any necessary cleanup.
 
         Args:
-            closer: The user who is closing the thread.
-            thread_status: The status of the thread after closing (by command, by deletion).
+            closer: The user who is closing the ticket.
+            ticket_status: The status of the ticket after closing (by command, by deletion).
 
         Raises:
-            ValueError: If an invalid thread status is provided for closing.
+            ValueError: If an invalid ticket status is provided for closing.
         """
-        logger.debug("Closing thread %s: %s", self.model.key, thread_status)
+        logger.debug("Closing ticket %s: %s", self.model.key, ticket_status)
 
-        if thread_status not in {
-            ThreadStatus.closed_by_command,
-            ThreadStatus.closed_by_deletion,
+        if ticket_status not in {
+            TicketStatus.closed_by_command,
+            TicketStatus.closed_by_deletion,
         }:
-            raise ValueError("Invalid thread status for closing.")
+            raise ValueError("Invalid ticket status for closing.")
 
-        closer_model = ThreadUserModel.from_user(closer)
-        await self.staff_guild.bot.database_client.close_thread(
-            self.model.key, closer_model, thread_status=thread_status
+        closer_model = TicketUserModel.from_user(closer)
+        await self.staff_guild.bot.database_client.close_ticket(
+            self.model.key, closer_model, ticket_status=ticket_status
         )
 
         # TODO: config
-        # await self.channel.delete(reason=_("ftl-msg-thread-closed-reason", user=closer.name))
-        logger.info("Closed thread %s for %s.", self.model.key, self.model.recipients)
+        # await self.channel.delete(reason=_("ftl-msg-ticket-closed-reason", user=closer.name))
+        logger.info("Closed ticket %s for %s.", self.model.key, self.model.recipients)

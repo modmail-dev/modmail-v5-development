@@ -15,11 +15,11 @@ from typing import TYPE_CHECKING, Any, cast
 import discord
 
 from ... import CONFIG
-from ...backends.common import ThreadModel, ThreadUserModel
-from ...enum import ProfileType, ThreadStatus
+from ...backends.common import TicketModel, TicketUserModel
+from ...enum import ProfileType, TicketStatus
 from ...errors import BadPermissionsError, NoModmailCategoryError, NoStaffGuildError
 from ..translator import _
-from .thread_view import ThreadView
+from .ticket_view import TicketView
 
 if TYPE_CHECKING:
     from ..bot import Bot
@@ -59,7 +59,7 @@ class StaffGuild:
         (ftl-cmd-setup-not-enough-guild-permissions, etc.)
 
         The view audit-log permission is highly recommended, but not required.
-        It help logs the closer when they manually delete a thread channel.
+        It help logs the closer when they manually delete a ticket channel.
 
         Returns:
             The discord.Permissions of the minimum permissions for Modmail.
@@ -332,40 +332,40 @@ class StaffGuild:
         if coros:
             await asyncio.gather(*coros)
 
-    async def get_thread(
+    async def get_ticket(
         self, /, user_or_channel: discord.User | discord.Member | discord.abc.GuildChannel
-    ) -> ThreadView | None:
-        """Get an open thread for a user or channel.
+    ) -> TicketView | None:
+        """Get an open ticket for a user or channel.
 
         Args:
-            user_or_channel: The user or channel to get the thread for.
+            user_or_channel: The user or channel to get the ticket for.
 
         Returns:
-            The thread for the user or channel, or None if it doesn't exist.
+            The ticket for the user or channel, or None if it doesn't exist.
         """
         if isinstance(user_or_channel, discord.User | discord.Member):
-            thread_model = await self.bot.database_client.get_thread_by_recipient(user_or_channel.id)
+            ticket_model = await self.bot.database_client.get_ticket_by_recipient(user_or_channel.id)
         else:
-            thread_model = await self.bot.database_client.get_thread_by_channel(user_or_channel.id, only_open=True)
+            ticket_model = await self.bot.database_client.get_ticket_by_channel(user_or_channel.id, only_open=True)
 
-        if thread_model is None:
-            logger.debug("No thread found for %s", user_or_channel)
+        if ticket_model is None:
+            logger.debug("No ticket found for %s", user_or_channel)
             return None
 
-        channel = self.guild.get_channel(thread_model.channel_id)
+        channel = self.guild.get_channel(ticket_model.channel_id)
         if channel is None:
             logger.warning(
-                "Thread channel %s does not exist, closing thread %s", thread_model.channel_id, thread_model.key
+                "Ticket channel %s does not exist, closing ticket %s", ticket_model.channel_id, ticket_model.key
             )
-            await self.bot.database_client.close_thread(
-                thread_model.key,
-                ThreadUserModel.from_user(cast(discord.ClientUser, self.bot.user)),
-                thread_status=ThreadStatus.closed_by_deletion,
+            await self.bot.database_client.close_ticket(
+                ticket_model.key,
+                TicketUserModel.from_user(cast(discord.ClientUser, self.bot.user)),
+                ticket_status=TicketStatus.closed_by_deletion,
             )
             return None
 
         recipients: list[discord.User | discord.Member] = []
-        for recipient in thread_model.recipients:
+        for recipient in ticket_model.recipients:
             try:
                 user = await self.bot.fetch_user(recipient.user_id)  # TODO: Implement some caching
             except discord.NotFound:  # TODO: Handle this better (show to user)
@@ -376,14 +376,14 @@ class StaffGuild:
                 continue
             recipients.append(user)
 
-        return ThreadView(self, thread_model, recipients)
+        return TicketView(self, ticket_model, recipients)
 
     @staticmethod
     def _make_channel_name(*users: discord.User | discord.Member) -> str:
-        """Generate a channel name for the thread.
+        """Generate a channel name for the ticket.
 
         Args:
-            *users: The users of the thread.
+            *users: The users of the ticket.
 
         Returns:
             The generated channel name.
@@ -391,19 +391,19 @@ class StaffGuild:
         # TODO: Add more options for channel names
         return "-".join([str(user.name) for user in users])
 
-    async def create_thread(
+    async def create_ticket(
         self,
         *recipients: discord.User | discord.Member,
         created_by: discord.User | discord.Member,
-    ) -> ThreadView:
-        """Create a new thread for the given users.
+    ) -> TicketView:
+        """Create a new ticket for the given users.
 
         Args:
-            *recipients: The users to create the thread for.
-            created_by: The user who created the thread.
+            *recipients: The users to create the ticket for.
+            created_by: The user who created the ticket.
 
         Returns:
-            The created thread view.
+            The created ticket view.
 
         Raises:
             NoStaffGuildError: If the staff guild is not configured.
@@ -416,31 +416,31 @@ class StaffGuild:
             raise ValueError("At least one user must be provided")
 
         reason = await self.bot.translator.translate(
-            _("ftl-msg-new-thread-reason", users=", ".join(str(user) for user in recipients)),
+            _("ftl-msg-new-ticket-reason", users=", ".join(str(user) for user in recipients)),
             CONFIG.default_locale,
         )
         channel = await self.category.create_text_channel(name=self._make_channel_name(*recipients), reason=reason)
 
-        thread = ThreadModel(
+        ticket = TicketModel(
             bot_id=CONFIG.bot.bot_id,
-            key=ThreadModel.generate_key(),
-            recipients=[ThreadUserModel.from_user(user) for user in recipients],
+            key=TicketModel.generate_key(),
+            recipients=[TicketUserModel.from_user(user) for user in recipients],
             channel_id=channel.id,
             created_at=datetime.datetime.now(datetime.UTC),
-            created_by=ThreadUserModel.from_user(created_by),
-            status=ThreadStatus.open,
+            created_by=TicketUserModel.from_user(created_by),
+            status=TicketStatus.open,
         )
         try:
-            await self.bot.database_client.create_thread(thread)
-            view = ThreadView(self, thread, list(recipients))
+            await self.bot.database_client.create_ticket(ticket)
+            view = TicketView(self, ticket, list(recipients))
             await view.send_initial_staff_message()
             # TODO: send initial recipient message
         except Exception:
-            logger.exception("Failed to create thread or send initial message.")
+            logger.exception("Failed to create ticket or send initial message.")
             # Send a message to the channel indicating the failure
             try:
                 await channel.send(
-                    await self.bot.translator.translate(_("ftl-msg-create-thread-failed"), CONFIG.default_locale)
+                    await self.bot.translator.translate(_("ftl-msg-create-ticket-failed"), CONFIG.default_locale)
                 )
             except discord.HTTPException:
                 logger.exception("Failed to send error message to channel %s", channel.id)

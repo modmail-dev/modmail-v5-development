@@ -24,30 +24,30 @@ ftl-dm-received-failed-recipients = The following recipients did not receive thi
                                     They may have disabled DMs, blocked me, or does not share any servers with me.
 
 # :param $users: a comma-separated list of usernames
-ftl-msg-new-thread-reason = New Modmail thread for: { $users }
+ftl-msg-new-ticket-reason = New Modmail ticket for: { $users }
 # :param $created: the date the account was created
-ftl-msg-new-thread-initial-embed-description = Account created { $created }.
+ftl-msg-new-ticket-initial-embed-description = Account created { $created }.
 # :param $user_id: the user ID of the user (string)
-ftl-msg-new-thread-initial-embed-footer = User ID: { $user_id }
+ftl-msg-new-ticket-initial-embed-footer = User ID: { $user_id }
 # :param $joined: the date the user joined the server
 # :param $roles: a comma-separated list of roles
 # :param $has_role: whether the user has a role in the server (true) or not (false)
-ftl-msg-new-thread-initial-embed-guild-field-value = Joined { $joined }.
+ftl-msg-new-ticket-initial-embed-guild-field-value = Joined { $joined }.
                                                      Roles: { $has_role ->
     *[true]  { $roles }
      [false] None
 }
-ftl-msg-new-thread-initial-embed-guild-field-value-no-join-date = [Unknown]
-ftl-msg-new-thread-initial-embed-past-threads-field-name = Past Threads
-# :param $count: the number of past threads
-ftl-msg-new-thread-initial-embed-past-threads-field-value = { $count ->
-     [one] 1 past thread
-    *[other] { $count } past threads
+ftl-msg-new-ticket-initial-embed-guild-field-value-no-join-date = [Unknown]
+ftl-msg-new-ticket-initial-embed-past-tickets-field-name = Past Tickets
+# :param $count: the number of past tickets
+ftl-msg-new-ticket-initial-embed-past-tickets-field-value = { $count ->
+     [one] 1 past ticket
+    *[other] { $count } past tickets
 }
-ftl-msg-create-thread-failed = Something went wrong while creating this Modmail thread. Please check my logs for more information.
+ftl-msg-create-ticket-failed = Something went wrong while creating this Modmail ticket. Please check my logs for more information.
 
 # :param $message_id: the message ID of the message (string)
-ftl-msg-thread-channel-embed-footer = Message ID: { $message_id }
+ftl-msg-ticket-channel-embed-footer = Message ID: { $message_id }
 
 ### ========================
 ###         Commands
@@ -196,7 +196,7 @@ ftl-cmd-setup-use-new-category-prompt-existing-category-no-permissions = I don't
 ftl-cmd-setup-category-name = Modmail
 ftl-cmd-setup-category-create-reason = Category for Modmail.
 ftl-cmd-setup-category-permissions-reason = Category permissions for Modmail.
-ftl-cmd-setup-log-channel-name = thread-logs
+ftl-cmd-setup-log-channel-name = ticket-logs
 ftl-cmd-setup-log-channel-topic = Modmail logs
 ftl-cmd-setup-log-channel-create-reason = Log channel for Modmail.
 ftl-cmd-setup-storage-channel-name = modmail-storage
@@ -211,7 +211,7 @@ ftl-cmd-setup-complete = Successfully setup Modmail. Your Modmail category is { 
 ## Command: Modmail.reply
 
 ftl-cmd-reply-name = reply
-ftl-cmd-reply-description = Reply to a Modmail thread.
+ftl-cmd-reply-description = Reply to a Modmail ticket.
 ftl-cmd-reply-param-attachment-name = attachment
 ftl-cmd-reply-param-attachment-description = The attachment to send. Can be a file or an image.
 ftl-cmd-reply-param-message-name = message
@@ -226,12 +226,12 @@ ftl-cmd-reply-message-failed = Failed to send the reply, please check my logs fo
 ## Command: Modmail.close
 
 ftl-cmd-close-name = close
-ftl-cmd-close-description = Close a Modmail thread.
+ftl-cmd-close-description = Close a Modmail ticket.
 ftl-cmd-close-param-attachment-name = attachment
 ftl-cmd-close-param-attachment-description = The attachment to send. Can be a file or an image.
 ftl-cmd-close-param-message-name = message
 ftl-cmd-close-param-message-description = The message to send.
-ftl-cmd-close-message-sending = Closing the thread...
+ftl-cmd-close-message-sending = Closing the ticket...
 # :param $recipients: a comma-separated list of recipients who did not receive the message
 ftl-cmd-close-message-failed-recipients = Failed to send the close message to the following recipients: { $recipients }.
                                           They may have disabled DMs, blocked me, or does not share any servers with me.
@@ -240,12 +240,12 @@ ftl-cmd-close-message-failed = Failed to send the close message, please check my
 ## Command: Modmail.sclose
 
 ftl-cmd-sclose-name = sclose
-ftl-cmd-sclose-description = Silently close a Modmail thread.
+ftl-cmd-sclose-description = Silently close a Modmail ticket.
 ftl-cmd-sclose-param-attachment-name = attachment
 ftl-cmd-sclose-param-attachment-description = The attachment to store with the close message. Can be a file or an image.
 ftl-cmd-sclose-param-message-name = message
 ftl-cmd-sclose-param-message-description = The message to store as the close message.
-ftl-cmd-sclose-message-sending = Closing the thread...
+ftl-cmd-sclose-message-sending = Closing the ticket...
 
 ### ========================
 ###         Messages

@@ -2,7 +2,7 @@
 
 This module defines a listener for incoming direct messages in the Modmail bot.
 It processes the messages, checks if the Modmail system is configured,
-and creates or retrieves threads for the users.
+and creates or retrieves tickets for the users.
 """
 
 from __future__ import annotations
@@ -76,18 +76,18 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
         except commands.CommandError, ModmailError:
             pass  # Meaning the command is not valid or not allowed, proceed to process the DM
 
-        thread = await staff_guild.get_thread(message.author)
-        if thread is None:
-            # If the user is not in a thread, create a new one
-            thread = await staff_guild.create_thread(message.author, created_by=message.author)
+        ticket = await staff_guild.get_ticket(message.author)
+        if ticket is None:
+            # If the user is not in a ticket, create a new one
+            ticket = await staff_guild.create_ticket(message.author, created_by=message.author)
 
-        failed_recipients = await thread.process_dm_message(message)
+        failed_recipients = await ticket.process_dm_message(message)
 
         if failed_recipients:
-            # Send a message to thread channel about the failed recipients
+            # Send a message to ticket channel about the failed recipients
             failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
             await cog.send(
-                thread.channel, _("ftl-dm-received-failed-recipients", recipients=failed_recipients_str)
+                ticket.channel, _("ftl-dm-received-failed-recipients", recipients=failed_recipients_str)
             )
 
     except Exception:

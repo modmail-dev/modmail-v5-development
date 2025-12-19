@@ -2,7 +2,7 @@
 
 This module provides utility functions for converting between
 common models and MongoDB document models, handling the persistence
-and retrieval of thread and user data in the MongoDB database backend.
+and retrieval of ticket and user data in the MongoDB database backend.
 """
 
 from __future__ import annotations
@@ -12,190 +12,190 @@ from typing import cast
 from beanie import Link, UpdateResponse
 from beanie.odm.queries.update import UpdateOne
 
-from ..common import ThreadDMMessageModel, ThreadMessageModel, ThreadModel, ThreadUserModel
+from ..common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
 from .models import (
-    MongoDBThreadDMMessageModel,
-    MongoDBThreadDocument,
-    MongoDBThreadMessageDocument,
-    MongoDBThreadUserDocument,
+    MongoDBTicketDMMessageModel,
+    MongoDBTicketDocument,
+    MongoDBTicketMessageDocument,
+    MongoDBTicketUserDocument,
 )
 
 __all__ = [
-    "get_or_create_thread_user",
-    "thread_dm_message_model_to_document",
-    "thread_message_model_to_document",
-    "thread_model_to_document",
+    "get_or_create_ticket_user",
+    "ticket_dm_message_model_to_document",
+    "ticket_message_model_to_document",
+    "ticket_model_to_document",
 ]
 
 
-def thread_user_model_to_document(thread_user: ThreadUserModel) -> MongoDBThreadUserDocument:
-    """Converts a ThreadUserModel to a MongoDBThreadUserDocument.
+def ticket_user_model_to_document(ticket_user: TicketUserModel) -> MongoDBTicketUserDocument:
+    """Converts a TicketUserModel to a MongoDBTicketUserDocument.
 
     Args:
-        thread_user: The ThreadUserModel.
+        ticket_user: The TicketUserModel.
 
     Returns:
-        The converted MongoDBThreadUserDocument.
+        The converted MongoDBTicketUserDocument.
     """
-    return MongoDBThreadUserDocument(
-        id=thread_user.user_id,
-        user_name=thread_user.user_name,
+    return MongoDBTicketUserDocument(
+        id=ticket_user.user_id,
+        user_name=ticket_user.user_name,
     )
 
 
-async def get_or_create_thread_user(thread_user: ThreadUserModel) -> MongoDBThreadUserDocument:
-    """Get or create thread user document for a thread user.
+async def get_or_create_ticket_user(ticket_user: TicketUserModel) -> MongoDBTicketUserDocument:
+    """Get or create ticket user document for a ticket user.
 
     Args:
-        thread_user: The thread user model to get or create.
+        ticket_user: The ticket user model to get or create.
 
     Returns:
-        The MongoDBThreadUserDocument object from the database.
+        The MongoDBTicketUserDocument object from the database.
     """
-    thread_user_document = thread_user_model_to_document(thread_user)
+    ticket_user_document = ticket_user_model_to_document(ticket_user)
     return cast(
-        MongoDBThreadUserDocument,
+        MongoDBTicketUserDocument,
         await cast(
             UpdateOne,
-            MongoDBThreadUserDocument.find_one(MongoDBThreadUserDocument.id == thread_user.user_id).upsert(
-                {"$set": thread_user_document.model_dump(exclude={"id"})},
-                on_insert=thread_user_document,
+            MongoDBTicketUserDocument.find_one(MongoDBTicketUserDocument.id == ticket_user.user_id).upsert(
+                {"$set": ticket_user_document.model_dump(exclude={"id"})},
+                on_insert=ticket_user_document,
                 response_type=UpdateResponse.NEW_DOCUMENT,
             ),
         ),
     )
 
 
-async def thread_model_to_document(thread: ThreadModel) -> MongoDBThreadDocument:
-    """Converts a ThreadModel to a MongoDBThreadDocument.
+async def ticket_model_to_document(ticket: TicketModel) -> MongoDBTicketDocument:
+    """Converts a TicketModel to a MongoDBTicketDocument.
 
-    This function also creates the thread users if they do not exist in the database.
+    This function also creates the ticket users if they do not exist in the database.
 
     Args:
-        thread: The ThreadModel to convert.
+        ticket: The TicketModel to convert.
 
     Returns:
-        The converted MongoDBThreadDocument.
+        The converted MongoDBTicketDocument.
     """
     # Since recipients, created_by, closed_by may be the same user,
     # we can cache them to avoid multiple database calls
     # Need to use Links with cast() to avoid type errors
-    thread_users_cache: dict[int, Link[MongoDBThreadUserDocument]] = {}
+    ticket_users_cache: dict[int, Link[MongoDBTicketUserDocument]] = {}
 
-    recipients: list[Link[MongoDBThreadUserDocument]] = []
-    for recipient in thread.recipients:
-        if recipient.user_id not in thread_users_cache:
-            thread_users_cache[recipient.user_id] = cast(
-                Link[MongoDBThreadUserDocument], await get_or_create_thread_user(recipient)
+    recipients: list[Link[MongoDBTicketUserDocument]] = []
+    for recipient in ticket.recipients:
+        if recipient.user_id not in ticket_users_cache:
+            ticket_users_cache[recipient.user_id] = cast(
+                Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(recipient)
             )
-        recipients.append(thread_users_cache[recipient.user_id])
+        recipients.append(ticket_users_cache[recipient.user_id])
 
-    if thread.created_by.user_id not in thread_users_cache:
-        thread_users_cache[thread.created_by.user_id] = cast(
-            Link[MongoDBThreadUserDocument], await get_or_create_thread_user(thread.created_by)
+    if ticket.created_by.user_id not in ticket_users_cache:
+        ticket_users_cache[ticket.created_by.user_id] = cast(
+            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket.created_by)
         )
-    created_by = thread_users_cache[thread.created_by.user_id]
+    created_by = ticket_users_cache[ticket.created_by.user_id]
 
-    if thread.closed_by and thread.closed_by.user_id not in thread_users_cache:
-        thread_users_cache[thread.closed_by.user_id] = cast(
-            Link[MongoDBThreadUserDocument], await get_or_create_thread_user(thread.closed_by)
+    if ticket.closed_by and ticket.closed_by.user_id not in ticket_users_cache:
+        ticket_users_cache[ticket.closed_by.user_id] = cast(
+            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket.closed_by)
         )
-    closed_by = thread_users_cache[thread.closed_by.user_id] if thread.closed_by else None
+    closed_by = ticket_users_cache[ticket.closed_by.user_id] if ticket.closed_by else None
 
-    return MongoDBThreadDocument(
-        bot_id=thread.bot_id,
-        key=thread.key,
+    return MongoDBTicketDocument(
+        bot_id=ticket.bot_id,
+        key=ticket.key,
         recipients=recipients,
-        channel_id=thread.channel_id,
-        created_at=thread.created_at,
+        channel_id=ticket.channel_id,
+        created_at=ticket.created_at,
         created_by=created_by,
-        closed_at=thread.closed_at,
+        closed_at=ticket.closed_at,
         closed_by=closed_by,
-        status=thread.status,
-        title=thread.title,
-        nsfw=thread.nsfw,
+        status=ticket.status,
+        title=ticket.title,
+        nsfw=ticket.nsfw,
     )
 
 
-async def thread_dm_message_model_to_document(
-    thread_dm_message: ThreadDMMessageModel,
+async def ticket_dm_message_model_to_document(
+    ticket_dm_message: TicketDMMessageModel,
     *,
-    thread_users_cache: dict[int, Link[MongoDBThreadUserDocument]] | None = None,
-) -> MongoDBThreadDMMessageModel:
-    """Converts a ThreadDMMessageModel to a MongoDBThreadDMMessageDocument.
+    ticket_users_cache: dict[int, Link[MongoDBTicketUserDocument]] | None = None,
+) -> MongoDBTicketDMMessageModel:
+    """Converts a TicketDMMessageModel to a MongoDBTicketDMMessageDocument.
 
-    This function also creates the thread user if it does not exist in the database.
+    This function also creates the ticket user if it does not exist in the database.
 
     Args:
-        thread_dm_message: The ThreadDMMessageModel to convert.
-        thread_users_cache: Optional cache for thread users to avoid multiple database calls.
+        ticket_dm_message: The TicketDMMessageModel to convert.
+        ticket_users_cache: Optional cache for ticket users to avoid multiple database calls.
 
     Returns:
-        The converted MongoDBThreadDMMessageDocument.
+        The converted MongoDBTicketDMMessageDocument.
     """
-    if thread_users_cache is None:
-        thread_users_cache = {}
+    if ticket_users_cache is None:
+        ticket_users_cache = {}
 
     # Ensure the recipient user exists in DB
-    if thread_dm_message.recipient.user_id not in thread_users_cache:
-        thread_users_cache[thread_dm_message.recipient.user_id] = cast(
-            Link[MongoDBThreadUserDocument], await get_or_create_thread_user(thread_dm_message.recipient)
+    if ticket_dm_message.recipient.user_id not in ticket_users_cache:
+        ticket_users_cache[ticket_dm_message.recipient.user_id] = cast(
+            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket_dm_message.recipient)
         )
 
-    return MongoDBThreadDMMessageModel(
-        message_id=thread_dm_message.message_id,
-        recipient_id=thread_dm_message.recipient.user_id,
+    return MongoDBTicketDMMessageModel(
+        message_id=ticket_dm_message.message_id,
+        recipient_id=ticket_dm_message.recipient.user_id,
     )
 
 
-async def thread_message_model_to_document(thread_message: ThreadMessageModel) -> MongoDBThreadMessageDocument:
-    """Converts a ThreadMessageModel to a MongoDBThreadMessageDocument.
+async def ticket_message_model_to_document(ticket_message: TicketMessageModel) -> MongoDBTicketMessageDocument:
+    """Converts a TicketMessageModel to a MongoDBTicketMessageDocument.
 
-    This function also creates the thread users if they do not exist in the database.
+    This function also creates the ticket users if they do not exist in the database.
 
     Args:
-        thread_message: The ThreadMessageModel to convert.
+        ticket_message: The TicketMessageModel to convert.
 
     Returns:
-        The converted MongoDBThreadMessageDocument.
+        The converted MongoDBTicketMessageDocument.
     """
-    thread_users_cache: dict[int, Link[MongoDBThreadUserDocument]] = {}
+    ticket_users_cache: dict[int, Link[MongoDBTicketUserDocument]] = {}
 
-    dm_messages: list[MongoDBThreadDMMessageModel] = []
-    for dm_message in thread_message.dm_messages:
+    dm_messages: list[MongoDBTicketDMMessageModel] = []
+    for dm_message in ticket_message.dm_messages:
         dm_messages.append(
-            await thread_dm_message_model_to_document(dm_message, thread_users_cache=thread_users_cache),
+            await ticket_dm_message_model_to_document(dm_message, ticket_users_cache=ticket_users_cache),
         )
 
-    if thread_message.author.user_id not in thread_users_cache:
-        thread_users_cache[thread_message.author.user_id] = cast(
-            Link[MongoDBThreadUserDocument], await get_or_create_thread_user(thread_message.author)
+    if ticket_message.author.user_id not in ticket_users_cache:
+        ticket_users_cache[ticket_message.author.user_id] = cast(
+            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket_message.author)
         )
-    author = thread_users_cache[thread_message.author.user_id]
+    author = ticket_users_cache[ticket_message.author.user_id]
 
-    if thread_message.edited_by and thread_message.edited_by.user_id not in thread_users_cache:
-        thread_users_cache[thread_message.edited_by.user_id] = cast(
-            Link[MongoDBThreadUserDocument], await get_or_create_thread_user(thread_message.edited_by)
+    if ticket_message.edited_by and ticket_message.edited_by.user_id not in ticket_users_cache:
+        ticket_users_cache[ticket_message.edited_by.user_id] = cast(
+            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket_message.edited_by)
         )
-    edited_by = thread_message.edited_by and thread_users_cache[thread_message.edited_by.user_id]
+    edited_by = ticket_message.edited_by and ticket_users_cache[ticket_message.edited_by.user_id]
 
-    if thread_message.deleted_by and thread_message.deleted_by.user_id not in thread_users_cache:
-        thread_users_cache[thread_message.deleted_by.user_id] = cast(
-            Link[MongoDBThreadUserDocument], await get_or_create_thread_user(thread_message.deleted_by)
+    if ticket_message.deleted_by and ticket_message.deleted_by.user_id not in ticket_users_cache:
+        ticket_users_cache[ticket_message.deleted_by.user_id] = cast(
+            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket_message.deleted_by)
         )
-    deleted_by = thread_message.deleted_by and thread_users_cache[thread_message.deleted_by.user_id]
+    deleted_by = ticket_message.deleted_by and ticket_users_cache[ticket_message.deleted_by.user_id]
 
-    return MongoDBThreadMessageDocument(
-        bot_id=thread_message.bot_id,
-        thread_key=thread_message.thread_key,
-        message_id=thread_message.message_id,
+    return MongoDBTicketMessageDocument(
+        bot_id=ticket_message.bot_id,
+        ticket_key=ticket_message.ticket_key,
+        message_id=ticket_message.message_id,
         dm_messages=dm_messages,
         author=author,
-        content=thread_message.content,
-        created_at=thread_message.created_at,
-        edited_at=thread_message.edited_at,
+        content=ticket_message.content,
+        created_at=ticket_message.created_at,
+        edited_at=ticket_message.edited_at,
         edited_by=edited_by,
-        deleted_at=thread_message.deleted_at,
+        deleted_at=ticket_message.deleted_at,
         deleted_by=deleted_by,
-        type=thread_message.type,
+        type=ticket_message.type,
     )

@@ -15,12 +15,12 @@ __all__ = [
     "ModmailError",
     "NoModmailCategoryError",
     "NoStaffGuildError",
-    "NoThreadChannelError",
-    "NotInThreadError",
+    "NoTicketChannelError",
+    "NotInTicketError",
     "StaffGuildNotConfiguredError",
-    "ThreadCreationError",
-    "ThreadNotFoundError",
-    "ThreadRecipientOccupiedError",
+    "TicketCreationError",
+    "TicketNotFoundError",
+    "TicketRecipientOccupiedError",
 ]
 
 
@@ -60,10 +60,10 @@ class NoModmailCategoryError(ModmailError):
     """
 
 
-class NoThreadChannelError(ModmailError):
-    """Exception for when the thread channel is not found.
+class NoTicketChannelError(ModmailError):
+    """Exception for when the ticket channel is not found.
 
-    Raised when an operation requires a thread channel but none is found.
+    Raised when an operation requires a ticket channel but none is found.
     """
 
 
@@ -74,31 +74,31 @@ class BadPermissionsError(ModmailError):
     """
 
 
-class ThreadCreationError(ModmailError):
-    """Exceptions during thread creation.
+class TicketCreationError(ModmailError):
+    """Exceptions during ticket creation.
 
-    Raised when an operation attempts to create a thread but fails due to various reasons.
+    Raised when an operation attempts to create a ticket but fails due to various reasons.
     """
 
 
-class ThreadRecipientOccupiedError(ThreadCreationError):
-    """Exception for when the recipient is already in another open thread.
+class TicketRecipientOccupiedError(TicketCreationError):
+    """Exception for when the recipient is already in another open ticket.
 
-    Raised when an operation attempts to create a thread with an occupied recipient.
+    Raised when an operation attempts to create a ticket with an occupied recipient.
     """
 
 
-class ThreadNotFoundError(ModmailError):
-    """Exception for when a thread is not found.
+class TicketNotFoundError(ModmailError):
+    """Exception for when a ticket is not found.
 
-    Raised when an operation requires a thread but it cannot be found in the database.
+    Raised when an operation requires a ticket, but it cannot be found in the database.
     """
 
 
-class NotInThreadError(ModmailError, commands.CheckFailure):
-    """Exception for when a user is not in a thread.
+class NotInTicketError(ModmailError, commands.CheckFailure):
+    """Exception for when a user is not in a ticket.
 
-    Raised when an operation requires the user to be in a thread, but they are not.
+    Raised when an operation requires the user to be in a ticket, but they are not.
     """
 
 

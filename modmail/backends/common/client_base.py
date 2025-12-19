@@ -9,12 +9,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Literal, overload
 
-from modmail.enum import ProfileType, ThreadStatus
+from modmail.enum import ProfileType, TicketStatus
 
 if TYPE_CHECKING:
     from modmail.config import Config
 
-    from .models import ProfileModel, SettingsModel, ThreadMessageModel, ThreadModel, ThreadUserModel
+    from .models import ProfileModel, SettingsModel, TicketMessageModel, TicketModel, TicketUserModel
 
 __all__ = ["DBClientBase"]
 
@@ -86,10 +86,10 @@ class DBClientBase(ABC):  # pragma: no cover
         """
 
     @abstractmethod
-    async def sync_open_threads(self) -> None:
-        """Synchronizes the open threads with the database.
+    async def sync_open_tickets(self) -> None:
+        """Synchronizes the open tickets with the database.
 
-        This method shouldn't need to be called directly, as the bot stores the threads in cache.
+        This method shouldn't need to be called directly, as the bot stores the tickets in cache.
         """
 
     @abstractmethod
@@ -121,112 +121,112 @@ class DBClientBase(ABC):  # pragma: no cover
         """
 
     @abstractmethod
-    async def get_open_threads(self) -> list[ThreadModel]:
-        """Retrieves all open threads from the database.
+    async def get_open_tickets(self) -> list[TicketModel]:
+        """Retrieves all open tickets from the database.
 
         Returns:
-            A list of open threads.
+            A list of open tickets.
         """
 
     @abstractmethod
-    async def get_thread_by_recipient(self, recipient_id: int) -> ThreadModel | None:
-        """Retrieves an open thread by recipient ID.
+    async def get_ticket_by_recipient(self, recipient_id: int) -> TicketModel | None:
+        """Retrieves an open ticket by recipient ID.
 
-        If you want to get closed threads as well, use `get_all_threads_by_recipient` instead.
+        If you want to get closed tickets as well, use `get_all_tickets_by_recipient` instead.
 
         Args:
             recipient_id: The identifier of the recipient.
 
         Returns:
-            The thread if found, otherwise None.
+            The ticket if found, otherwise None.
         """
 
     @overload
-    async def get_all_threads_by_recipient(
+    async def get_all_tickets_by_recipient(
         self, recipient_id: int, *, count: Literal[True] = True, only_closed: bool = False
     ) -> int: ...
 
     @overload
-    async def get_all_threads_by_recipient(
+    async def get_all_tickets_by_recipient(
         self, recipient_id: int, *, count: Literal[False] = False, only_closed: bool = False
-    ) -> list[ThreadModel]: ...
+    ) -> list[TicketModel]: ...
 
     @abstractmethod
-    async def get_all_threads_by_recipient(
+    async def get_all_tickets_by_recipient(
         self, recipient_id: int, *, count: bool = False, only_closed: bool = False
-    ) -> int | list[ThreadModel]:
-        """Retrieves all threads by recipient ID.
+    ) -> int | list[TicketModel]:
+        """Retrieves all tickets by recipient ID.
 
         Args:
             recipient_id: The identifier of the recipient.
-            count: Whether to return the count of threads or the list of thread objects.
-            only_closed: Whether to only include closed threads.
+            count: Whether to return the count of tickets or the list of ticket objects.
+            only_closed: Whether to only include closed tickets.
 
         Returns:
-            A list of threads associated with the recipient or the count of threads if count is True.
+            A list of tickets associated with the recipient or the count of tickets if count is True.
         """
 
     @abstractmethod
-    async def get_thread_by_key(self, key: str, *, only_open: bool = True) -> ThreadModel | None:
-        """Retrieves a thread by its key.
+    async def get_ticket_by_key(self, key: str, *, only_open: bool = True) -> TicketModel | None:
+        """Retrieves a ticket by its key.
 
         Args:
-            key: The key of the thread.
-            only_open: Whether to only search for open threads.
+            key: The key of the ticket.
+            only_open: Whether to only search for open tickets.
 
         Returns:
-            The thread if found, otherwise None.
+            The ticket if found, otherwise None.
         """
 
     @abstractmethod
-    async def get_thread_by_channel(self, channel_id: int, *, only_open: bool = True) -> ThreadModel | None:
-        """Retrieves a thread by its channel ID.
+    async def get_ticket_by_channel(self, channel_id: int, *, only_open: bool = True) -> TicketModel | None:
+        """Retrieves a ticket by its channel ID.
 
         Args:
             channel_id: The identifier of the channel.
-            only_open: Whether to only search for open threads.
+            only_open: Whether to only search for open tickets.
 
         Returns:
-            The thread if found, otherwise None.
+            The ticket if found, otherwise None.
         """
 
     @abstractmethod
-    async def create_thread(self, thread: ThreadModel) -> None:
-        """Creates a new thread in the database.
+    async def create_ticket(self, ticket: TicketModel) -> None:
+        """Creates a new ticket in the database.
 
         Args:
-            thread: The thread object to create.
+            ticket: The ticket object to create.
 
         Raises:
-            ThreadRecipientOccupiedError: If the recipient is already in another open thread.
+            TicketRecipientOccupiedError: If the recipient is already in another open ticket.
         """
 
     @abstractmethod
-    async def save_message(self, thread_message: ThreadMessageModel) -> None:
+    async def save_message(self, ticket_message: TicketMessageModel) -> None:
         """Saves a message to the database.
 
         Args:
-            thread_message: The thread message object to save.
+            ticket_message: The ticket message object to save.
 
         Raises:
-            ThreadNotFoundError: If the thread is not found.
+            TicketNotFoundError: If the ticket is not found.
         """
 
     @abstractmethod
-    async def close_thread(
+    async def close_ticket(
         self,
-        thread_key: str,
-        closer: ThreadUserModel,
+        ticket_key: str,
+        closer: TicketUserModel,
         *,
-        thread_status: ThreadStatus = ThreadStatus.closed_by_command,
+        ticket_status: TicketStatus = TicketStatus.closed_by_command,
     ) -> None:
-        """Closes a thread in the database.
+        """Closes a ticket in the database.
 
         Args:
-            thread_key: The key of the thread to close.
-            closer: The user who is closing the thread.
-            thread_status: The status of the thread after closing.
+            ticket_key: The key of the ticket to close.
+            closer: The user who is closing the ticket.
+            ticket_status: The status of the ticket after closing.
 
         Raises:
-            ThreadNotFoundError: If the thread is not found in the database or isn't currently open.
+            TicketNotFoundError: If the ticket is not found in the database or isn't currently open.
         """

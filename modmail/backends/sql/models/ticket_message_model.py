@@ -1,7 +1,7 @@
-"""SQLAlchemy model for thread users.
+"""SQLAlchemy model for ticket users.
 
-This module defines the SQLThreadUserTable class, which represents
-the thread user table in the database.
+This module defines the SQLTicketUserTable class, which represents
+the ticket user table in the database.
 """
 
 from __future__ import annotations
@@ -12,27 +12,27 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, ForeignKeyConstraint, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from modmail.enum import ThreadMessageType
+from modmail.enum import TicketMessageType
 
 from .base import SQLBase
-from .thread_user_model import SQLThreadUserTable
+from .ticket_user_model import SQLTicketUserTable
 
 if TYPE_CHECKING:
-    from .thread_dm_message_model import SQLThreadDMMessageTable
+    from .ticket_dm_message_model import SQLTicketDMMessageTable
 
-__all__ = ["SQLThreadMessageTable"]
+__all__ = ["SQLTicketMessageTable"]
 
 
-class SQLThreadMessageTable(SQLBase):
-    """SQL model representing a message in a thread.
+class SQLTicketMessageTable(SQLBase):
+    """SQL model representing a message in a ticket.
 
     This model stores information about a message, including its ID, the
-    associated thread, the author, content, timestamps, and other metadata.
+    associated ticket, the author, content, timestamps, and other metadata.
 
     Attributes:
         id: A surrogate key for this table.
         bot_id: The unique identifier of the bot.
-        thread_key: The unique key for the thread.
+        ticket_key: The unique key for the ticket.
         message_id: The unique identifier of the message.
         dm_messages: List of direct messages associated with this message.
         author_id: The ID of the user who authored the message.
@@ -45,52 +45,52 @@ class SQLThreadMessageTable(SQLBase):
         type: The type of the message.
     """
 
-    __tablename__ = "thread_message"
+    __tablename__ = "ticket_message"
 
     # Not using `message_id` as primary key because multiple bots may have the same message ID.
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     bot_id: Mapped[int]
-    thread_key: Mapped[str] = mapped_column(String(12))
+    ticket_key: Mapped[str] = mapped_column(String(12))
 
     message_id: Mapped[int]
-    dm_messages: Mapped[list[SQLThreadDMMessageTable]] = relationship(
+    dm_messages: Mapped[list[SQLTicketDMMessageTable]] = relationship(
         cascade="all, delete-orphan",
         passive_deletes=True,
-        back_populates="thread_message",
+        back_populates="ticket_message",
         lazy="selectin",
     )
 
     author_id: Mapped[int] = mapped_column(
-        ForeignKey("thread_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
+        ForeignKey("ticket_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
     )
-    author: Mapped[SQLThreadUserTable] = relationship(foreign_keys=[author_id], lazy="joined")
+    author: Mapped[SQLTicketUserTable] = relationship(foreign_keys=[author_id], lazy="joined")
 
     content: Mapped[str] = mapped_column(String(4096))
     created_at: Mapped[datetime]
 
     edited_at: Mapped[datetime | None]
     edited_by_id: Mapped[int | None] = mapped_column(
-        ForeignKey("thread_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
+        ForeignKey("ticket_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
     )
-    edited_by: Mapped[SQLThreadUserTable | None] = relationship(foreign_keys=[edited_by_id], lazy="joined")
+    edited_by: Mapped[SQLTicketUserTable | None] = relationship(foreign_keys=[edited_by_id], lazy="joined")
 
     deleted_at: Mapped[datetime | None]
     deleted_by_id: Mapped[int | None] = mapped_column(
-        ForeignKey("thread_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
+        ForeignKey("ticket_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
     )
-    deleted_by: Mapped[SQLThreadUserTable | None] = relationship(foreign_keys=[deleted_by_id], lazy="joined")
+    deleted_by: Mapped[SQLTicketUserTable | None] = relationship(foreign_keys=[deleted_by_id], lazy="joined")
 
-    type: Mapped[ThreadMessageType]
+    type: Mapped[TicketMessageType]
 
     __table_args__ = (
-        UniqueConstraint("bot_id", "thread_key", "message_id", name="uq_thread_message"),
+        UniqueConstraint("bot_id", "ticket_key", "message_id", name="uq_ticket_message"),
         ForeignKeyConstraint(
-            ["bot_id", "thread_key"],
-            ["thread.bot_id", "thread.key"],
-            name="fk_thread_message_thread",
+            ["bot_id", "ticket_key"],
+            ["ticket.bot_id", "ticket.key"],
+            name="fk_ticket_message_ticket",
             ondelete="CASCADE",
             onupdate="CASCADE",
         ),
-        Index("ix_thread_message_type", "bot_id", "thread_key", "type"),
-        Index("ix_thread_message_author", "bot_id", "thread_key", "author_id"),
+        Index("ix_ticket_message_type", "bot_id", "ticket_key", "type"),
+        Index("ix_ticket_message_author", "bot_id", "ticket_key", "author_id"),
     )

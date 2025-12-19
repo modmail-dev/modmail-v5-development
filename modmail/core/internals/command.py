@@ -14,7 +14,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ... import CONFIG
-from ...errors import NotInThreadError, StaffGuildNotConfiguredError
+from ...errors import NotInTicketError, StaffGuildNotConfiguredError
 
 if TYPE_CHECKING:
     from ..bot import Bot
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 __all__ = [
     "LazyHybridCommand",
     "LazyHybridGroup",
-    "in_modmail_thread",
+    "in_modmail_ticket",
     "lazy_hybrid_command",
     "lazy_hybrid_group",
     "wrap",
@@ -284,38 +284,38 @@ def wrap[T](dpy_func: Any, *args: Any, **kwargs: Any) -> Callable[[T], T]:
     return decorator
 
 
-def in_modmail_thread() -> Any:
-    """Check if the command is being invoked in a Modmail thread.
+def in_modmail_ticket() -> Any:
+    """Check if the command is being invoked in a Modmail ticket.
 
     This decorator also applies the guild_only decorator to ensure the command is only
     available in servers.
 
     Returns:
-        A check function that returns True if the command is in a Modmail thread.
+        A check function that returns True if the command is in a Modmail ticket.
     """
 
     async def predicate(ctx: commands.Context[Bot]) -> bool:
-        """Check if the command is being invoked in a Modmail thread.
+        """Check if the command is being invoked in a Modmail ticket.
 
         Args:
             ctx: The command context.
 
         Returns:
-            True if the command is in a Modmail thread, False otherwise.
+            True if the command is in a Modmail ticket, False otherwise.
 
         Raises:
-            NotInThreadError: If the command is not in a Modmail thread.
+            NotInTicketError: If the command is not in a Modmail ticket.
             StaffGuildNotConfiguredError: If Modmail is not configured.
         """
         if not ctx.bot.staff_guild.is_configured():
             raise StaffGuildNotConfiguredError("Modmail is not configured.")
 
         if ctx.guild is None or ctx.guild.id != ctx.bot.staff_guild.guild_id:
-            raise NotInThreadError("This command can only be used in Modmail threads.")
+            raise NotInTicketError("This command can only be used in Modmail tickets.")
 
-        thread_model = await ctx.bot.database_client.get_thread_by_channel(ctx.channel.id, only_open=True)
-        if thread_model is None:
-            raise NotInThreadError("This command can only be used in Modmail threads.")
+        ticket_model = await ctx.bot.database_client.get_ticket_by_channel(ctx.channel.id, only_open=True)
+        if ticket_model is None:
+            raise NotInTicketError("This command can only be used in Modmail tickets.")
         return True
 
     return wrap(commands.guild_only)(wrap(lambda: commands.check(predicate)))

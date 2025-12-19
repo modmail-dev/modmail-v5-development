@@ -1,5 +1,6 @@
 # This file contains localization strings for the German (de) locale.
 # Translations here will be used across the entire Modmail project.
+# TODO: This is only a demo, some texts are wrong and some keys are missing translations.
 
 ### ========================
 ###         General

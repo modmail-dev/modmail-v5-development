@@ -1,7 +1,7 @@
-"""Pydantic model for thread messages.
+"""Pydantic model for ticket messages.
 
-This module defines the ThreadMessageModel class, which represents a message in a
-thread. It includes attributes such as the author, content, and metadata like
+This module defines the TicketMessageModel class, which represents a message in a
+ticket. It includes attributes such as the author, content, and metadata like
 creation and deletion timestamps.
 """
 
@@ -11,25 +11,25 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from modmail.enum import ThreadMessageType
+from modmail.enum import TicketMessageType
 
-from .thread_dm_message_model import ThreadDMMessageModel
-from .thread_user_model import ThreadUserModel
+from .ticket_dm_message_model import TicketDMMessageModel
+from .ticket_user_model import TicketUserModel
 
-__all__ = ["ThreadMessageModel"]
+__all__ = ["TicketMessageModel"]
 
 
-class ThreadMessageModel(BaseModel):
-    """Represents a message in a thread.
+class TicketMessageModel(BaseModel):
+    """Represents a message in a ticket.
 
-    This model stores information about messages in a thread, including the
+    This model stores information about messages in a ticket, including the
     author, content, and metadata such as creation and deletion timestamps.
 
     Attributes:
         bot_id: The unique identifier of the bot.
-        thread_key: The unique key for the thread.
-        message_id: The ID of the message in the thread channel.
-        dm_messages: List of direct messages associated with this thread message.
+        ticket_key: The unique key for the ticket.
+        message_id: The ID of the message in the ticket channel.
+        dm_messages: List of direct messages associated with this ticket message.
         author: The author of the message (user).
         content: The content of the message.
         created_at: The timestamp when the message was created.
@@ -43,17 +43,17 @@ class ThreadMessageModel(BaseModel):
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     bot_id: int
-    thread_key: str
+    ticket_key: str
 
-    message_id: int  # in the thread channel
-    dm_messages: list[ThreadDMMessageModel]
+    message_id: int  # in the ticket channel
+    dm_messages: list[TicketDMMessageModel]
 
-    author: ThreadUserModel
+    author: TicketUserModel
     content: str
     created_at: datetime
     edited_at: datetime | None = None
-    edited_by: ThreadUserModel | None = None
+    edited_by: TicketUserModel | None = None
     deleted_at: datetime | None = None
-    deleted_by: ThreadUserModel | None = None
+    deleted_by: TicketUserModel | None = None
 
-    type: ThreadMessageType
+    type: TicketMessageType

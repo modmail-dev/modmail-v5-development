@@ -37,10 +37,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("bot_id", name=op.f("pk_settings")),
     )
     op.create_table(
-        "thread_user",
+        "ticket_user",
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("user_name", sa.String(), nullable=False),
-        sa.PrimaryKeyConstraint("user_id", name=op.f("pk_thread_user")),
+        sa.PrimaryKeyConstraint("user_id", name=op.f("pk_ticket_user")),
     )
     op.create_table(
         "activity",
@@ -81,7 +81,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("bot_id", "profile_id", "profile_type", name=op.f("pk_profile")),
     )
     op.create_table(
-        "thread",
+        "ticket",
         sa.Column("bot_id", sa.Integer(), nullable=False),
         sa.Column("key", sa.String(length=12), nullable=False),
         sa.Column("channel_id", sa.Integer(), nullable=False),
@@ -91,27 +91,27 @@ def upgrade() -> None:
         sa.Column("closed_by_id", sa.Integer(), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("open", "closed_by_command", "closed_by_deletion", name="threadstatus"),
+            sa.Enum("open", "closed_by_command", "closed_by_deletion", name="ticketstatus"),
             nullable=False,
         ),
         sa.Column("title", sa.String(), nullable=True),
         sa.Column("nsfw", sa.Boolean(), nullable=False),
         sa.ForeignKeyConstraint(
             ["closed_by_id"],
-            ["thread_user.user_id"],
-            name=op.f("fk_thread_closed_by_id_thread_user"),
+            ["ticket_user.user_id"],
+            name=op.f("fk_ticket_closed_by_id_ticket_user"),
             onupdate="CASCADE",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
             ["created_by_id"],
-            ["thread_user.user_id"],
-            name=op.f("fk_thread_created_by_id_thread_user"),
+            ["ticket_user.user_id"],
+            name=op.f("fk_ticket_created_by_id_ticket_user"),
             onupdate="CASCADE",
             ondelete="RESTRICT",
         ),
-        sa.PrimaryKeyConstraint("bot_id", "key", name=op.f("pk_thread")),
-        sa.UniqueConstraint("bot_id", "channel_id", name="uq_thread_channel"),
+        sa.PrimaryKeyConstraint("bot_id", "key", name=op.f("pk_ticket")),
+        sa.UniqueConstraint("bot_id", "channel_id", name="uq_ticket_channel"),
     )
     op.create_table(
         "permission_override",
@@ -132,10 +132,10 @@ def upgrade() -> None:
         ),
     )
     op.create_table(
-        "thread_message",
+        "ticket_message",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("bot_id", sa.Integer(), nullable=False),
-        sa.Column("thread_key", sa.String(length=12), nullable=False),
+        sa.Column("ticket_key", sa.String(length=12), nullable=False),
         sa.Column("message_id", sa.Integer(), nullable=False),
         sa.Column("author_id", sa.Integer(), nullable=False),
         sa.Column("content", sa.String(length=4096), nullable=False),
@@ -145,87 +145,87 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(), nullable=True),
         sa.Column("deleted_by_id", sa.Integer(), nullable=True),
         sa.Column(
-            "type", sa.Enum("reply", "dm", "internal", "close", "sclose", name="threadmessagetype"), nullable=False
+            "type", sa.Enum("reply", "dm", "internal", "close", "sclose", name="ticketmessagetype"), nullable=False
         ),
         sa.ForeignKeyConstraint(
             ["author_id"],
-            ["thread_user.user_id"],
-            name=op.f("fk_thread_message_author_id_thread_user"),
+            ["ticket_user.user_id"],
+            name=op.f("fk_ticket_message_author_id_ticket_user"),
             onupdate="CASCADE",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
-            ["bot_id", "thread_key"],
-            ["thread.bot_id", "thread.key"],
-            name="fk_thread_message_thread",
+            ["bot_id", "ticket_key"],
+            ["ticket.bot_id", "ticket.key"],
+            name="fk_ticket_message_ticket",
             onupdate="CASCADE",
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["deleted_by_id"],
-            ["thread_user.user_id"],
-            name=op.f("fk_thread_message_deleted_by_id_thread_user"),
+            ["ticket_user.user_id"],
+            name=op.f("fk_ticket_message_deleted_by_id_ticket_user"),
             onupdate="CASCADE",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
             ["edited_by_id"],
-            ["thread_user.user_id"],
-            name=op.f("fk_thread_message_edited_by_id_thread_user"),
+            ["ticket_user.user_id"],
+            name=op.f("fk_ticket_message_edited_by_id_ticket_user"),
             onupdate="CASCADE",
             ondelete="RESTRICT",
         ),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_thread_message")),
-        sa.UniqueConstraint("bot_id", "thread_key", "message_id", name="uq_thread_message"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_ticket_message")),
+        sa.UniqueConstraint("bot_id", "ticket_key", "message_id", name="uq_ticket_message"),
     )
     op.create_index(
-        "ix_thread_message_author", "thread_message", ["bot_id", "thread_key", "author_id"], unique=False
+        "ix_ticket_message_author", "ticket_message", ["bot_id", "ticket_key", "author_id"], unique=False
     )
-    op.create_index("ix_thread_message_type", "thread_message", ["bot_id", "thread_key", "type"], unique=False)
+    op.create_index("ix_ticket_message_type", "ticket_message", ["bot_id", "ticket_key", "type"], unique=False)
     op.create_table(
-        "thread_recipient",
+        "ticket_recipient",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("bot_id", sa.Integer(), nullable=False),
-        sa.Column("thread_key", sa.String(length=12), nullable=False),
+        sa.Column("ticket_key", sa.String(length=12), nullable=False),
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(
-            ["bot_id", "thread_key"],
-            ["thread.bot_id", "thread.key"],
-            name="fk_thread_recipient_thread",
+            ["bot_id", "ticket_key"],
+            ["ticket.bot_id", "ticket.key"],
+            name="fk_ticket_recipient_ticket",
             onupdate="CASCADE",
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["user_id"],
-            ["thread_user.user_id"],
-            name=op.f("fk_thread_recipient_user_id_thread_user"),
+            ["ticket_user.user_id"],
+            name=op.f("fk_ticket_recipient_user_id_ticket_user"),
             onupdate="CASCADE",
             ondelete="RESTRICT",
         ),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_thread_recipient")),
-        sa.UniqueConstraint("bot_id", "thread_key", "user_id", name="uq_thread_recipient"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_ticket_recipient")),
+        sa.UniqueConstraint("bot_id", "ticket_key", "user_id", name="uq_ticket_recipient"),
     )
     op.create_table(
-        "thread_dm_message",
+        "ticket_dm_message",
         sa.Column("message_id", sa.Integer(), nullable=False),
-        sa.Column("thread_message_ref_id", sa.Integer(), nullable=False),
+        sa.Column("ticket_message_ref_id", sa.Integer(), nullable=False),
         sa.Column("recipient_id", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(
             ["recipient_id"],
-            ["thread_user.user_id"],
-            name=op.f("fk_thread_dm_message_recipient_id_thread_user"),
+            ["ticket_user.user_id"],
+            name=op.f("fk_ticket_dm_message_recipient_id_ticket_user"),
             onupdate="CASCADE",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
-            ["thread_message_ref_id"],
-            ["thread_message.id"],
-            name=op.f("fk_thread_dm_message_thread_message_ref_id_thread_message"),
+            ["ticket_message_ref_id"],
+            ["ticket_message.id"],
+            name=op.f("fk_ticket_dm_message_ticket_message_ref_id_ticket_message"),
             onupdate="CASCADE",
             ondelete="CASCADE",
         ),
-        sa.PrimaryKeyConstraint("message_id", name=op.f("pk_thread_dm_message")),
-        sa.UniqueConstraint("message_id", "thread_message_ref_id", name="uq_thread_dm_message"),
+        sa.PrimaryKeyConstraint("message_id", name=op.f("pk_ticket_dm_message")),
+        sa.UniqueConstraint("message_id", "ticket_message_ref_id", name="uq_ticket_dm_message"),
     )
     # ### end Alembic commands ###
 
@@ -233,15 +233,15 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
-    op.drop_table("thread_dm_message")
-    op.drop_table("thread_recipient")
-    op.drop_index("ix_thread_message_type", table_name="thread_message")
-    op.drop_index("ix_thread_message_author", table_name="thread_message")
-    op.drop_table("thread_message")
+    op.drop_table("ticket_dm_message")
+    op.drop_table("ticket_recipient")
+    op.drop_index("ix_ticket_message_type", table_name="ticket_message")
+    op.drop_index("ix_ticket_message_author", table_name="ticket_message")
+    op.drop_table("ticket_message")
     op.drop_table("permission_override")
-    op.drop_table("thread")
+    op.drop_table("ticket")
     op.drop_table("profile")
     op.drop_table("activity")
-    op.drop_table("thread_user")
+    op.drop_table("ticket_user")
     op.drop_table("settings")
     # ### end Alembic commands ###

@@ -36,7 +36,7 @@ bot:
   # Required: The bot's token, REPLACE WITH YOUR BOT'S TOKEN!
   token: "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.12345.XYZ"
 
-  # Required: The ID of your staff server (the server where new threads/tickets will be created).
+  # Required: The ID of your staff server (the server where new tickets will be created).
   # To find your server's ID, see https://dis.gd/findmyid.
   # 1. Enable Developer Mode in your Discord settings.
   # 2. Right-click on your server's icon in the server list.
