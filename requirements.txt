@@ -71,7 +71,7 @@ propcache==0.4.1
     # via
     #   aiohttp
     #   yarl
-pycares==4.11.0 ; sys_platform != 'win32'
+pycares==5.0.0 ; sys_platform != 'win32'
     # via aiodns
 pycparser==2.23 ; implementation_name != 'PyPy' and sys_platform != 'win32'
     # via cffi
