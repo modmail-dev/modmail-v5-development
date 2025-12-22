@@ -18,15 +18,15 @@ class SettingsModel(BaseModel):
     """Settings model for bot configuration.
 
     Attributes:
-        bot_id: Bot identifier.
+        bot_id: Bot ID.
         last_ran_version: Last version that the bot was run on; None indicates first run.
         last_ran_locale: Last locale used when running the bot.
         last_slash_synced_version: Last version in which slash commands were synced.
         last_slash_minimum_permission_int: Last minimum permission integer for slash commands.
-        main_category_id: Main category identifier.
-        fallback_category_id: Fallback category identifier.
-        log_channel_id: Log channel identifier.
-        storage_channel_id: Storage channel identifier.
+        main_category_or_forum_id: Main category or forum ID.
+        fallback_category_id: Fallback category ID.
+        log_channel_id: Log channel ID.
+        storage_channel_id: Storage channel ID.
         status: The bot's status.
         activity: The bot's activity.
     """
@@ -38,7 +38,7 @@ class SettingsModel(BaseModel):
     last_ran_locale: str | None = None  # The last locale the bot was run on
     last_slash_synced_version: str | None = None  # The last version the slash commands were synced on
     last_slash_minimum_permission_int: int | None = None  # The last minimum permission int for slash commands
-    main_category_id: int | None = None
+    main_category_or_forum_id: int | None = None
     fallback_category_id: int | None = None
     log_channel_id: int | None = None
     storage_channel_id: int | None = None

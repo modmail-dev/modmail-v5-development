@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.Column("last_ran_locale", sa.String(length=8), nullable=True),
         sa.Column("last_slash_synced_version", sa.String(length=32), nullable=True),
         sa.Column("last_slash_minimum_permission_int", sa.Integer(), nullable=True),
-        sa.Column("main_category_id", sa.Integer(), nullable=True),
+        sa.Column("main_category_or_forum_id", sa.Integer(), nullable=True),
         sa.Column("fallback_category_id", sa.Integer(), nullable=True),
         sa.Column("log_channel_id", sa.Integer(), nullable=True),
         sa.Column("storage_channel_id", sa.Integer(), nullable=True),

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
+import re
 from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, cast
 
@@ -70,12 +71,16 @@ class StaffGuild:
             read_message_history=True,
             send_messages=True,
             send_messages_in_threads=True,
+            create_public_threads=True,
+            create_private_threads=True,
             embed_links=True,
             add_reactions=True,
             attach_files=True,
             manage_channels=True,
             manage_messages=True,
             manage_roles=True,
+            manage_threads=True,
+            # TODO: Add pin messages and bypass slowmode perms
         )
 
     @property
@@ -93,11 +98,15 @@ class StaffGuild:
             read_message_history=True,
             send_messages=True,
             send_messages_in_threads=True,
+            create_public_threads=True,
+            create_private_threads=True,
             embed_links=True,
             add_reactions=True,
             attach_files=True,
             manage_channels=True,
             manage_messages=True,
+            manage_threads=True,
+            # TODO: Add pin messages and bypass slowmode perms
         )
 
     @property
@@ -128,38 +137,41 @@ class StaffGuild:
         return guild
 
     @property
-    def category(self) -> discord.CategoryChannel:
-        """Get the modmail category.
+    def category_or_forum(self) -> discord.CategoryChannel | discord.ForumChannel:
+        """Get the modmail category or forum.
 
         Returns:
-            The modmail category if it exists, otherwise None.
+            The modmail category or forum if it exists, otherwise None.
 
         Raises:
-            NoModmailCategoryError: If the modmail category is not found.
+            NoModmailCategoryError: If the modmail category or forum is not found.
             NoStaffGuildError: If the staff guild is not found.
             BadPermissionsError: If the bot does not have the required permissions.
         """
         if not self.exists:  # Check if the guild exists
             raise NoStaffGuildError(f"Staff guild with ID {self.guild_id} not found.")
 
-        category_id = self.bot.database_client.settings_model.main_category_id
-        if category_id is None:
-            raise NoModmailCategoryError("No modmail category found in the database.")
+        category_or_forum_id = self.bot.database_client.settings_model.main_category_or_forum_id
+        if category_or_forum_id is None:
+            raise NoModmailCategoryError("No modmail category or forum found in the database.")
 
-        category = discord.utils.get(self.guild.categories, id=category_id)
-        if category is None:
-            raise NoModmailCategoryError("Modmail category not found in the guild.")
-
-        perms = category.permissions_for(category.guild.me)
-        if perms & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
-            logger.critical("Some permissions were missing from the main category, category is unusable.")
-            raise BadPermissionsError(
-                "Some permissions were missing from the main category, category is unusable."
+        category_or_forum = self.guild.get_channel(category_or_forum_id)
+        if category_or_forum is None:
+            raise NoModmailCategoryError("Modmail category or forum not found in the guild.")
+        if not isinstance(category_or_forum, discord.CategoryChannel | discord.ForumChannel):
+            raise NoModmailCategoryError(
+                "Modmail category or forum ID does not correspond to a category or forum."
             )
-        return category
 
-    @property
-    def log_channel(self) -> discord.TextChannel | None:
+        perms = category_or_forum.permissions_for(category_or_forum.guild.me)
+        if perms & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
+            logger.error("One or more essential permissions are missing from the main category or forum.")
+            raise BadPermissionsError(
+                "One or more essential permissions are missing from the main category or forum."
+            )
+        return category_or_forum
+
+    async def get_log_channel(self) -> discord.TextChannel | discord.Thread | None:
         """Get the modmail log channel.
 
         Returns:
@@ -172,18 +184,38 @@ class StaffGuild:
         if channel_id is None:
             return None
 
-        channel = discord.utils.get(self.guild.text_channels, id=channel_id)
+        channel = self.guild.get_channel(channel_id)
         if channel is None:
+            # Try to fetch the channel via API (if the thread was auto-archived, it won't be in cache)
+            try:
+                channel = await self.guild.fetch_channel(channel_id)
+            except discord.NotFound, discord.HTTPException:
+                logger.warning("Modmail log channel (ID: %d) was not found.", channel_id)
+                return None
+            if isinstance(channel, discord.TextChannel) or (
+                isinstance(channel, discord.Thread) and not channel.archived
+            ):
+                logger.warning(
+                    "Modmail log channel (ID: %d) was not found in cache, fetched via API. "
+                    "(THIS SHOULD NOT HAPPEN)",
+                    channel_id,
+                )
+
+        if not isinstance(channel, discord.TextChannel | discord.Thread):
+            logger.warning("Modmail log channel (ID: %d) is not a text channel or thread.", channel_id)
             return None
+
+        if isinstance(channel, discord.Thread) and channel.archived:
+            logger.info("Modmail log channel (ID: %d) was archived, unarchiving it.", channel_id)
+            await channel.edit(archived=False)
 
         perms = channel.permissions_for(channel.guild.me)
         if perms & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
-            logger.critical("Some permissions were missing from the log channel, channel is unusable.")
+            logger.warning("Some permissions are missing from the log channel, channel is unusable.")
             return None
         return channel
 
-    @property
-    def storage_channel(self) -> discord.TextChannel | None:
+    async def get_storage_channel(self) -> discord.TextChannel | discord.Thread | None:
         """Get the modmail storage channel.
 
         Returns:
@@ -196,13 +228,34 @@ class StaffGuild:
         if channel_id is None:
             return None
 
-        channel = discord.utils.get(self.guild.text_channels, id=channel_id)
+        channel = self.guild.get_channel(channel_id)
         if channel is None:
+            # Try to fetch the channel via API (if the thread was auto-archived, it won't be in cache)
+            try:
+                channel = await self.guild.fetch_channel(channel_id)
+            except discord.NotFound, discord.HTTPException:
+                logger.warning("Modmail storage channel (ID: %d) was not found.", channel_id)
+                return None
+            if isinstance(channel, discord.TextChannel) or (
+                isinstance(channel, discord.Thread) and not channel.archived
+            ):
+                logger.warning(
+                    "Modmail storage channel (ID: %d) was not found in cache, fetched via API. "
+                    "(THIS SHOULD NOT HAPPEN)",
+                    channel_id,
+                )
+
+        if not isinstance(channel, discord.TextChannel | discord.Thread):
+            logger.warning("Modmail storage channel (ID: %d) is not a text channel or thread.", channel_id)
             return None
+
+        if isinstance(channel, discord.Thread) and channel.archived:
+            logger.info("Modmail storage channel (ID: %d) was archived, unarchiving it.", channel_id)
+            await channel.edit(archived=False)
 
         perms = channel.permissions_for(channel.guild.me)
         if perms & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
-            logger.critical("Some permissions were missing from the storage channel, channel is unusable.")
+            logger.critical("Some permissions are missing from the storage channel, channel is unusable.")
             return None
         return channel
 
@@ -213,30 +266,32 @@ class StaffGuild:
             True if the guild is configured, False otherwise.
         """
         try:
-            return self.exists and bool(self.category)
+            return self.exists and bool(self.category_or_forum)
         except NoStaffGuildError, NoModmailCategoryError, BadPermissionsError:
             return False
 
     async def setup(
         self,
-        category: discord.CategoryChannel,
-        log_channel: discord.TextChannel,
-        storage_channel: discord.TextChannel,
+        category_or_forum: discord.CategoryChannel | discord.ForumChannel,
+        log_channel: discord.TextChannel | discord.Thread,
+        storage_channel: discord.TextChannel | discord.Thread,
     ) -> None:
         """Set up the staff guild.
 
         Args:
-            category: The category to use for modmail channels.
-            log_channel: The log channel to use for modmail logs.
-            storage_channel: The storage channel to use for modmail storage.
+            category_or_forum: The category or forum used for modmail.
+            log_channel: The log channel or thread to use for modmail logs.
+            storage_channel: The storage channel or thread to use for modmail storage.
         """
         # Save the channels in the database.
         await self.bot.database_client.update_settings(
-            main_category_id=category.id, log_channel_id=log_channel.id, storage_channel_id=storage_channel.id
+            main_category_or_forum_id=category_or_forum.id,
+            log_channel_id=log_channel.id,
+            storage_channel_id=storage_channel.id,
         )
 
     async def grant_access(self, profile_id: int, profile_type: ProfileType) -> None:
-        """Grant access to the Modmail category.
+        """Grant access to the Modmail category or forum.
 
         Args:
             profile_id: The ID of the profile to grant access to.
@@ -262,7 +317,7 @@ class StaffGuild:
                 return
 
         logger.info("Granting %s access to the Modmail category", user_or_role)
-        overwrite = self.category.overwrites_for(user_or_role)
+        overwrite = self.category_or_forum.overwrites_for(user_or_role)
         overwrite.read_messages = True  # Grant access to the category
 
         reason = await self.bot.translator.translate(
@@ -270,14 +325,16 @@ class StaffGuild:
             CONFIG.default_locale,
         )
         coros: list[Awaitable[Any]] = [
-            self.category.set_permissions(user_or_role, overwrite=overwrite, reason=reason)
+            self.category_or_forum.set_permissions(user_or_role, overwrite=overwrite, reason=reason)
         ]
 
-        if self.storage_channel is not None:
+        storage_channel = await self.get_storage_channel()
+        if storage_channel is not None and not isinstance(storage_channel, discord.Thread):
             # Since the storage channel permissions are different, we need to set them separately
-            overwrite = self.storage_channel.overwrites_for(user_or_role)
+            # And threads cannot have overwrites set on them
+            overwrite = storage_channel.overwrites_for(user_or_role)
             overwrite.read_messages = True
-            coros += [self.storage_channel.set_permissions(user_or_role, overwrite=overwrite, reason=reason)]
+            coros += [storage_channel.set_permissions(user_or_role, overwrite=overwrite, reason=reason)]
 
         await asyncio.gather(*coros)
 
@@ -313,18 +370,20 @@ class StaffGuild:
             CONFIG.default_locale,
         )
 
-        overwrite = self.category.overwrites_for(user_or_role)
+        overwrite = self.category_or_forum.overwrites_for(user_or_role)
         if overwrite == discord.PermissionOverwrite(read_messages=True):  # default overwrite
             logger.info("Revoking %s access to the Modmail category", user_or_role)
-            coros += [self.category.set_permissions(user_or_role, overwrite=None, reason=reason)]
+            coros += [self.category_or_forum.set_permissions(user_or_role, overwrite=None, reason=reason)]
         else:
             logger.info("Not revoking access to %s for category, overwrites were modified", user_or_role)
 
-        if self.storage_channel is not None:
-            overwrite = self.storage_channel.overwrites_for(user_or_role)
+        storage_channel = await self.get_storage_channel()
+        if storage_channel is not None and not isinstance(storage_channel, discord.Thread):
+            # threads cannot have overwrites set on them
+            overwrite = storage_channel.overwrites_for(user_or_role)
             if overwrite == discord.PermissionOverwrite(read_messages=True):  # default overwrite
                 logger.info("Revoking %s access to the Modmail storage channel", user_or_role)
-                coros += [self.storage_channel.set_permissions(user_or_role, overwrite=None, reason=reason)]
+                coros += [storage_channel.set_permissions(user_or_role, overwrite=None, reason=reason)]
             else:
                 logger.info(
                     "Not revoking access to %s for storage channel, overwrites were modified", user_or_role
@@ -333,7 +392,7 @@ class StaffGuild:
             await asyncio.gather(*coros)
 
     async def get_ticket(
-        self, /, user_or_channel: discord.User | discord.Member | discord.abc.GuildChannel
+        self, /, user_or_channel: discord.User | discord.Member | discord.TextChannel | discord.Thread
     ) -> TicketView | None:
         """Get an open ticket for a user or channel.
 
@@ -352,10 +411,38 @@ class StaffGuild:
             logger.debug("No ticket found for %s", user_or_channel)
             return None
 
-        channel = self.guild.get_channel(ticket_model.channel_id)
+        channel = self.guild.get_channel_or_thread(ticket_model.channel_id)
         if channel is None:
+            try:
+                channel = await self.guild.fetch_channel(ticket_model.channel_id)
+            except discord.NotFound, discord.HTTPException:
+                # Ticket channel does not exist, close the ticket
+                logger.warning(
+                    "Ticket channel %s does not exist, closing ticket %s",
+                    ticket_model.channel_id,
+                    ticket_model.key,
+                )
+                await self.bot.database_client.close_ticket(
+                    ticket_model.key,
+                    TicketUserModel.from_user(cast(discord.ClientUser, self.bot.user)),
+                    ticket_status=TicketStatus.closed_by_deletion,
+                )
+                return None
+
+            if isinstance(channel, discord.TextChannel) or (
+                isinstance(channel, discord.Thread) and not channel.archived
+            ):
+                logger.warning(
+                    "Ticket channel or thread %s was not found in cache, fetched via API. "
+                    "(THIS SHOULD NOT HAPPEN)",
+                    ticket_model.channel_id,
+                )
+
+        if not isinstance(channel, discord.TextChannel | discord.Thread):
             logger.warning(
-                "Ticket channel %s does not exist, closing ticket %s", ticket_model.channel_id, ticket_model.key
+                "Ticket channel %s is not a text channel or thread, closing ticket %s",
+                ticket_model.channel_id,
+                ticket_model.key,
             )
             await self.bot.database_client.close_ticket(
                 ticket_model.key,
@@ -364,9 +451,17 @@ class StaffGuild:
             )
             return None
 
+        if isinstance(channel, discord.Thread) and channel.archived:
+            # TODO: if possible: un-archive if archived due to inactivity, otherwise close the ticket if manual
+            # There's many places in the code that unarchives the thread, when implementing the TO/DO
+            # need to change those as well.
+            logger.info("Ticket channel %s is an archived thread, unarchiving it.", ticket_model.channel_id)
+            await channel.edit(archived=False)
+
         recipients: list[discord.User | discord.Member] = []
         for recipient in ticket_model.recipients:
             try:
+                # Using .fetch_user since members are not cached
                 user = await self.bot.fetch_user(recipient.user_id)  # TODO: Implement some caching
             except discord.NotFound:  # TODO: Handle this better (show to user)
                 logger.info("User %s not found in guild", recipient.user_id)
@@ -395,12 +490,14 @@ class StaffGuild:
         self,
         *recipients: discord.User | discord.Member,
         created_by: discord.User | discord.Member,
+        starter_message: discord.Message | None = None,
     ) -> TicketView:
         """Create a new ticket for the given users.
 
         Args:
             *recipients: The users to create the ticket for.
             created_by: The user who created the ticket.
+            starter_message: An optional message that started the ticket.
 
         Returns:
             The created ticket view.
@@ -419,7 +516,30 @@ class StaffGuild:
             _("ftl-msg-new-ticket-reason", users=", ".join(str(user) for user in recipients)),
             CONFIG.default_locale,
         )
-        channel = await self.category.create_text_channel(name=self._make_channel_name(*recipients), reason=reason)
+        if isinstance(self.category_or_forum, discord.CategoryChannel):
+            channel = await self.category_or_forum.create_text_channel(
+                name=self._make_channel_name(*recipients), reason=reason
+            )
+        else:
+            if starter_message is not None and starter_message.content.strip():
+                # Remove excessive whitespace and limit to 150 characters for thread starter message preview
+                thread_starter_message = re.sub(r"\s+", " ", starter_message.content.strip())
+                wrap_limit = 150
+                if len(thread_starter_message) > wrap_limit:
+                    thread_starter_message = thread_starter_message[: wrap_limit - 3] + "..."
+            else:
+                thread_starter_message = await self.bot.translator.translate(
+                    _(
+                        "ftl-msg-new-ticket-default-thread-opening-message",
+                        users=" ".join(user.mention for user in recipients),
+                    ),
+                    CONFIG.default_locale,
+                )
+            channel = (
+                await self.category_or_forum.create_thread(
+                    name=self._make_channel_name(*recipients), content=thread_starter_message, reason=reason
+                )
+            ).thread
 
         ticket = TicketModel(
             bot_id=CONFIG.bot.bot_id,

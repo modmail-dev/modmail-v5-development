@@ -16,9 +16,8 @@ from typing import TYPE_CHECKING, Any
 import discord
 from discord.ext import commands
 
-from modmail.backends.common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
-
 from ... import CONFIG
+from ...backends.common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
 from ...enum import TicketMessageType, TicketStatus
 from ...errors import BadPermissionsError, NoStaffGuildError, NoTicketChannelError
 from ..translator import _
@@ -60,25 +59,43 @@ class TicketView:
         self.model = ticket_model
         self.recipients = recipients
 
-    @property
-    def channel(self) -> discord.TextChannel:
-        """Get the channel associated with the ticket.
+    async def get_channel(self) -> discord.TextChannel | discord.Thread:
+        """Get the channel or thread associated with the ticket.
+
+        If the thread is archived, it will be auto-unarchived.
 
         Returns:
-            The channel associated with the ticket, or None if the channel does not exist.
+            The channel or thread associated with the ticket, or None if the channel does not exist.
 
         Raises:
             NoStaffGuildError: If the staff guild is not set.
-            NoTicketChannelError: If the channel is not found in the staff guild.
+            NoTicketChannelError: If the channel or thread is not found in the staff guild.
             BadPermissionsError: If the bot does not have the required permissions to access the channel.
         """
         try:
-            channel = discord.utils.get(self.staff_guild.guild.text_channels, id=self.model.channel_id)
+            channel = self.staff_guild.guild.get_channel_or_thread(self.model.channel_id)
         except NoStaffGuildError:
             logger.debug("Staff guild not set, cannot get channel.")
             raise
         if channel is None:
-            raise NoTicketChannelError("Ticket channel not found.")
+            try:
+                channel = await self.staff_guild.guild.fetch_channel(self.model.channel_id)
+            except (discord.NotFound, discord.HTTPException) as e:
+                raise NoTicketChannelError("Ticket channel %d not found.", self.model.channel_id) from e
+            if isinstance(channel, discord.TextChannel) or (
+                isinstance(channel, discord.Thread) and not channel.archived
+            ):
+                logger.warning(
+                    "Channel or thread %d not found in cache, fetched from API. (THIS SHOULD NOT HAPPEN)",
+                    channel.id,
+                )
+
+        if not isinstance(channel, discord.TextChannel | discord.Thread):
+            raise NoTicketChannelError("Ticket channel is not a text channel or thread.")
+
+        if isinstance(channel, discord.Thread) and channel.archived:
+            logger.info("Thread %d is archived, unarchiving.", channel.id)
+            await channel.edit(archived=False)
 
         perms = channel.permissions_for(channel.guild.me)
         if perms & self.staff_guild.MIN_PERMISSIONS != self.staff_guild.MIN_PERMISSIONS:
@@ -111,7 +128,7 @@ class TicketView:
 
     async def send_initial_staff_message(self) -> None:
         """Send the initial message to the ticket chanel."""
-        channel = self.channel  # This checks for permissions and validity
+        channel = await self.get_channel()
         log_url = self._get_log_url(self.model.key)
         embed_proxies: list[tuple[Any, EmbedProxy]] = []  # list of tuples (sort-key, embed)
 
@@ -284,7 +301,7 @@ class TicketView:
             A list of recipients to whom the DM message failed to send.
         """
         logger.debug("Processing DM message from %s: %s", message.author, message.content)
-        channel = self.channel  # This checks for permissions and validity
+        channel = await self.get_channel()
         embed_proxy = self.format_ticket_channel_embed(message, TicketMessageType.dm)
         embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
         coros: list[Awaitable[Any]] = [channel.send(embed=embed)]
@@ -364,7 +381,7 @@ class TicketView:
             A list of recipients to whom the reply message failed to send.
         """
         logger.debug("Processing %s message in ticket %s: %s", message_type, self.model.key, message)
-        channel = self.channel  # This checks for permissions and validity
+        channel = await self.get_channel()
         embed_proxy = self.format_ticket_channel_embed((ctx, message), message_type)
         embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
 
@@ -446,5 +463,7 @@ class TicketView:
         )
 
         # TODO: config
-        # await self.channel.delete(reason=_("ftl-msg-ticket-closed-reason", user=closer.name))
+        # delete channel?: await self.channel.delete(reason=_("ftl-msg-ticket-closed-reason", user=closer.name))
+        # archive thread?: await self.channel.edit(archived=True,
+        #                                          reason=_("ftl-msg-ticket-closed-reason", user=closer.name))
         logger.info("Closed ticket %s for %s.", self.model.key, self.model.recipients)

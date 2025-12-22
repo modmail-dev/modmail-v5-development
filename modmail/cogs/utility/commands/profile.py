@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Final, NamedTuple, cast
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, Final, NamedTuple
 
 import discord
 from discord.ext import commands
@@ -24,17 +25,26 @@ from modmail.enum import AccessLevel, PermissionOverrideValue, ProfileType, Requ
 if TYPE_CHECKING:
     from .. import Utility
 
-    # A "stub" for type hinting
-    class _ProfileCustomizeView(discord.ui.View):
-        _original_message: discord.Message | None
-
-        def set_original_message(self, message: discord.Message) -> None: ...
-
-
 __all__ = ["profile_command"]
 
-
 logger = logging.getLogger(__name__)
+
+
+class _ProfileCustomizeView(discord.ui.View, ABC):
+    """Abstract base class for profile customization views.
+
+    The real implementation is created dynamically in make_profile_customize_view().
+    """
+
+    @abstractmethod
+    def set_original_message(self, message: discord.Message) -> None:
+        """Set the message that sent this view.
+
+        This should be called after sending the message so the view can reference and edit it.
+
+        Args:
+            message: The Discord.py message from the original .send().
+        """
 
 
 # TODO: move ProfileDetail and _get_profile_detail into a converter/transformer in converters.py
@@ -223,8 +233,7 @@ async def make_profile_customize_view(
                 ephemeral=True,
             )
 
-    # noinspection PyShadowingNames
-    class ProfileCustomizeView(discord.ui.View):
+    class ProfileCustomizeView(_ProfileCustomizeView):
         """A view for customizing the profile."""
 
         def __init__(self) -> None:
@@ -307,10 +316,6 @@ async def make_profile_customize_view(
         ) -> None:
             """Open the modal for profile customization."""
             await interaction.response.send_modal(ProfileCustomizeModal())
-
-    if TYPE_CHECKING:
-        # This is quite ugly, but until Protocol intersection is supported we have to do this
-        ProfileCustomizeView = cast(type[_ProfileCustomizeView], ProfileCustomizeView)  # noqa: N806
 
     return ProfileCustomizeView
 

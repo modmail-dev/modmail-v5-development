@@ -54,9 +54,9 @@ class NoStaffGuildError(ModmailError):
 
 
 class NoModmailCategoryError(ModmailError):
-    """Exception for when the Modmail category is not found.
+    """Exception for when the Modmail category or forum is not found.
 
-    Raised when an operation requires the Modmail category but none is found.
+    Raised when an operation requires the Modmail category or forum but none is found.
     """
 
 

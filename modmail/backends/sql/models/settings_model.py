@@ -33,7 +33,7 @@ class SQLSettingsTable(SQLBase):
         last_ran_locale: The locale setting when the bot was last run (max 8 characters).
         last_slash_synced_version: The version when slash commands were last synchronized (max 32 characters).
         last_slash_minimum_permission_int: The minimum permission level required for slash commands.
-        main_category_id: The Discord category ID where new tickets are created.
+        main_category_or_forum_id: The Discord category or forum ID where new tickets are created.
         fallback_category_id: The backup Discord category ID for when the main category is full.
         log_channel_id: The Discord channel ID for the log channel.
         storage_channel_id: The Discord channel ID for the storage channel.
@@ -48,7 +48,7 @@ class SQLSettingsTable(SQLBase):
     last_ran_locale: Mapped[str | None] = mapped_column(String(8))
     last_slash_synced_version: Mapped[str | None] = mapped_column(String(32))
     last_slash_minimum_permission_int: Mapped[int | None]
-    main_category_id: Mapped[int | None]
+    main_category_or_forum_id: Mapped[int | None]
     fallback_category_id: Mapped[int | None]
     log_channel_id: Mapped[int | None]
     storage_channel_id: Mapped[int | None]

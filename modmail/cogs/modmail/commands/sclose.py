@@ -60,7 +60,7 @@ async def sclose_command(
     if ctx.interaction is not None:
         await cog.reply(ctx, _("ftl-cmd-sclose-message-sending"), delete_after=3, ephemeral=True, auto_embed=False)
 
-    assert isinstance(ctx.channel, discord.abc.GuildChannel)
+    assert isinstance(ctx.channel, discord.TextChannel | discord.Thread)
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
     if ticket is None:
         raise ModmailError("Ticket should not be None here.")

@@ -31,7 +31,7 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
     """Handle incoming direct messages.
 
     Args:
-        cog: The DMReceiveListener instance.
+        cog: The Modmail cog instance (self).
         message: The incoming message.
     """
     # Ignore messages from bots
@@ -79,7 +79,9 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
         ticket = await staff_guild.get_ticket(message.author)
         if ticket is None:
             # If the user is not in a ticket, create a new one
-            ticket = await staff_guild.create_ticket(message.author, created_by=message.author)
+            ticket = await staff_guild.create_ticket(
+                message.author, created_by=message.author, starter_message=message
+            )
 
         failed_recipients = await ticket.process_dm_message(message)
 
@@ -87,7 +89,8 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
             # Send a message to ticket channel about the failed recipients
             failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
             await cog.send(
-                ticket.channel, _("ftl-dm-received-failed-recipients", recipients=failed_recipients_str)
+                await ticket.get_channel(),
+                _("ftl-dm-received-failed-recipients", recipients=failed_recipients_str),
             )
 
     except Exception:

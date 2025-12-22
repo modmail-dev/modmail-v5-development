@@ -13,8 +13,10 @@ from typing import Any
 
 from .dm_receive import dm_receive
 from .ticket_channel_delete import ticket_channel_delete
+from .ticket_thread_delete import ticket_thread_delete
 
 all_listeners: list[Callable[..., Any]] = [
     dm_receive,
     ticket_channel_delete,
+    ticket_thread_delete,
 ]

@@ -25,6 +25,8 @@ ftl-dm-received-failed-recipients = The following recipients did not receive thi
 
 # :param $users: a comma-separated list of usernames
 ftl-msg-new-ticket-reason = New Modmail ticket for: { $users }
+# :param $users: a space-separated list of user mentions
+ftl-msg-new-ticket-default-thread-opening-message = { $users } started a new Modmail ticket.
 # :param $created: the date the account was created
 ftl-msg-new-ticket-initial-embed-description = Account created { $created }.
 # :param $user_id: the user ID of the user (string)
@@ -181,21 +183,31 @@ ftl-cmd-profile-unset-override-not-found = No override exists on { $command } fo
 
 ftl-cmd-setup-name = setup
 ftl-cmd-setup-description = Setup the Modmail bot.
+ftl-cmd-setup-not-enough-guild-permissions = I don't have enough permissions in this server.
 # :param $guild_name: the name of the staff guild
 ftl-cmd-setup-wrong-guild = You can only setup the Modmail bot in the staff server ({ $guild_name }).
 ftl-cmd-setup-already-running = You can't use this command right now. Please try again later.
-ftl-cmd-setup-not-enough-guild-permissions = I don't have enough permissions to create the Modmail category and channels.
 ftl-cmd-setup-guild-already-configured-prompt = This server is already configured. Do you want to reconfigure it?
 ftl-cmd-setup-guild-already-configured-prompt-continue-anyway = Yes
+ftl-cmd-setup-use-category-or-forum-prompt = Do you want to use a category or a forum for Modmail? (Category is recommended)
+ftl-cmd-setup-use-category-or-forum-prompt-category = Category
+ftl-cmd-setup-use-category-or-forum-prompt-forum = Forum
 ftl-cmd-setup-use-new-category-prompt = Do you want me to create a new category for Modmail?
-ftl-cmd-setup-use-new-category-prompt-new = Yes
+ftl-cmd-setup-use-new-category-prompt-new = Create
 ftl-cmd-setup-use-new-category-prompt-existing = Use an existing category
-ftl-cmd-setup-use-new-category-prompt-existing-category = Please enter the ID or name of the category you want to use for Modmail:
+ftl-cmd-setup-use-new-category-prompt-existing-category = Please enter the name or ID of the category you want to use for Modmail:
 ftl-cmd-setup-use-new-category-prompt-existing-category-not-found = Category not found.
 ftl-cmd-setup-use-new-category-prompt-existing-category-no-permissions = I don't have enough permissions in this category.
-ftl-cmd-setup-category-name = Modmail
-ftl-cmd-setup-category-create-reason = Category for Modmail.
-ftl-cmd-setup-category-permissions-reason = Category permissions for Modmail.
+ftl-cmd-setup-use-new-forum-prompt = Do you want me to create a new forum for Modmail?
+ftl-cmd-setup-use-new-forum-prompt-new = Create
+ftl-cmd-setup-use-new-forum-prompt-existing = Use an existing forum
+ftl-cmd-setup-use-new-forum-prompt-existing-forum = Please enter the name or ID of the forum you want to use for Modmail:
+ftl-cmd-setup-use-new-forum-prompt-existing-forum-not-found = Forum not found.
+ftl-cmd-setup-use-new-forum-prompt-existing-forum-no-permissions = I don't have enough permissions in this forum.
+ftl-cmd-setup-category-or-forum-name = Modmail
+ftl-cmd-setup-category-or-forum-create-reason = Category/Forum for Modmail.
+ftl-cmd-setup-category-or-forum-permissions-reason = Category/Forum permissions for Modmail.
+ftl-cmd-setup-forum-thread-unpin-reason = Unpin existing thread in Modmail forum.
 ftl-cmd-setup-log-channel-name = ticket-logs
 ftl-cmd-setup-log-channel-topic = Modmail logs
 ftl-cmd-setup-log-channel-create-reason = Log channel for Modmail.
@@ -206,7 +218,11 @@ ftl-cmd-setup-storage-channel-create-reason = Storage channel for Modmail.
 # :param $category: the name of the Modmail category
 # :param $log_channel: the name of the Modmail log channel
 # :param $storage_channel: the name of the Modmail storage channel
-ftl-cmd-setup-complete = Successfully setup Modmail. Your Modmail category is { $category }. I have also created a channel called { $log_channel } for Modmail logs and { $storage_channel } for storing some of my internal data. Feel free to rename and move these channels, but please do not delete them! Please check the permissions of the category and channels to make sure they are correct.
+ftl-cmd-setup-category-complete = Successfully setup Modmail. Your Modmail category is { $category }. I have also created two channels: { $log_channel } for Modmail logs and { $storage_channel } for storing some of my internal data. Feel free to rename and move these channels, but please do not delete them! Please check the permissions of the category and channels to make sure they are correct.
+# :param forum: the name of the Modmail forum
+# :param $log_channel: the name of the Modmail log thread
+# :param $storage_channel: the name of the Modmail storage thread
+ftl-cmd-setup-forum-complete = Successfully setup Modmail. Your Modmail forum is { $forum }. I have also created two threads: { $log_channel } for Modmail logs and { $storage_channel } for storing some of my internal data. Feel free to rename these threads, but please do not delete them! Please check the permissions of the forum to make sure they are correct.
 
 ## Command: Modmail.reply
 
