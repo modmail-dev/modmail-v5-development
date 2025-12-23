@@ -111,6 +111,7 @@ async def ticket_model_to_document(ticket: TicketModel) -> MongoDBTicketDocument
         created_by=created_by,
         closed_at=ticket.closed_at,
         closed_by=closed_by,
+        log_channel_message_id=ticket.log_channel_message_id,
         status=ticket.status,
         title=ticket.title,
         nsfw=ticket.nsfw,

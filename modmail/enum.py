@@ -37,6 +37,14 @@ class TicketStatus(enum.Enum):
     closed_by_command = "closed_by_command"
     closed_by_deletion = "closed_by_deletion"
 
+    def is_open(self) -> bool:
+        """Check if the ticket status represents an open ticket.
+
+        Returns:
+            True if the ticket is open, False otherwise.
+        """
+        return self == TicketStatus.open
+
 
 class AccessLevel(enum.IntEnum):
     """Permission access levels assignable to a profile.

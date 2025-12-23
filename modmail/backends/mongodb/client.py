@@ -465,6 +465,32 @@ class MongoDBClient(DBClientBase):
             )
         logger.info("Created ticket %s for %s.", ticket.key, ticket.recipients)
 
+    async def set_ticket_log_channel_message_id(self, ticket_key: str, message_id: int | None) -> None:
+        """Sets the log channel message ID for a ticket.
+
+        Args:
+            ticket_key: The key of the ticket.
+            message_id: The message ID to set, or None to clear it.
+
+        Raises:
+            TicketNotFoundError: If the ticket is not found.
+        """
+        ticket_document = await MongoDBTicketDocument.find_one(
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id and MongoDBTicketDocument.key == ticket_key
+        )
+        if ticket_document is None:
+            raise TicketNotFoundError(f"Ticket with key {ticket_key} not found.")
+
+        ticket_document.log_channel_message_id = message_id
+        await ticket_document.replace()
+
+        # Update the cache if exists
+        cached_ticket = self.__open_tickets_cache.get(key=ticket_key)
+        if cached_ticket is not None:
+            cached_ticket.log_channel_message_id = message_id
+
+        logger.debug("Set log channel message ID for ticket %s to %s.", ticket_key, message_id)
+
     async def get_ticket_by_channel(self, channel_id: int, *, only_open: bool = True) -> TicketModel | None:
         """Get a ticket by channel ID.
 

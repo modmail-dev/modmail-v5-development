@@ -8,6 +8,16 @@
 Please note that the database structure may change at any time, and database migrations between development versions are not available.
 You will need to drop the database when the structure changes.
 
+### Short-Term TODOs
+
+- [x] Forum implementation, alternative to category/channel structure
+- [x] Implement log channel message
+- [ ] Convert certain embeds to use component v2
+- [ ] "Custom locale" to allow overriding specific locale strings without editing language files
+- [ ] Proper pytest unit tests (see how other projects do it)
+- [ ] pyinstaller or nuitka compiled build, also with an installer
+- [ ] Message attachment support (linked attachment to storage channel)
+
 ## Acknowledgements
 
 The current release of Modmail (v5) is a complete rewrite of the original Modmail bot.

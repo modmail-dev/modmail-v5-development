@@ -40,6 +40,9 @@ class Bot(commands.Bot):
         database_client: Database client instance for interacting with the database.
     """
 
+    # Set of pending asyncio tasks, used for tracking long-running operations.
+    asyncio_pending_tasks: set[asyncio.Task[Any]] = set()
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize the Modmail bot.
 
@@ -724,3 +727,15 @@ class Bot(commands.Bot):
         #     """
         #     return True
         return True  # pragma: nocover ; TODO: Implement this check
+
+    @staticmethod
+    def get_log_url(key: str) -> str:
+        """Get a formatted log URL for the ticket.
+
+        Args:
+            key: The key of the ticket.
+
+        Returns:
+            The formatted log URL.
+        """
+        return f"{CONFIG.log_url}/{key}"

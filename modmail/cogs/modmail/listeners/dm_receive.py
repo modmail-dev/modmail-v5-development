@@ -58,7 +58,7 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
             logger.warning("Message content: %s", message.content)
 
             msg = await cog.bot.translator.translate(
-                _("ftl-dm-received-not-configured", guild_name=staff_guild.guild.name), CONFIG.default_locale
+                _("ftl-msg-dm-received-not-configured", guild_name=staff_guild.guild.name), CONFIG.default_locale
             )
             try:
                 await message.reply(msg)

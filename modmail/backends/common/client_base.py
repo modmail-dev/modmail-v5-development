@@ -198,7 +198,20 @@ class DBClientBase(ABC):  # pragma: no cover
             ticket: The ticket object to create.
 
         Raises:
+            TicketCreationError: If a ticket with a duplicate key or channel.
             TicketRecipientOccupiedError: If the recipient is already in another open ticket.
+        """
+
+    @abstractmethod
+    async def set_ticket_log_channel_message_id(self, ticket_key: str, message_id: int | None) -> None:
+        """Sets the log channel message ID for a ticket.
+
+        Args:
+            ticket_key: The key of the ticket.
+            message_id: The message ID to set, or None to clear it.
+
+        Raises:
+            TicketNotFoundError: If the ticket is not found.
         """
 
     @abstractmethod

@@ -18,7 +18,7 @@ from discord.ext import commands
 
 from ... import CONFIG
 from ...backends.common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
-from ...enum import TicketMessageType, TicketStatus
+from ...enum import TicketMessageType
 from ...errors import BadPermissionsError, NoStaffGuildError, NoTicketChannelError
 from ..translator import _
 from .embed import EmbedProxy
@@ -114,22 +114,18 @@ class TicketView:
     #         logger.debug("Staff guild not set, cannot get DM channel.")
     #         raise
 
-    @staticmethod
-    def _get_log_url(key: str) -> str:
-        """Get a formatted log URL for the ticket.
-
-        Args:
-            key: The key of the ticket.
+    @property
+    def log_url(self) -> str:
+        """Get the log URL for the ticket.
 
         Returns:
-            The formatted log URL.
+            The log URL for the ticket.
         """
-        return f"{CONFIG.log_url}/{key}"
+        return self.bot.get_log_url(self.model.key)
 
     async def send_initial_staff_message(self) -> None:
         """Send the initial message to the ticket chanel."""
         channel = await self.get_channel()
-        log_url = self._get_log_url(self.model.key)
         embed_proxies: list[tuple[Any, EmbedProxy]] = []  # list of tuples (sort-key, embed)
 
         members_mapping: defaultdict[int, list[discord.Member]] = defaultdict(list)
@@ -160,7 +156,7 @@ class TicketView:
 
         for recipient in self.recipients:
             embed = EmbedProxy()
-            embed.set_author(name=str(recipient), icon_url=str(recipient.avatar), url=log_url)
+            embed.set_author(name=str(recipient), icon_url=str(recipient.avatar), url=self.log_url)
             embed.description = _(
                 "ftl-msg-new-ticket-initial-embed-description",
                 created=discord.utils.format_dt(recipient.created_at, "R"),
@@ -354,11 +350,15 @@ class TicketView:
             type=TicketMessageType.dm,
         )
         task = asyncio.create_task(self.bot.database_client.save_message(ticket_message_model))
+        self.bot.asyncio_pending_tasks.add(task)
         task.add_done_callback(
             lambda t: (
-                logger.warning("Error saving message for ticket %s", self.model.key, exc_info=t.exception())
-                if t.exception()
-                else None
+                self.bot.asyncio_pending_tasks.discard(t),
+                (
+                    logger.warning("Error saving message for ticket %s", self.model.key, exc_info=t.exception())
+                    if t.exception()
+                    else None
+                ),
             )
         )
         return failed_recipients
@@ -428,42 +428,20 @@ class TicketView:
             type=message_type,
         )
         task = asyncio.create_task(self.bot.database_client.save_message(ticket_message_model))
+        self.bot.asyncio_pending_tasks.add(task)
         task.add_done_callback(
             lambda t: (
-                logger.error(
-                    "Error saving %s message for ticket %s", message_type, self.model.key, exc_info=t.exception()
-                )
-                if t.exception()
-                else None
+                self.bot.asyncio_pending_tasks.discard(t),
+                (
+                    logger.error(
+                        "Error saving %s message for ticket %s",
+                        message_type,
+                        self.model.key,
+                        exc_info=t.exception(),
+                    )
+                    if t.exception()
+                    else None
+                ),
             )
         )
         return failed_recipients
-
-    async def close(self, closer: discord.User | discord.Member, ticket_status: TicketStatus) -> None:
-        """Close the ticket and perform any necessary cleanup.
-
-        Args:
-            closer: The user who is closing the ticket.
-            ticket_status: The status of the ticket after closing (by command, by deletion).
-
-        Raises:
-            ValueError: If an invalid ticket status is provided for closing.
-        """
-        logger.debug("Closing ticket %s: %s", self.model.key, ticket_status)
-
-        if ticket_status not in {
-            TicketStatus.closed_by_command,
-            TicketStatus.closed_by_deletion,
-        }:
-            raise ValueError("Invalid ticket status for closing.")
-
-        closer_model = TicketUserModel.from_user(closer)
-        await self.staff_guild.bot.database_client.close_ticket(
-            self.model.key, closer_model, ticket_status=ticket_status
-        )
-
-        # TODO: config
-        # delete channel?: await self.channel.delete(reason=_("ftl-msg-ticket-closed-reason", user=closer.name))
-        # archive thread?: await self.channel.edit(archived=True,
-        #                                          reason=_("ftl-msg-ticket-closed-reason", user=closer.name))
-        logger.info("Closed ticket %s for %s.", self.model.key, self.model.recipients)

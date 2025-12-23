@@ -90,5 +90,6 @@ async def close_command(
                 logger.info("Failed to delete the message after closing in %s: %s", ctx.channel, e)
     finally:
         # Close the ticket
-        await ticket.close(ctx.author, TicketStatus.closed_by_command)
-    # TODO: delete channel, create auto delete after close config
+        await cog.bot.staff_guild.close_ticket(
+            ticket.model, closer=ctx.author, close_status=TicketStatus.closed_by_command
+        )

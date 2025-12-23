@@ -36,6 +36,7 @@ class MongoDBTicketDocument(Document):
         status: The current status of the ticket (open, closed, etc.).
         closed_by: The user who closed the ticket (if applicable).
         closed_at: The timestamp when the ticket was closed (if applicable).
+        log_channel_message_id: The ID of the thread info message when sent to log channel.
         title: An optional title for the ticket.
         nsfw: A boolean indicating if the ticket is NSFW (not safe for work).
     """
@@ -51,6 +52,8 @@ class MongoDBTicketDocument(Document):
 
     closed_at: datetime | None = None
     closed_by: Link[MongoDBTicketUserDocument] | None = None
+
+    log_channel_message_id: int | None = None
 
     status: TicketStatus
     title: str | None = None
@@ -98,6 +101,7 @@ class MongoDBTicketDocument(Document):
             status=self.status,
             closed_by=closed_by,
             closed_at=self.closed_at,
+            log_channel_message_id=self.log_channel_message_id,
             title=self.title,
             nsfw=self.nsfw,
         )

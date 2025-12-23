@@ -8,12 +8,11 @@ and attempts to identify who deleted the channel through audit logs.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands
 
-from modmail.backends.common import TicketUserModel
 from modmail.enum import TicketStatus
 
 if TYPE_CHECKING:
@@ -55,15 +54,12 @@ async def ticket_channel_delete(cog: Modmail, channel: discord.abc.GuildChannel)
                     ticket_model.key,
                 )
 
-                if not entry.user:  # if there is no user (should not happen but just in case)
-                    audit_user = cast(discord.ClientUser, cog.bot.user)
-                else:
+                audit_user = None
+                if entry.user:
                     audit_user = entry.user
 
-                await cog.bot.database_client.close_ticket(
-                    ticket_model.key,
-                    TicketUserModel.from_user(audit_user),
-                    ticket_status=TicketStatus.closed_by_deletion,
+                await cog.bot.staff_guild.close_ticket(
+                    ticket_model, closer=audit_user, close_status=TicketStatus.closed_by_deletion
                 )
                 return
     else:
@@ -74,9 +70,4 @@ async def ticket_channel_delete(cog: Modmail, channel: discord.abc.GuildChannel)
 
     logger.info("Ticket channel %s manually deleted by unknown user, closing ticket %s", channel, ticket_model.key)
 
-    # If the audit log entry is not found, close the ticket with the bot as the user
-    await cog.bot.database_client.close_ticket(
-        ticket_model.key,
-        TicketUserModel.from_user(cast(discord.ClientUser, cog.bot.user)),
-        ticket_status=TicketStatus.closed_by_deletion,
-    )
+    await cog.bot.staff_guild.close_ticket(ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion)

@@ -11,45 +11,7 @@ ftl-access-level-manager = Manager
 ftl-access-level-admin = Admin
 ftl-access-level-owner = Owner
 
-ftl-msg-permission-denied = You do not have permission to use this command.
-ftl-msg-command-invoke-error = An unknown error occurred while processing your command, try again later.
-                               If the problem persists, please check your logs and report the error to the Modmail team.
-
 ftl-view-prompt-cancel-label = Cancel
-ftl-msg-prompt-timeout = Timed out. Please rerun the command to try again.
-
-ftl-dm-received-not-configured = Modmail has not been configured. Please contact the server owner to configure Modmail for the server.
-# :param $recipients: a comma-separated list of recipients who did not receive the message
-ftl-dm-received-failed-recipients = The following recipients did not receive this message: { $recipients }.
-                                    They may have disabled DMs, blocked me, or does not share any servers with me.
-
-# :param $users: a comma-separated list of usernames
-ftl-msg-new-ticket-reason = New Modmail ticket for: { $users }
-# :param $users: a space-separated list of user mentions
-ftl-msg-new-ticket-default-thread-opening-message = { $users } started a new Modmail ticket.
-# :param $created: the date the account was created
-ftl-msg-new-ticket-initial-embed-description = Account created { $created }.
-# :param $user_id: the user ID of the user (string)
-ftl-msg-new-ticket-initial-embed-footer = User ID: { $user_id }
-# :param $joined: the date the user joined the server
-# :param $roles: a comma-separated list of roles
-# :param $has_role: whether the user has a role in the server (true) or not (false)
-ftl-msg-new-ticket-initial-embed-guild-field-value = Joined { $joined }.
-                                                     Roles: { $has_role ->
-    *[true]  { $roles }
-     [false] None
-}
-ftl-msg-new-ticket-initial-embed-guild-field-value-no-join-date = [Unknown]
-ftl-msg-new-ticket-initial-embed-past-tickets-field-name = Past Tickets
-# :param $count: the number of past tickets
-ftl-msg-new-ticket-initial-embed-past-tickets-field-value = { $count ->
-     [one] 1 past ticket
-    *[other] { $count } past tickets
-}
-ftl-msg-create-ticket-failed = Something went wrong while creating this Modmail ticket. Please check my logs for more information.
-
-# :param $message_id: the message ID of the message (string)
-ftl-msg-ticket-channel-embed-footer = Message ID: { $message_id }
 
 ### ========================
 ###         Commands
@@ -233,7 +195,7 @@ ftl-cmd-reply-param-attachment-description = The attachment to send. Can be a fi
 ftl-cmd-reply-param-message-name = message
 ftl-cmd-reply-param-message-description = The message to send.
 ftl-cmd-reply-message-empty = Please enter a message to send.
-flt-cmd-reply-message-sending = Sending the message...
+ftl-cmd-reply-message-sending = Sending the message...
 # :param $recipients: a comma-separated list of recipients who did not receive the message
 ftl-cmd-reply-message-failed-recipients = Failed to send this message to the following recipients: { $recipients }.
                                           They may have disabled DMs, blocked me, or does not share any servers with me.
@@ -283,6 +245,55 @@ ftl-msg-status-clear-status = Cleared status.
 # :param $user_or_role: the name of the user or role
 ftl-msg-grant-access-reason = Granting access to { $user_or_role } to Modmail category and channels.
 ftl-msg-revoke-access-reason = Revoking access to { $user_or_role } to Modmail category and channels.
+
+ftl-msg-permission-denied = You do not have permission to use this command.
+ftl-msg-command-invoke-error = An unknown error occurred while processing your command, try again later.
+                               If the problem persists, please check your logs and report the error to the Modmail team.
+
+ftl-msg-prompt-timeout = Timed out. Please rerun the command to try again.
+
+ftl-msg-dm-received-not-configured = Modmail has not been configured. Please contact the server owner to configure Modmail for the server.
+# :param $recipients: a comma-separated list of recipients who did not receive the message
+ftl-msg-dm-received-failed-recipients = The following recipients did not receive this message: { $recipients }.
+                                        They may have disabled DMs, blocked me, or does not share any servers with me.
+
+# :param $users: a comma-separated list of usernames
+ftl-msg-new-ticket-reason = New Modmail ticket for: { $users }
+# :param $users: a space-separated list of user mentions
+ftl-msg-new-ticket-default-thread-opening-message = { $users } started a new Modmail ticket.
+# :param $created: the date the account was created
+ftl-msg-new-ticket-initial-embed-description = Account created { $created }.
+# :param $user_id: the user ID of the user (string)
+ftl-msg-new-ticket-initial-embed-footer = User ID: { $user_id }
+# :param $joined: the date the user joined the server
+# :param $roles: a comma-separated list of roles
+# :param $has_role: whether the user has a role in the server (true) or not (false)
+ftl-msg-new-ticket-initial-embed-guild-field-value = Joined { $joined }.
+                                                     Roles: { $has_role ->
+    *[true]  { $roles }
+     [false] None
+}
+ftl-msg-new-ticket-initial-embed-guild-field-value-no-join-date = [Unknown]
+ftl-msg-new-ticket-initial-embed-past-tickets-field-name = Past Tickets
+# :param $count: the number of past tickets
+ftl-msg-new-ticket-initial-embed-past-tickets-field-value = { $count ->
+     [one] 1 past ticket
+    *[other] { $count } past tickets
+}
+ftl-msg-create-ticket-failed = Something went wrong while creating this Modmail ticket. Please check my logs for more information.
+
+# :param $user: the name of the closer
+ftl-msg-ticket-closed-reason = Modmail ticket closed by { $user }.
+ftl-msg-ticket-closed-reason-unknown-closer = Modmail ticket closed by unknown user.
+
+# :param $message_id: the message ID of the message (string)
+ftl-msg-ticket-channel-embed-footer = Message ID: { $message_id }
+
+ftl-msg-log-embed-open-footer = Ticket Open
+# :param $user: the username of the closer
+ftl-msg-log-embed-closed-footer = Ticket Closed by @{ $user }
+ftl-msg-log-embed-closed-footer-unknown-closer = Ticket Closed
+ftl-msg-log-embed-no-content-description = *No content*
 
 ### ========================
 ###          Models

@@ -94,6 +94,7 @@ def upgrade() -> None:
             sa.Enum("open", "closed_by_command", "closed_by_deletion", name="ticketstatus"),
             nullable=False,
         ),
+        sa.Column("log_channel_message_id", sa.Integer(), nullable=True),
         sa.Column("title", sa.String(), nullable=True),
         sa.Column("nsfw", sa.Boolean(), nullable=False),
         sa.ForeignKeyConstraint(

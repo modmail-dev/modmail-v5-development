@@ -7,7 +7,7 @@ of strings, enabling localization of embed content based on the user's locale.
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Literal, Self
 
 import discord
 from discord.app_commands import locale_str
@@ -27,6 +27,7 @@ class EmbedProxy:
     that can be translated at a later time when the embed is needed.
 
     Attributes:
+        _timestamp: Timestamp for the embed.
         author_icon_url: URL for the author's icon.
         author_name: Name of the author.
         author_url: URL for the author.
@@ -38,12 +39,12 @@ class EmbedProxy:
         footer_text: Text for the footer.
         image_url: URL for the embed image.
         thumbnail_url: URL for the embed thumbnail.
-        timestamp: Timestamp for the embed.
         title: The title of the embed.
         url: URL for the embed title.
     """
 
     __slots__ = (
+        "_timestamp",
         "author_icon_url",
         "author_name",
         "author_url",
@@ -55,7 +56,6 @@ class EmbedProxy:
         "footer_text",
         "image_url",
         "thumbnail_url",
-        "timestamp",
         "title",
         "url",
     )
@@ -68,24 +68,23 @@ class EmbedProxy:
         title: AnyStr | None = None,
         url: AnyStr | None = None,
         description: AnyStr | None = None,
-        timestamp: datetime.datetime | None = None,
+        timestamp: datetime.datetime | Literal[True] | None = None,
     ) -> None:
         """Initialize the EmbedProxy with optional parameters.
 
         Args:
             colour: The colour of the embed.
-            color: The color of the embed. Alias for colour
+            color: The color of the embed. Alias for colour.
             title: The title of the embed.
             url: The URL for the embed title.
             description: The description of the embed.
-            timestamp: The timestamp for the embed.
+            timestamp: The timestamp for the embed. Set to True for current time.
         """
         self.color = color
         self.colour = colour
         self.title = title
         self.url = url
         self.description = description
-        self.timestamp = timestamp
         self.footer_text: AnyStr | None = None
         self.footer_icon_url: AnyStr | None = None
         self.image_url: AnyStr | None = None
@@ -94,6 +93,11 @@ class EmbedProxy:
         self.author_url: AnyStr | None = None
         self.author_icon_url: AnyStr | None = None
         self.fields: list[tuple[AnyStr, AnyStr, bool]] = []  # name, value, inline
+
+        if timestamp is True:
+            self._timestamp = datetime.datetime.now(datetime.UTC)
+        else:
+            self._timestamp = timestamp
 
     async def to_embed(self, translator: Translator, locale: discord.Locale | str) -> discord.Embed:
         """Convert the EmbedProxy to a discord.Embed object with translated strings.
@@ -149,6 +153,27 @@ class EmbedProxy:
         for name, value, inline in self.fields:
             embed.add_field(name=await translate(name), value=await translate(value), inline=inline)
         return embed
+
+    @property
+    def timestamp(self) -> datetime.datetime | None:
+        """Get the timestamp of the embed.
+
+        Returns:
+            The timestamp of the embed. Or None if not set.
+        """
+        return self._timestamp
+
+    @timestamp.setter
+    def timestamp(self, value: datetime.datetime | Literal[True] | None) -> None:  # pyright: ignore[reportPropertyTypeMismatch]
+        """Set the timestamp of the embed.
+
+        Args:
+            value: The timestamp to set. If True, sets to current time.
+        """
+        if value is True:
+            self._timestamp = datetime.datetime.now(datetime.UTC)
+        else:
+            self._timestamp = value
 
     def set_footer(self, *, text: AnyStr | None = None, icon_url: AnyStr | None = None) -> Self:
         """Set the footer of the embed.
