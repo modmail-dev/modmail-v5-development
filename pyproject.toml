@@ -87,6 +87,12 @@ Funding = "https://buymeacoffee.com/modmaildev"
 [tool.uv]
 default-groups = "all"
 
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
+
 [tool.uv.build-backend]
 module-name = "modmail"
 module-root = ""  # default expects src/, we have everything in the root

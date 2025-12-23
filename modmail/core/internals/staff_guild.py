@@ -488,7 +488,7 @@ class StaffGuild:
             embed.timestamp = ticket.created_at
         else:
             embed.colour = discord.Colour.red()
-            if not ticket.closed_by or ticket.closed_by.user_id == self.bot.user.id:
+            if not ticket.closed_by or ticket.closed_by.user_id == self.guild.me.id:
                 embed.set_footer(text=_("ftl-msg-log-embed-closed-footer-unknown-closer"))
             else:
                 embed.set_footer(text=_("ftl-msg-log-embed-closed-footer", user=ticket.closed_by.user_name))

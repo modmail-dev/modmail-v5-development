@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import logging
 from logging.handlers import RotatingFileHandler
+from types import ModuleType
 
-import discord
-import sqlalchemy
 from rich.logging import RichHandler
 from rich.text import Text
 
@@ -67,12 +66,32 @@ def setup_logging() -> None:
 
     # Configure RichHandler for console logging with rich formatting.
     formatter = logging.Formatter(CONFIG.logging.stdout_format)
+
+    # Suppress tracebacks from certain modules for cleaner output.
+    import discord
+
+    tracebacks_suppress: list[ModuleType] = [discord]
+
+    try:
+        import sqlalchemy
+
+        tracebacks_suppress.append(sqlalchemy)
+    except ImportError:
+        pass
+
+    try:
+        import pymongo
+
+        tracebacks_suppress.append(pymongo)
+    except ImportError:
+        pass
+
     handler = RichHandler(
         show_level=True,
         rich_tracebacks=True,
         tracebacks_show_locals=True,
         log_time_format=lambda dt: Text(dt.strftime("%X,%f")[:-3]),
-        tracebacks_suppress=[discord, sqlalchemy],
+        tracebacks_suppress=tracebacks_suppress,
     )
     handler.setFormatter(formatter)
     handler.setLevel(CONFIG.logging.console_level)
