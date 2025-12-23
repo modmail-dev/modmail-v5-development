@@ -91,7 +91,7 @@ sql_config:
   # Required: The SQL connection URI, supported SQL databases are:
   #   * SQLite
   # Example for SQLite: "sqlite+aiosqlite:///modmail.db"
-  # Example for PostgreSQL: "postgresql+asyncpg://user:password@localhost/modmail"
+  # Example for PostgreSQL (does not work yet): "postgresql+asyncpg://user:password@localhost/modmail"
   # For SQLite, in-memory database is not supported, you must use a file.
   uri: "sqlite+aiosqlite:///modmail.db"
 
