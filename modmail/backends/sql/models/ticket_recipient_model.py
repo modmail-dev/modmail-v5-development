@@ -7,13 +7,16 @@ the recipient user, the associated ticket, and other metadata.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, ForeignKeyConstraint, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from modmail.backends.common import TicketUserModel
-
 from .base import SQLBase
 from .ticket_user_model import SQLTicketUserTable
+
+if TYPE_CHECKING:
+    from modmail.backends.common import TicketUserModel
 
 __all__ = ["SQLTicketRecipientTable"]
 

@@ -384,8 +384,8 @@ class MongoDBClient(DBClientBase):
         """
         # Delete the profile from the database.
         await MongoDBProfileDocument.find(
-            MongoDBProfileDocument.bot_id == self._config.bot.bot_id
-            and MongoDBProfileDocument.profile_id == profile_id
+            MongoDBProfileDocument.bot_id == self._config.bot.bot_id,
+            MongoDBProfileDocument.profile_id == profile_id,
         ).delete()
 
         # Delete the profile from cache.
@@ -402,8 +402,8 @@ class MongoDBClient(DBClientBase):
         open_tickets_cache = MultiKeyCollection[MongoDBTicketDocument]("key", "channel_id")
 
         async for ticket_document in MongoDBTicketDocument.find(
-            MongoDBTicketDocument.bot_id == self._config.bot.bot_id
-            and MongoDBTicketDocument.status == TicketStatus.open,
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id,
+            MongoDBTicketDocument.status == TicketStatus.open,
             fetch_links=True,
         ):
             open_tickets_cache.add(ticket_document, key=ticket_document.key, channel_id=ticket_document.channel_id)
@@ -448,7 +448,7 @@ class MongoDBClient(DBClientBase):
             if ticket_document.channel_id == ticket.channel_id:
                 raise TicketCreationError("Ticket with this channel ID already exists.")
             if any(
-                new_recipient.user_id == cast(MongoDBTicketUserDocument, old_recipient).id
+                new_recipient.user_id == cast("MongoDBTicketUserDocument", old_recipient).id
                 for old_recipient in ticket_document.recipients
                 for new_recipient in ticket.recipients
             ):
@@ -476,7 +476,8 @@ class MongoDBClient(DBClientBase):
             TicketNotFoundError: If the ticket is not found.
         """
         ticket_document = await MongoDBTicketDocument.find_one(
-            MongoDBTicketDocument.bot_id == self._config.bot.bot_id and MongoDBTicketDocument.key == ticket_key
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id,
+            MongoDBTicketDocument.key == ticket_key,
         )
         if ticket_document is None:
             raise TicketNotFoundError(f"Ticket with key {ticket_key} not found.")
@@ -509,8 +510,8 @@ class MongoDBClient(DBClientBase):
             return None
 
         ticket_document = await MongoDBTicketDocument.find_one(
-            MongoDBTicketDocument.bot_id == self._config.bot.bot_id
-            and MongoDBTicketDocument.channel_id == channel_id,
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id,
+            MongoDBTicketDocument.channel_id == channel_id,
             fetch_links=True,
         )
         if ticket_document is not None:
@@ -535,7 +536,8 @@ class MongoDBClient(DBClientBase):
             return None
 
         ticket_document = await MongoDBTicketDocument.find_one(
-            MongoDBTicketDocument.bot_id == self._config.bot.bot_id and MongoDBTicketDocument.key == key,
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id,
+            MongoDBTicketDocument.key == key,
             fetch_links=True,
         )
         if ticket_document is not None:
@@ -555,7 +557,7 @@ class MongoDBClient(DBClientBase):
             await ticket_document.fetch_all_links()
             # Check if the recipient ID is in the ticket's recipients.
             if any(
-                cast(MongoDBTicketUserDocument, recipient).id == recipient_id
+                cast("MongoDBTicketUserDocument", recipient).id == recipient_id
                 for recipient in ticket_document.recipients
             ):
                 return await ticket_document.get_model()
@@ -584,18 +586,18 @@ class MongoDBClient(DBClientBase):
         Returns:
             A list of ticket models associated with the recipient or the count of tickets if count is True.
         """
-        query = (
-            MongoDBTicketDocument.bot_id == self._config.bot.bot_id
-            and cast(MongoDBTicketUserDocument, MongoDBTicketDocument.recipients).id == recipient_id
-        )
+        conditions = [
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id,
+            cast("MongoDBTicketUserDocument", MongoDBTicketDocument.recipients).id == recipient_id,
+        ]
 
         if only_closed:
-            query = query and MongoDBTicketDocument.status != TicketStatus.open
+            conditions.append(MongoDBTicketDocument.status != TicketStatus.open)
 
         if count:
-            return await MongoDBTicketDocument.find(query, fetch_links=True).count()
+            return await MongoDBTicketDocument.find(*conditions, fetch_links=True).count()
 
-        ticket_documents = await MongoDBTicketDocument.find(query, fetch_links=True).to_list()
+        ticket_documents = await MongoDBTicketDocument.find(*conditions, fetch_links=True).to_list()
         return await asyncio.gather(*[ticket_document.get_model() for ticket_document in ticket_documents])
 
     async def save_message(self, ticket_message: TicketMessageModel) -> None:
@@ -645,7 +647,8 @@ class MongoDBClient(DBClientBase):
 
         # Find the ticket document
         ticket_document = await MongoDBTicketDocument.find_one(
-            MongoDBTicketDocument.bot_id == self._config.bot.bot_id and MongoDBTicketDocument.key == ticket_key,
+            MongoDBTicketDocument.bot_id == self._config.bot.bot_id,
+            MongoDBTicketDocument.key == ticket_key,
             fetch_links=True,
         )
 

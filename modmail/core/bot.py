@@ -16,11 +16,13 @@ from discord.ext import commands
 from packaging.version import Version
 
 from .. import CONFIG, __version__, utils
-from ..backends.common import ActivityModel, DBClientBase, ProfileModel
 from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
 from ..errors import DatabaseError, NoStaffGuildError
 from .internals import StaffGuild
 from .translator import Translator, _
+
+if TYPE_CHECKING:
+    from ..backends.common import ActivityModel, DBClientBase, ProfileModel
 
 logger = logging.getLogger(__name__)
 

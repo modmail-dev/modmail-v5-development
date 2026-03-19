@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build"]
+requires = ["uv_build>=0.10.11,<0.11.0"]
 build-backend = "uv_build"
 
 [project]
@@ -31,10 +31,10 @@ classifiers = [
 ]
 
 dependencies = [
-    "discord.py==2.6.4",  # Ensure to keep in sync with [project.optional-dependencies.speed]
-    "rich~=14.2.0",
+    "discord.py==2.7.1",  # Ensure to keep in sync with [project.optional-dependencies.speed]
+    "rich~=14.3.0",
     "pydantic~=2.12.0",
-    "pydantic-settings~=2.12.0",
+    "pydantic-settings~=2.13.0",
     "packaging",  # For version parsing, should be installed by default but just in case
     "pyyaml~=6.0.3",
     "fluent-runtime~=0.4.0",
@@ -42,12 +42,12 @@ dependencies = [
 
 [project.optional-dependencies]
 speed = [
-    "discord.py[speed]==2.6.4",
-    "uvloop>=0.22.1; platform_system != \"Windows\"",
+    "discord.py[speed]==2.7.1",
+    "uvloop>=0.22.1; platform_system != \"Windows\"",  # NOTE: uvloop 0.22.1 has known issues on Python 3.14 (debug mode crash), fallback to asyncio is handled in bot.py
 ]
 sqlite = [
-    "sqlalchemy[asyncio,aiosqlite]~=2.0.45",
-    "alembic~=1.17.2"
+    "sqlalchemy[asyncio,aiosqlite]~=2.0.48",
+    "alembic~=1.18.0"
 ]
 mongodb = [
     "beanie[zstd]~=2.0.0",
@@ -55,24 +55,25 @@ mongodb = [
 
 [dependency-groups]
 dev = [
-    "ruff==0.14.10",  # When updating ruff version, update it in .pre-commit-config.yaml too
-    "pyright==1.1.407",
-    "isort==7.0.0",  # When updating isort version, update it in .pre-commit-config.yaml too
+    "ruff==0.15.6",  # When updating ruff version, update it in .pre-commit-config.yaml too
+    "pyright==1.1.408",
+    "isort==8.0.1",  # When updating isort version, update it in .pre-commit-config.yaml too
     "pre-commit<5,>=4.5.1",  # When updating pre-commit version, update it in the tox "lint" section too
-    "python-dotenv>=1.2.1",  # TODO: .env isn't supported/tested yet
+    "python-dotenv>=1.2.2",  # TODO: .env isn't supported/tested yet
     # When updating pytest plugins, update it below in the pytest "required_plugins" section too
     # TODO: unit testing and tox are currently disabled
-    "tox<5,>=4.32.0",  # When updating tox version, update it below in the [tool.tox] section too
+    "tox<5,>=4.50.0",  # When updating tox version, update it below in the [tool.tox] section too
     "pytest==9.0.2",
     "pytest-mock==3.15.1",
     "pytest-asyncio==1.3.0",
     "pytest-cov==7.0.0",
+    "pip",  # For IDE detecting installed packages
 ]
 debug = [
     "jishaku~=2.6.3",
 ]
 packaging = [
-    "pyinstaller~=6.17.0",
+    "pyinstaller~=6.19.0",
 ]
 # TODO: set up git hooks and configure pyinstaller
 # this command kind of works: uv run pyinstaller --onefile --nowindow --clean --name modmail --copy-metadata modmail.py --collect-all modmail --hidden-import=logging.config start.py
@@ -85,7 +86,7 @@ Changelog = "https://github.com/modmail-dev/Modmail/blob/master/CHANGELOG.md"
 Funding = "https://buymeacoffee.com/modmaildev"
 
 [tool.uv]
-default-groups = "all"
+default-groups = []  # Don't install any optional dependencies by default
 
 [[tool.uv.index]]
 name = "testpypi"
@@ -124,24 +125,38 @@ select = [
     "A",       # flake8-builtins
     "C4",      # flake8-comprehensions
     "DTZ",     # flake8-datetimez
+    "T10",     # flake8-debugger
+    "ISC",     # flake8-implicit-str-concat
     "LOG",     # flake8-logging
     "G",       # flake8-logging-format
     "PIE",     # flake8-pie
     "T20",     # flake8-print
     "PT",      # flake8-pytest-style
+    "RSE",     # flake8-raise
     "RET",     # flake8-return
     "SIM",     # flake8-simplify
+    "TC",      # flake8-type-checking
     "PTH",     # flake8-use-pathlib
     "I",       # isort
     "N",       # pep8-naming
+    "PERF",    # Perflint
     "DOC",     # pydoclint (preview)
     "D",       # pydocstyle
+    "PGH",     # pygrep-hooks
     "PL",      # pylint
     "UP",      # pyupgrade
+    "FURB",    # refurb (preview)
     "RUF",     # Ruff-specific rules
 ]
 
 ignore = [
+    # The following 6 rules conflicts with ruff formatter: https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    "W191",
+    "E111",
+    "E114",
+    "E117",
+    "D206",
+    "D300",
     "ANN401",  # Disallow `Any` type
     "S101",    # Use of assert detected
     "SIM102",  # Single `if` instead of nested `if`
@@ -157,6 +172,19 @@ ignore = [
     "PLW2901", # `for` loop variable `value` overwritten by assignment target
     "PLR6301", # Method could be a function, class method, or static method (preview)
     "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
+    "RUF067", # `__init__` module should only contain docstrings and re-exports
+]
+
+[tool.ruff.lint.flake8-type-checking]
+# These base classes evaluate annotations at runtime (via Pydantic model construction /
+# SQLAlchemy mapper configuration), so imports used only in their subclasses' field
+# annotations must remain as runtime imports, not be moved to TYPE_CHECKING blocks.
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+    "beanie.Document",
+    "sqlalchemy.orm.DeclarativeBase",
+    "modmail.backends.sql.models.base.SQLBase",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -164,6 +192,8 @@ ignore = [
 "ftl_finder.py" = ["T201"]  # T201: Use of print
 "tests/*" = ["D107", "D101", "D100", "D105", "D202", "D102", "D104", "D103", "PLR2004", "PLR0917", "PLC2701"]  # D*: Missing doc strings, PLR2004: Compare magic number, PLC2701: Private name import from external module
 "modmail/backends/sql/migrations/versions/*" = ["D415", "UP"]  # D415:  First line should end with a period, question mark, or exclamation point
+"modmail/cogs/*/commands/*.py" = ["TC002"]  # discord and commands are always kept as runtime imports in cogs
+"modmail/cogs/*/listeners/*.py" = ["TC002"]  # discord and commands are always kept as runtime imports in cogs
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]
@@ -193,6 +223,8 @@ typeCheckingMode = "strict"
 executionEnvironments = [
   { root = "tests", reportPrivateUsage = "none", reportFunctionMemberAccess = "none", reportWildcardImportFromLibrary = "none" },
 ]
+venvPath = "."
+venv = ".venv"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

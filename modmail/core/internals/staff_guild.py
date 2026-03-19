@@ -11,7 +11,6 @@ import contextlib
 import datetime
 import logging
 import re
-from collections.abc import Awaitable, Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 import discord
@@ -25,6 +24,8 @@ from .embed import EmbedProxy
 from .ticket_view import TicketView
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Iterable
+
     from ..bot import Bot
 
 
@@ -762,7 +763,7 @@ class StaffGuild:
             close_status = TicketStatus.closed_by_command
 
         if closer is None:
-            closer_model = TicketUserModel.from_user(cast(discord.ClientUser, self.bot.user))
+            closer_model = TicketUserModel.from_user(cast("discord.ClientUser", self.bot.user))
         else:
             closer_model = TicketUserModel.from_user(closer)
 

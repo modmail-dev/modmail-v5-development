@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
-from collections.abc import Awaitable
 from concurrent.futures import ProcessPoolExecutor
 from typing import TYPE_CHECKING, Any, Literal, overload
 
@@ -41,6 +40,8 @@ from .models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from sqlalchemy.engine.interfaces import DBAPIConnection
     from sqlalchemy.pool import ConnectionPoolEntry
 

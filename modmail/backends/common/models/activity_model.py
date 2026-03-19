@@ -5,10 +5,14 @@ This module provides a model for representing Discord activities.
 
 from __future__ import annotations
 
-from discord import app_commands
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, ConfigDict
 
 from modmail.enum import ActivityType
+
+if TYPE_CHECKING:
+    from discord import app_commands
 
 __all__ = ["ActivityModel"]
 
@@ -38,7 +42,7 @@ class ActivityModel(BaseModel):
             case ActivityType.playing:
                 return f"Playing {self.name}"
             case ActivityType.streaming:
-                return f"Streaming {self.name} ({self.url if self.url else 'No URL'})"
+                return f"Streaming {self.name} ({self.url or 'No URL'})"
             case ActivityType.listening:
                 return f"Listening to {self.name}"
             case ActivityType.watching:

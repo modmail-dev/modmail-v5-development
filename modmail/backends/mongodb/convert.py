@@ -7,18 +7,21 @@ and retrieval of ticket and user data in the MongoDB database backend.
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from beanie import Link, UpdateResponse
-from beanie.odm.queries.update import UpdateOne
 
-from ..common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
 from .models import (
     MongoDBTicketDMMessageModel,
     MongoDBTicketDocument,
     MongoDBTicketMessageDocument,
     MongoDBTicketUserDocument,
 )
+
+if TYPE_CHECKING:
+    from beanie.odm.queries.update import UpdateOne
+
+    from ..common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
 
 __all__ = [
     "get_or_create_ticket_user",
@@ -54,9 +57,9 @@ async def get_or_create_ticket_user(ticket_user: TicketUserModel) -> MongoDBTick
     """
     ticket_user_document = ticket_user_model_to_document(ticket_user)
     return cast(
-        MongoDBTicketUserDocument,
+        "MongoDBTicketUserDocument",
         await cast(
-            UpdateOne,
+            "UpdateOne",
             MongoDBTicketUserDocument.find_one(MongoDBTicketUserDocument.id == ticket_user.user_id).upsert(
                 {"$set": ticket_user_document.model_dump(exclude={"id"})},
                 on_insert=ticket_user_document,
@@ -86,19 +89,19 @@ async def ticket_model_to_document(ticket: TicketModel) -> MongoDBTicketDocument
     for recipient in ticket.recipients:
         if recipient.user_id not in ticket_users_cache:
             ticket_users_cache[recipient.user_id] = cast(
-                Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(recipient)
+                "Link[MongoDBTicketUserDocument]", await get_or_create_ticket_user(recipient)
             )
         recipients.append(ticket_users_cache[recipient.user_id])
 
     if ticket.created_by.user_id not in ticket_users_cache:
         ticket_users_cache[ticket.created_by.user_id] = cast(
-            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket.created_by)
+            "Link[MongoDBTicketUserDocument]", await get_or_create_ticket_user(ticket.created_by)
         )
     created_by = ticket_users_cache[ticket.created_by.user_id]
 
     if ticket.closed_by and ticket.closed_by.user_id not in ticket_users_cache:
         ticket_users_cache[ticket.closed_by.user_id] = cast(
-            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket.closed_by)
+            "Link[MongoDBTicketUserDocument]", await get_or_create_ticket_user(ticket.closed_by)
         )
     closed_by = ticket_users_cache[ticket.closed_by.user_id] if ticket.closed_by else None
 
@@ -140,7 +143,7 @@ async def ticket_dm_message_model_to_document(
     # Ensure the recipient user exists in DB
     if ticket_dm_message.recipient.user_id not in ticket_users_cache:
         ticket_users_cache[ticket_dm_message.recipient.user_id] = cast(
-            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket_dm_message.recipient)
+            "Link[MongoDBTicketUserDocument]", await get_or_create_ticket_user(ticket_dm_message.recipient)
         )
 
     return MongoDBTicketDMMessageModel(
@@ -162,27 +165,26 @@ async def ticket_message_model_to_document(ticket_message: TicketMessageModel) -
     """
     ticket_users_cache: dict[int, Link[MongoDBTicketUserDocument]] = {}
 
-    dm_messages: list[MongoDBTicketDMMessageModel] = []
-    for dm_message in ticket_message.dm_messages:
-        dm_messages.append(
-            await ticket_dm_message_model_to_document(dm_message, ticket_users_cache=ticket_users_cache),
-        )
+    dm_messages: list[MongoDBTicketDMMessageModel] = [
+        await ticket_dm_message_model_to_document(dm_message, ticket_users_cache=ticket_users_cache)
+        for dm_message in ticket_message.dm_messages
+    ]
 
     if ticket_message.author.user_id not in ticket_users_cache:
         ticket_users_cache[ticket_message.author.user_id] = cast(
-            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket_message.author)
+            "Link[MongoDBTicketUserDocument]", await get_or_create_ticket_user(ticket_message.author)
         )
     author = ticket_users_cache[ticket_message.author.user_id]
 
     if ticket_message.edited_by and ticket_message.edited_by.user_id not in ticket_users_cache:
         ticket_users_cache[ticket_message.edited_by.user_id] = cast(
-            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket_message.edited_by)
+            "Link[MongoDBTicketUserDocument]", await get_or_create_ticket_user(ticket_message.edited_by)
         )
     edited_by = ticket_message.edited_by and ticket_users_cache[ticket_message.edited_by.user_id]
 
     if ticket_message.deleted_by and ticket_message.deleted_by.user_id not in ticket_users_cache:
         ticket_users_cache[ticket_message.deleted_by.user_id] = cast(
-            Link[MongoDBTicketUserDocument], await get_or_create_ticket_user(ticket_message.deleted_by)
+            "Link[MongoDBTicketUserDocument]", await get_or_create_ticket_user(ticket_message.deleted_by)
         )
     deleted_by = ticket_message.deleted_by and ticket_users_cache[ticket_message.deleted_by.user_id]
 

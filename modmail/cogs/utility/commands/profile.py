@@ -216,7 +216,7 @@ async def make_profile_customize_view(
                     utils.int_to_colour_hex(colour) if colour is not None else None
                 )
 
-            tag = self.tag.value if self.tag.value else None
+            tag = self.tag.value or None
             if tag != profile.tag:
                 to_update["tag"] = tag
                 # Update the default value of the modal

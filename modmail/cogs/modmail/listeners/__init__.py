@@ -8,12 +8,14 @@ to a message.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .dm_receive import dm_receive
 from .ticket_channel_delete import ticket_channel_delete
 from .ticket_thread_delete import ticket_thread_delete
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 all_listeners: list[Callable[..., Any]] = [
     dm_receive,

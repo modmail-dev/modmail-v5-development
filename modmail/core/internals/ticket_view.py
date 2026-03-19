@@ -9,12 +9,11 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
+import operator
 from collections import defaultdict
-from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any
 
 import discord
-from discord.ext import commands
 
 from ... import CONFIG
 from ...backends.common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
@@ -24,6 +23,10 @@ from ..translator import _
 from .embed import EmbedProxy
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
+    from discord.ext import commands
+
     from ..bot import Bot
     from .staff_guild import StaffGuild
 
@@ -81,7 +84,7 @@ class TicketView:
             try:
                 channel = await self.staff_guild.guild.fetch_channel(self.model.channel_id)
             except (discord.NotFound, discord.HTTPException) as e:
-                raise NoTicketChannelError("Ticket channel %d not found.", self.model.channel_id) from e
+                raise NoTicketChannelError(f"Ticket channel {self.model.channel_id} not found.") from e
             if isinstance(channel, discord.TextChannel) or (
                 isinstance(channel, discord.Thread) and not channel.archived
             ):
@@ -196,7 +199,7 @@ class TicketView:
             )
             embed_proxies.append((recipient.name, embed))
 
-        embed_proxies.sort(key=lambda x: x[0])  # Sort by recipient name
+        embed_proxies.sort(key=operator.itemgetter(0))  # Sort by recipient name
         embeds = await asyncio.gather(*[
             embed.to_embed(self.bot.translator, CONFIG.default_locale) for _x, embed in embed_proxies
         ])

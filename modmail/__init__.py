@@ -86,8 +86,10 @@ def run_bot() -> NoReturn:
     modmail_text_lines += [""]
     modmail_text_lines += [f"Starting at {current_time_text}"]
     modmail_text_lines += [
-        f"Version: {__version__} | Python: {python_version} | "
-        f"Language{'s' if len(CONFIG.allowed_locales) != 1 else ''}: {enabled_locales}"
+        (
+            f"Version: {__version__} | Python: {python_version} | "
+            f"Language{'s' if len(CONFIG.allowed_locales) != 1 else ''}: {enabled_locales}"
+        )
     ]
     modmail_text_lines += [""]
     modmail_text_width = len(max(modmail_text_lines, key=len)) + 10

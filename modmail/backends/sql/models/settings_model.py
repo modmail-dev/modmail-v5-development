@@ -6,17 +6,13 @@ settings, including version information, category IDs, and activity status.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from modmail.enum import StatusType
 
+from .activity_model import SQLActivityTable
 from .base import SQLBase
-
-if TYPE_CHECKING:
-    from .activity_model import SQLActivityTable
 
 __all__ = ["SQLSettingsTable"]
 

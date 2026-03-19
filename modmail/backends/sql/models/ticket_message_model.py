@@ -7,7 +7,6 @@ the ticket user table in the database.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, ForeignKeyConstraint, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -15,10 +14,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from modmail.enum import TicketMessageType
 
 from .base import SQLBase
+from .ticket_dm_message_model import SQLTicketDMMessageTable
 from .ticket_user_model import SQLTicketUserTable
-
-if TYPE_CHECKING:
-    from .ticket_dm_message_model import SQLTicketDMMessageTable
 
 __all__ = ["SQLTicketMessageTable"]
 

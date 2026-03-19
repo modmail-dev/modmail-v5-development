@@ -7,8 +7,12 @@ users, including their ID and name.
 
 from __future__ import annotations
 
-import discord
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, ConfigDict
+
+if TYPE_CHECKING:
+    import discord
 
 __all__ = ["TicketUserModel"]
 

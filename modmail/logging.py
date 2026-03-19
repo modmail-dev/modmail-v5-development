@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import logging
 from logging.handlers import RotatingFileHandler
-from types import ModuleType
+from typing import TYPE_CHECKING
 
 from rich.logging import RichHandler
 from rich.text import Text
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 try:
     from . import CONFIG

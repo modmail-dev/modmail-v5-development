@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated
 
-import discord
-from discord.ext import commands
-
 if TYPE_CHECKING:
+    from discord import Interaction
+    from discord.ext import commands
+
     from ..bot import Bot
 
 __all__ = ["Str"]
@@ -34,7 +34,7 @@ class StrStripConverter:
         return value.strip()
 
     @classmethod
-    async def transform(cls, interaction: discord.Interaction, value: str) -> str:
+    async def transform(cls, interaction: Interaction, value: str) -> str:
         """Transform a string by stripping whitespace.
 
         Args:

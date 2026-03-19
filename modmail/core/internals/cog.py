@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
 import discord
@@ -21,6 +20,8 @@ from ..translator import _
 from .embed import EmbedProxy
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .. import Bot
     from .command import LazyHybridCommand
 
@@ -100,7 +101,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
 
         if isinstance(ctx, commands.Context):
             if TYPE_CHECKING:
-                ctx = cast(commands.Context[Bot], ctx)
+                ctx = cast("commands.Context[Bot]", ctx)
             # Only use user locale if ephemeral and has interaction
             if ctx.interaction is not None and kwargs.get("ephemeral"):
                 locale = ctx.interaction.locale
@@ -164,7 +165,7 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
             locale = CONFIG.default_locale
             if isinstance(ctx, commands.Context):
                 if TYPE_CHECKING:
-                    ctx = cast(commands.Context[Bot], ctx)
+                    ctx = cast("commands.Context[Bot]", ctx)
                 if ctx.interaction is not None:
                     locale = ctx.interaction.locale
 

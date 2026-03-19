@@ -86,10 +86,10 @@ class MongoDBTicketDocument(Document):
         await self.fetch_all_links()  # Make sure all links are fetched
 
         recipients = await asyncio.gather(*[
-            cast(MongoDBTicketUserDocument, recipient).get_model() for recipient in self.recipients
+            cast("MongoDBTicketUserDocument", recipient).get_model() for recipient in self.recipients
         ])
-        created_by = await cast(MongoDBTicketUserDocument, self.created_by).get_model()
-        closed_by = await cast(MongoDBTicketUserDocument, self.closed_by).get_model() if self.closed_by else None
+        created_by = await cast("MongoDBTicketUserDocument", self.created_by).get_model()
+        closed_by = await cast("MongoDBTicketUserDocument", self.closed_by).get_model() if self.closed_by else None
 
         return TicketModel(
             bot_id=self.bot_id,

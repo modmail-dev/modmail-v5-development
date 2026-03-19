@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import logging
 import weakref
-from collections.abc import Iterator
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from discord.ext import commands
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from discord.ext import commands
 
 __all__ = [
     "MultiKeyCollection",

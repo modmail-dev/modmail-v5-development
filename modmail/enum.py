@@ -7,9 +7,10 @@ application, including access levels, activity types, status types, and more.
 from __future__ import annotations
 
 import enum
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
-from discord import app_commands
+if TYPE_CHECKING:
+    from discord import app_commands
 
 
 class TicketMessageType(enum.Enum):
