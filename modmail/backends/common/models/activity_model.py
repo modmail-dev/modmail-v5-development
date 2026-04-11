@@ -1,7 +1,4 @@
-"""Defines the Pydantic model for Activity.
-
-This module provides a model for representing Discord activities.
-"""
+"""Common Pydantic model for a bot Discord activity."""
 
 from __future__ import annotations
 
@@ -18,26 +15,23 @@ __all__ = ["ActivityModel"]
 
 
 class ActivityModel(BaseModel):
-    """Represents a Discord activity.
+    """Common immutable model for a bot Discord activity.
 
-    Attributes:
-        type: The type of activity.
-        name: The activity name.
-        url: The URL for streaming activities. Defaults to None.
+    [`url`][] is only meaningful for the [`ActivityType.streaming`][] activity type and is not
+    validated for other types.
     """
 
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     type: ActivityType
+    """[ActivityType][]{ data-preview } controlling how the activity appears in Discord."""
     name: str
-    url: str | None = None  # URL for streaming activity; not enforced for other types
+    """Display name of the activity shown in the bot's status."""
+    url: str | None = None
+    """Stream URL (`None` if [`type`][] is not [`ActivityType.streaming`][])."""
 
     def __str__(self) -> str:
-        """Returns a string representation of the activity.
-
-        Returns:
-            A description of the activity.
-        """
+        """Return a human-readable description of the activity."""
         match self.type:
             case ActivityType.playing:
                 return f"Playing {self.name}"
@@ -53,11 +47,7 @@ class ActivityModel(BaseModel):
                 return f"Competing in {self.name}"
 
     def __locale_str__(self) -> app_commands.locale_str:
-        """Returns a localized string representation of the activity.
-
-        Returns:
-            The locale-specific string.
-        """
+        """Return the localized string representation of the activity via the Fluent translator."""
         from modmail.core import _
 
         return _(

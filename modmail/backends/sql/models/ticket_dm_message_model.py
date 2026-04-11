@@ -1,45 +1,49 @@
-"""Ticket Direct Message SQL Model.
-
-This module defines the SQLTicketDMMessageTable class, which represents
-the ticket direct message table in the database.
-"""
+"""SQLAlchemy model for the ticket DM message table."""
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import SQLBase
-from .ticket_message_model import SQLTicketMessageTable
+from .base import TABLE_OPTS, Snowflake, SQLBase
 from .ticket_user_model import SQLTicketUserTable
+
+if TYPE_CHECKING:
+    from .ticket_message_model import SQLTicketMessageTable  # noqa: TC004
 
 __all__ = ["SQLTicketDMMessageTable"]
 
 
 class SQLTicketDMMessageTable(SQLBase):
-    """SQL model representing a direct message in a ticket.
+    """SQL model for the ticket DM message table.
 
-    This model stores information about a direct message, including its ID,
-    the associated ticket message, the recipient user, and other metadata.
+    Each row records one DM delivery of a staff reply to a recipient.
 
-    Attributes:
-        message_id: The unique identifier of the direct message.
-        ticket_message_ref_id: The ID of the associated ticket message row.
-        ticket_message: The ticket message associated with this direct message.
-        recipient_id: The ID of the recipient user.
-        recipient: The recipient user of this direct message.
+    **Primary key:** [`message_id`][]
     """
 
     __tablename__ = "ticket_dm_message"
 
-    message_id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[Snowflake] = mapped_column(primary_key=True)
+    """Discord message ID in the recipient's DM channel."""
     ticket_message_ref_id: Mapped[int] = mapped_column(
         ForeignKey("ticket_message.id", ondelete="CASCADE", onupdate="CASCADE")
     )
-    ticket_message: Mapped[SQLTicketMessageTable] = relationship(back_populates="dm_messages", lazy="joined")
-    recipient_id: Mapped[int] = mapped_column(
+    """Row ID of the parent [SQLTicketMessageTable][]{ data-preview }
+    (distinct from [`message_id`][]).
+    """
+    ticket_message: Mapped[SQLTicketMessageTable] = relationship(back_populates="dm_messages", lazy="raise_on_sql")
+    """[SQLTicketMessageTable][]{ data-preview } this DM delivery belongs to."""
+    recipient_id: Mapped[Snowflake] = mapped_column(
         ForeignKey("ticket_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
     )
+    """Discord snowflake ID of the user who received the DM."""
     recipient: Mapped[SQLTicketUserTable] = relationship(lazy="joined")
+    """[SQLTicketUserTable][]{ data-preview } for the DM recipient."""
 
-    __table_args__ = (UniqueConstraint("message_id", "ticket_message_ref_id", name="uq_ticket_dm_message"),)
+    __table_args__ = (
+        UniqueConstraint("ticket_message_ref_id", "recipient_id", name="uq_ticket_dm_message"),
+        TABLE_OPTS,
+    )

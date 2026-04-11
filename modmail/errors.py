@@ -6,12 +6,20 @@ error handling and reporting within the Modmail application.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from discord.ext import commands
+
+if TYPE_CHECKING:
+    import datetime
 
 __all__ = [
     "BadPermissionsError",
+    "CacheNotReadyError",
     "DatabaseConnectionError",
     "DatabaseError",
+    "DatabaseOperationError",
+    "InstanceAlreadyRunningError",
     "ModmailError",
     "NoModmailCategoryError",
     "NoStaffGuildError",
@@ -39,11 +47,55 @@ class DatabaseError(ModmailError):
     """
 
 
+class CacheNotReadyError(DatabaseError):
+    """Exception raised when a cached property is accessed before the cache is populated.
+
+    Raised by [DBClient][modmail.backends.common.db_client.DBClient] when any cached
+    property or cache-dependent method is called before [`connect`][] has completed its
+    initial sync. Await [`wait_until_ready`][] if you need to block until the cache is
+    available.
+    """
+
+
 class DatabaseConnectionError(DatabaseError):
     """Exception for database connection errors.
 
     Raised when the application fails to establish a connection with the database.
     """
+
+
+class DatabaseOperationError(DatabaseError):
+    """Exception raised when a database read or write operation fails unexpectedly.
+
+    Raised by persistence operations when an unexpected database error occurs
+    that is not a connection or locking issue (e.g. a query failure, serialization
+    error, or unexpected driver exception).
+    """
+
+
+class InstanceAlreadyRunningError(DatabaseConnectionError):
+    """Exception raised when another instance of the bot is already running.
+
+    Raised during startup if the instance lock in the database is held by an active process.
+
+    Attributes:
+        hostname: The hostname of the running instance, or None if unknown.
+        pid: The process ID of the running instance, or None if unknown.
+        acquired_at: When the running instance acquired the lock, or None if unknown.
+    """
+
+    def __init__(self, hostname: str | None, pid: int | None, acquired_at: datetime.datetime | None) -> None:
+        """Initialize the error.
+
+        Args:
+            hostname: The hostname of the running instance.
+            pid: The process ID of the running instance.
+            acquired_at: When the running instance acquired the lock, or None if unknown.
+        """
+        self.hostname = hostname
+        self.pid = pid
+        self.acquired_at = acquired_at
+        super().__init__()
 
 
 class NoStaffGuildError(ModmailError):

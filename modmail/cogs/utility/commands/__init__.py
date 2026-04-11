@@ -15,7 +15,10 @@ if TYPE_CHECKING:
     from modmail.core import LazyHybridCommand
 
 __all__ = [
+    "about_command",
     "all_commands",
+    "profile_command",
+    "status_command",
 ]
 
 all_commands: list[LazyHybridCommand[Any]] = [

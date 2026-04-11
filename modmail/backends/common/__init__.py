@@ -1,13 +1,12 @@
-"""Provides a uniform interface between backend models.
+"""Common database backend abstractions and shared models.
 
-This module exports common abstractions and models for database backend implementations.
-
-Note:
-    Modules from this directory should not import from modmail.core.*
+Notes:
+    Modules from this directory should not import from ``modmail.core.*``
     to avoid circular import issues.
 """
 
 from __future__ import annotations
 
-from .client_base import *
+from .db_backend import *
+from .db_client import *
 from .models import *

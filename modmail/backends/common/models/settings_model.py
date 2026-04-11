@@ -1,7 +1,4 @@
-"""Provides the Settings model for managing bot settings.
-
-This module provides a Pydantic model representing various bot settings.
-"""
+"""Common Pydantic model for bot settings."""
 
 from __future__ import annotations
 
@@ -15,32 +12,33 @@ __all__ = ["SettingsModel"]
 
 
 class SettingsModel(BaseModel):
-    """Settings model for bot configuration.
+    """Common immutable model for bot settings.
 
-    Attributes:
-        bot_id: Bot ID.
-        last_ran_version: Last version that the bot was run on; None indicates first run.
-        last_ran_locale: Last locale used when running the bot.
-        last_slash_synced_version: Last version in which slash commands were synced.
-        last_slash_minimum_permission_int: Last minimum permission integer for slash commands.
-        main_category_or_forum_id: Main category or forum ID.
-        fallback_category_id: Fallback category ID.
-        log_channel_id: Log channel ID.
-        storage_channel_id: Storage channel ID.
-        status: The bot's status.
-        activity: The bot's activity.
+    All fields except [`bot_id`][] are optional. `None` means the value has
+    never been set (e.g. `last_ran_version=None` on first run).
     """
 
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     bot_id: int
-    last_ran_version: str | None = None  # The last version the bot was run on, None = first run
-    last_ran_locale: str | None = None  # The last locale the bot was run on
-    last_slash_synced_version: str | None = None  # The last version the slash commands were synced on
-    last_slash_minimum_permission_int: int | None = None  # The last minimum permission int for slash commands
+    """Discord application ID of the bot these settings belong to."""
+    last_ran_version: str | None = None
+    """Bot version string from the last startup, e.g. `"v1.2.3"` (`None` on first run)."""
+    last_ran_locale: str | None = None
+    """BCP-47 locale code active on the previous run, e.g. `"en"` (`None` on first run)."""
+    last_slash_synced_version: str | None = None
+    """Bot version when slash commands were last synced to Discord (`None` if never synced)."""
+    last_slash_minimum_permission_int: int | None = None
+    """Default member permission integer from the last slash-command sync (`None` if never synced)."""
     main_category_or_forum_id: int | None = None
+    """Discord category or forum channel ID where new ticket channels are created (`None` if unset)."""
     fallback_category_id: int | None = None
+    """Discord category ID used when the main category is full or unavailable (`None` if unset)."""
     log_channel_id: int | None = None
+    """Discord channel ID where closed-ticket summaries are posted (`None` if unset)."""
     storage_channel_id: int | None = None
+    """Discord channel ID used for internal file storage (`None` if unset)."""
     status: StatusType | None = None
+    """Bot presence status shown in Discord as a [StatusType][]{ data-preview } (`None` if unset)."""
     activity: ActivityModel | None = None
+    """Bot activity shown in Discord as an [ActivityModel][]{ data-preview } (`None` if unset)."""

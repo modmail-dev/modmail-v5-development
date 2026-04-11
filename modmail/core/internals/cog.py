@@ -255,7 +255,8 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         def check(m: discord.Message) -> bool:
             return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
 
-        # Similar to bot.wait_for(), but we're doing creating the wait_for manually here to allow future.cancel()
+        # Similar to bot.wait_for(), but we're creating the wait_for manually here
+        # to allow future.cancel()
         future = self.bot.loop.create_future()
         try:
             listeners: list[Any] = self.bot._listeners["message"]  # pyright: ignore [reportUnknownVariableType, reportUnknownMemberType, reportPrivateUsage]
@@ -297,7 +298,8 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
             **kwargs: Additional keyword arguments to pass to the send method.
 
         Returns:
-            A tuple of the prompt message and the index of the chosen choice if the user chose one, else None.
+            A tuple of the prompt message and the index of the chosen choice if the user chose one,
+            else None.
         """
         choices_labels = [
             await self.translate(ctx, choice) if isinstance(choice, app_commands.locale_str) else choice
@@ -399,7 +401,8 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         await view.wait()
         return prompt_message, view.result
 
-    # TODO: Add a before invoke hook (here or in bot) that checks if using ctx.send() and warns to use cog.send().
+    # TODO: Add a before invoke hook (here or in bot) that checks if using ctx.send()
+    # and warns to use cog.send().
 
 
 def create_cog(

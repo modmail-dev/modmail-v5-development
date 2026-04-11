@@ -1,55 +1,48 @@
-"""SQL database migration handling using Alembic.
+"""SQL migration runner using Alembic.
 
-This module handles the migration of the SQL database using Alembic.
+Exposes [`do_migration`][] for programmatic `upgrade to head` from the running
+bot.  To auto-generate a new version file from the project root:
 
-To create a new migration, use the following command:
-    alembic -c modmail/backends/sql/migrations/alembic.ini revision --autogenerate -m "migration_name"
-
-Note:
-    Must set database_type to sql and supply connection uri in configs first.
-    Then manually edit the migration file to add the necessary changes.
+    uv run alembic revision --autogenerate -m "description"
 """
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
-__all__ = ["do_migration", "rollback_migration"]
+from alembic import command
+from alembic.config import Config
+
+__all__ = ["do_migration"]
+
+_MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
-def do_migration(uri: str) -> None:
-    """Perform SQL database migration using Alembic.
+def _upgrade_head(uri: str) -> None:
+    """Run `alembic upgrade head` synchronously.
 
-    Args:
-        uri: The SQL database connection URI.
-    """
-    from alembic import command
-    from alembic.config import Config
-
-    # Determine the absolute path to the .ini file.
-    ini_location = Path(__file__).absolute().parent / "migrations" / "alembic.ini"
-
-    # Create an Alembic configuration instance.
-    alembic_cfg = Config(file_=ini_location)
-
-    # Set the database URI for Alembic. The URI should include the database name,
-    # but if the URI requires dynamic construction with db_name, adjust here.
-    alembic_cfg.set_main_option("sqlalchemy.url", uri)
-
-    # Run the migrations: upgrade to the latest revision.
-    command.upgrade(alembic_cfg, "head")
-
-
-def rollback_migration(uri: str) -> None:
-    """Rollback all SQL database migration done by Alembic.
+    Intended to be called from a worker thread (via [`asyncio.to_thread`][]) that
+    has no running event loop, so `env.py`'s [`asyncio.run`][] call can start a
+    fresh one.
 
     Args:
         uri: The SQL database connection URI.
     """
-    from alembic import command
-    from alembic.config import Config
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", uri)
+    command.upgrade(cfg, "head")
 
-    ini_location = Path(__file__).absolute().parent / "migrations" / "alembic.ini"
-    alembic_cfg = Config(file_=ini_location)
-    alembic_cfg.set_main_option("sqlalchemy.url", uri)
-    command.downgrade(alembic_cfg, "base")
+
+async def do_migration(uri: str) -> None:
+    """Run all pending Alembic migrations against the given database URI.
+
+    Delegates to a worker thread so the event loop is not blocked, and so
+    that `env.py`'s internal [`asyncio.run`][] call gets a loop-free thread in
+    which to start its own event loop.
+
+    Args:
+        uri: The SQL database connection URI.
+    """
+    await asyncio.to_thread(_upgrade_head, uri)

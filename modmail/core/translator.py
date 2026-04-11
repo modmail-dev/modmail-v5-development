@@ -42,7 +42,8 @@ locale_loader = FluentResourceLoader(str(Path(__file__).absolute().parent.parent
 
 all_l10n: dict[str, FluentLocalization] = {}
 for allowed_locale in CONFIG.allowed_locales:
-    # Load the FluentLocalization for each locale, use en as fallback if the locale is missing translations
+    # Load the FluentLocalization for each locale, use en as fallback
+    # if the locale is missing translations
     if allowed_locale != "en":
         all_l10n[allowed_locale] = FluentLocalization([allowed_locale, "en"], ["main.ftl"], locale_loader)
     else:
@@ -78,7 +79,8 @@ class Translator(app_commands.Translator):
             l10n = all_l10n[locale_name]
         else:
             if "-" in locale_name:
-                # If the locale is in the form of xx-YY (e.g., en-US), check if the base locale (xx) is supported
+                # If the locale is in the form of xx-YY (e.g., en-US),
+                # check if the base locale (xx) is supported
                 locale_name = locale_name.split("-", maxsplit=1)[0]
                 if locale_name in all_l10n:
                     l10n = all_l10n[locale_name]

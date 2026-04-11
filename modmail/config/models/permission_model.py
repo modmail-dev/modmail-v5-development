@@ -44,7 +44,7 @@ class PermissionConfig(BaseModel):
 
         Args:
             v: Dictionary mapping command names to their required access levels,
-               which can be either RequiredAccessLevel enum values or strings.
+                which can be either RequiredAccessLevel enum values or strings.
 
         Returns:
             A dictionary mapping sanitized command names to RequiredAccessLevel enum values.

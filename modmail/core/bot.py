@@ -16,13 +16,14 @@ from discord.ext import commands
 from packaging.version import Version
 
 from .. import CONFIG, __version__, utils
+from ..backends import create_db_client
 from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
-from ..errors import DatabaseError, NoStaffGuildError
+from ..errors import DatabaseError, InstanceAlreadyRunningError, NoStaffGuildError
 from .internals import StaffGuild
 from .translator import Translator, _
 
 if TYPE_CHECKING:
-    from ..backends.common import ActivityModel, DBClientBase, ProfileModel
+    from ..backends.common import ActivityModel, DBClient, ProfileModel
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ class Bot(commands.Bot):
 
         # Disable "voice will NOT be supported" warning.
         discord.VoiceClient.warn_nacl = False
+        discord.VoiceClient.warn_dave = False
 
         super().__init__(*args, **kwargs)
 
@@ -99,15 +101,7 @@ class Bot(commands.Bot):
         self.version: str = __version__
         logger.debug("[bold green]Bot version: %s", self.version, extra={"markup": True, "highlighter": None})
 
-        if CONFIG.database_type == "sql":
-            from ..backends.sql import SQLClient
-
-            self.database_client: DBClientBase = SQLClient(CONFIG)
-
-        elif CONFIG.database_type == "mongodb":
-            from ..backends.mongodb import MongoDBClient
-
-            self.database_client: DBClientBase = MongoDBClient(CONFIG)
+        self.database_client: DBClient = create_db_client(CONFIG)
 
         self.add_check(self._bot_can_run_check)
         self.add_check(self._permission_check)
@@ -174,17 +168,17 @@ class Bot(commands.Bot):
         else:
             if CONFIG.bot.use_slash_commands:
                 # Sync slash commands if last synced in a different version.
-                if self.database_client.settings_model.last_slash_synced_version != self.version:
+                if self.database_client.settings.last_slash_synced_version != self.version:
                     slash_synced = True
                     await self._sync_slash_commands()
             else:
                 # Un-sync slash commands if last synced is not None (it's un-synced when None).
-                if self.database_client.settings_model.last_slash_synced_version is not None:
+                if self.database_client.settings.last_slash_synced_version is not None:
                     slash_synced = True
                     await self._unsync_slash_commands()
 
         # Update the last ran locale in the database.
-        last_ran_locale = self.database_client.settings_model.last_ran_locale
+        last_ran_locale = self.database_client.settings.last_ran_locale
         if last_ran_locale != CONFIG.default_locale:
             if last_ran_locale is not None:  # The locale was changed, need to resync the commands.
                 logger.info("Locale changed from %s to %s", last_ran_locale, CONFIG.default_locale)
@@ -194,7 +188,7 @@ class Bot(commands.Bot):
 
             await self.database_client.update_settings(last_ran_locale=CONFIG.default_locale)
 
-        last_slash_minimum_permission_int = self.database_client.settings_model.last_slash_minimum_permission_int
+        last_slash_minimum_permission_int = self.database_client.settings.last_slash_minimum_permission_int
         if last_slash_minimum_permission_int != CONFIG.permission.slash_minimum_permission_int:
             if last_slash_minimum_permission_int is not None:
                 logger.info(
@@ -210,7 +204,7 @@ class Bot(commands.Bot):
             )
 
         # Update the last ran version in the database.
-        last_ran_version = self.database_client.settings_model.last_ran_version
+        last_ran_version = self.database_client.settings.last_ran_version
         if last_ran_version != self.version:
             await self.database_client.update_settings(last_ran_version=self.version)
             logger.debug("Updated last ran version to %s", self.version)
@@ -260,7 +254,7 @@ class Bot(commands.Bot):
 
         Raises:
             SystemExit: With appropriate exit codes based on execution result.
-        """  # noqa: DOC502
+        """
         self._exit_status = 0
 
         async def bot_runner() -> None:
@@ -295,8 +289,27 @@ class Bot(commands.Bot):
         except KeyboardInterrupt:
             logger.debug("Keyboard interrupt.")
             logger.info("[yellow]Shutting down Modmail.", extra={"markup": True})
+        except InstanceAlreadyRunningError as e:
+            if e.hostname and e.pid:
+                logger.critical(
+                    "[bold red]Another instance of this bot is already running "
+                    "(host: %s, PID: %d, started: %s). "
+                    "Stop the other instance before starting a new one. "
+                    "If it crashed, wait 30 seconds for the lock to expire automatically.",
+                    e.hostname,
+                    e.pid,
+                    e.acquired_at,
+                    extra={"markup": True},
+                )
+            else:
+                logger.critical(
+                    "[bold red]Another instance of this bot is already running. "
+                    "Stop it before starting a new one.",
+                    extra={"markup": True},
+                )
+            self._exit_status = 1
         except DatabaseError:
-            logger.critical("[bold red]Failed to connect to the database.", extra={"markup": True})
+            logger.critical("[bold red]Failed to connect to the database.", extra={"markup": True}, exc_info=True)
             self._exit_status = 1
         except discord.PrivilegedIntentsRequired:
             logger.debug("Login failure.", exc_info=True)
@@ -384,7 +397,8 @@ class Bot(commands.Bot):
         logger.debug("Connected to Discord.")
         await self.wait_until_ready()
 
-        # Check if the staff guild still exists, in case the bot was removed from the server between connects.
+        # Check if the staff guild still exists,
+        # in case the bot was removed from the server between connects.
         if not self.staff_guild.exists:
             await self._not_in_guild_close()
             return
@@ -412,8 +426,8 @@ class Bot(commands.Bot):
         dc_status: discord.Status | None = None
 
         # db_activity and db_status should be the same as activity and status if provided
-        db_activity = self.database_client.settings_model.activity
-        db_status = self.database_client.settings_model.status
+        db_activity = self.database_client.settings.activity
+        db_status = self.database_client.settings.status
 
         if db_activity:
             if db_activity.type == ActivityType.custom:

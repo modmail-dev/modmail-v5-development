@@ -15,6 +15,10 @@ alembic==1.18.4
     # via modmail-py
 annotated-types==0.7.0
     # via pydantic
+asyncmy==0.2.11
+    # via sqlalchemy
+asyncpg==0.31.0
+    # via sqlalchemy
 attrs==25.4.0
     # via
     #   aiohttp
@@ -90,14 +94,16 @@ pygments==2.19.2
 pymongo==4.15.5
     # via beanie
 python-dotenv==1.2.2
-    # via pydantic-settings
+    # via
+    #   modmail-py
+    #   pydantic-settings
 pytz==2025.2
     # via fluent-runtime
 pyyaml==6.0.3
     # via modmail-py
 rich==14.3.3
     # via modmail-py
-sqlalchemy==2.0.48
+sqlalchemy==2.0.49
     # via
     #   alembic
     #   modmail-py

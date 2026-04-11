@@ -1,9 +1,4 @@
-"""Defines the TicketUserModel class for representing a user in a ticket.
-
-This module contains the TicketUserModel class, which represents a user
-involved in a ticket. This model is used to store information about
-users, including their ID and name.
-"""
+"""Common Pydantic model for a user referenced in a ticket."""
 
 from __future__ import annotations
 
@@ -18,28 +13,24 @@ __all__ = ["TicketUserModel"]
 
 
 class TicketUserModel(BaseModel):
-    """Represents a user involved in a ticket.
-
-    This model contains information about the user, including their ID and name.
-
-    Attributes:
-        user_id: The unique identifier of the user.
-        user_name: The name of the user.
-    """
+    """Common immutable model for a user referenced in a ticket."""
 
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     user_id: int
+    """Discord snowflake ID of the user."""
     user_name: str
+    """Display name captured at ticket time."""
+    # TODO: Add user's avatar
 
     @classmethod
     def from_user(cls, user: discord.User | discord.Member | discord.ClientUser) -> TicketUserModel:
-        """Creates a TicketUserModel from a discord user or member.
+        """Construct a [TicketUserModel][]{ data-preview } from a discord.py user or member object.
 
         Args:
-            user: The discord user or member.
+            user: The Discord user or member.
 
         Returns:
-            A TicketUserModel instance.
+            TicketUserModel: Constructed from the user's Discord ID and display name.
         """
         return cls(user_id=user.id, user_name=user.name)

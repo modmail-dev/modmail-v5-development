@@ -154,7 +154,7 @@ class StaffGuild:
         if not self.exists:  # Check if the guild exists
             raise NoStaffGuildError(f"Staff guild with ID {self.guild_id} not found.")
 
-        category_or_forum_id = self.bot.database_client.settings_model.main_category_or_forum_id
+        category_or_forum_id = self.bot.database_client.settings.main_category_or_forum_id
         if category_or_forum_id is None:
             raise NoModmailCategoryError("No modmail category or forum found in the database.")
 
@@ -183,7 +183,7 @@ class StaffGuild:
         if not self.exists:
             return None
 
-        channel_id = self.bot.database_client.settings_model.log_channel_id
+        channel_id = self.bot.database_client.settings.log_channel_id
         if channel_id is None:
             return None
 
@@ -227,7 +227,7 @@ class StaffGuild:
         if not self.exists:
             return None
 
-        channel_id = self.bot.database_client.settings_model.storage_channel_id
+        channel_id = self.bot.database_client.settings.storage_channel_id
         if channel_id is None:
             return None
 
@@ -447,7 +447,8 @@ class StaffGuild:
             return None
 
         if isinstance(channel, discord.Thread) and channel.archived:
-            # TODO: if possible: un-archive if archived due to inactivity, otherwise close the ticket if manual
+            # TODO: if possible: un-archive if archived due to inactivity,
+            # otherwise close the ticket if manual
             # There's many places in the code that unarchives the thread, when implementing the TO/DO
             # need to change those as well.
             logger.info("Ticket channel %s is an archived thread, unarchiving it.", ticket_model.channel_id)
@@ -629,7 +630,8 @@ class StaffGuild:
         else:
             # New forum threads require a starter message
             if starter_message is not None and starter_message.content.strip():
-                # Remove excessive whitespace and limit to 150 characters for thread starter message preview
+                # Remove excessive whitespace and limit to 150 characters
+                # for thread starter message preview
                 ticket_summary = re.sub(r"\s+", " ", starter_message.content.strip())
                 wrap_limit = 150
                 if len(ticket_summary) > wrap_limit:

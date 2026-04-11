@@ -1,69 +1,65 @@
-"""Document model for tickets in MongoDB.
-
-This module defines the MongoDBTicketDocument class,
- which represents a ticket document in the MongoDB database.
-"""
+"""Beanie document model for tickets in MongoDB."""
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime
 from typing import cast
 
+import pymongo.errors
 from beanie import Document, Link
 from pymongo import ASCENDING, IndexModel
 
 from modmail.backends.common import TicketModel
 from modmail.enum import TicketStatus
+from modmail.errors import DatabaseOperationError, TicketCreationError
 
+from .base import BSON_ENCODERS, UTCTimestamp
 from .ticket_user_model import MongoDBTicketUserDocument
 
 __all__ = ["MongoDBTicketDocument"]
 
 
 class MongoDBTicketDocument(Document):
-    """Represents a MongoDB ticket document.
+    """Beanie document for a ticket.
 
-    This document stores information about tickets in the bot system.
-
-    Attributes:
-        bot_id: The unique identifier of the bot.
-        key: The unique key for the ticket.
-        recipients: List of users involved in the ticket.
-        channel_id: The ID of the channel associated with the ticket.
-        created_at: The timestamp when the ticket was created.
-        created_by: The user who created the ticket.
-        status: The current status of the ticket (open, closed, etc.).
-        closed_by: The user who closed the ticket (if applicable).
-        closed_at: The timestamp when the ticket was closed (if applicable).
-        log_channel_message_id: The ID of the thread info message when sent to log channel.
-        title: An optional title for the ticket.
-        nsfw: A boolean indicating if the ticket is NSFW (not safe for work).
+    Two unique indexes are maintained: ([`bot_id`][], [`key`][]) for key-based lookup
+    and ([`bot_id`][], [`channel_id`][]) to enforce one ticket per Discord channel.
+    Recipients and user references are stored as Beanie `Link` fields.
     """
 
     bot_id: int
+    """Discord application ID of the bot that owns this ticket."""
     key: str
-
+    """Random 12-character alphanumeric ticket identifier."""
     recipients: list[Link[MongoDBTicketUserDocument]]
+    """Non-staff users who are parties to this ticket."""
     channel_id: int
-
-    created_at: datetime
+    """Discord channel or forum-thread ID where staff interact."""
+    created_at: UTCTimestamp
+    """UTC-aware timestamp when the ticket was opened."""
     created_by: Link[MongoDBTicketUserDocument]
-
-    closed_at: datetime | None = None
+    """[MongoDBTicketUserDocument][]{ data-preview } who initiated the ticket."""
+    closed_at: UTCTimestamp | None = None
+    """UTC-aware timestamp when closed (`None` if [`closed_by`][] is unset)."""
     closed_by: Link[MongoDBTicketUserDocument] | None = None
-
+    """[MongoDBTicketUserDocument][]{ data-preview } who closed the ticket
+    (`None` if [`closed_at`][] is unset).
+    """
     log_channel_message_id: int | None = None
-
+    """Summary message ID posted to the log channel on closure (`None` if not yet posted)."""
     status: TicketStatus
+    """Current lifecycle state as a [TicketStatus][]{ data-preview }."""
     title: str | None = None
+    """Human-readable title for the ticket (`None` if unset)."""
     nsfw: bool = False
+    """Whether the ticket channel is marked as age-restricted in Discord."""
 
     class Settings:
-        """Settings for the MongoDB ticket document."""
+        """Settings for MongoDB ticket collection."""
 
         name = "Ticket"
+        keep_nulls = False
         validate_on_save = True
+        bson_encoders = BSON_ENCODERS
         indexes = [
             IndexModel(
                 [("bot_id", ASCENDING), ("key", ASCENDING)],
@@ -77,19 +73,32 @@ class MongoDBTicketDocument(Document):
             ),
         ]
 
-    async def get_model(self) -> TicketModel:
-        """Converts the MongoDBTicketDocument to a TicketModel.
+    def to_model(self) -> TicketModel:
+        """Convert this document to a common [TicketModel][]{ data-preview }.
+
+        All `Link` fields must already be resolved (i.e. the document must have
+        been fetched with `fetch_links=True`).
 
         Returns:
-            The converted TicketModel.
-        """
-        await self.fetch_all_links()  # Make sure all links are fetched
+            TicketModel: The converted common ticket model.
 
-        recipients = await asyncio.gather(*[
-            cast("MongoDBTicketUserDocument", recipient).get_model() for recipient in self.recipients
-        ])
-        created_by = await cast("MongoDBTicketUserDocument", self.created_by).get_model()
-        closed_by = await cast("MongoDBTicketUserDocument", self.closed_by).get_model() if self.closed_by else None
+        Raises:
+            RuntimeError: If any linked user field has not been resolved.
+        """
+        if any(isinstance(cast("object", r), Link) for r in self.recipients):
+            raise RuntimeError("recipients links not resolved; fetch with fetch_links=True")
+        if isinstance(cast("object", self.created_by), Link):
+            raise RuntimeError("created_by link not resolved; fetch with fetch_links=True")
+        if isinstance(cast("object", self.closed_by), Link):
+            raise RuntimeError("closed_by link not resolved; fetch with fetch_links=True")
+
+        recipients = [cast("MongoDBTicketUserDocument", cast("object", r)).to_model() for r in self.recipients]
+        created_by = cast("MongoDBTicketUserDocument", cast("object", self.created_by)).to_model()
+        closed_by = (
+            cast("MongoDBTicketUserDocument", cast("object", self.closed_by)).to_model()
+            if self.closed_by
+            else None
+        )
 
         return TicketModel(
             bot_id=self.bot_id,
@@ -105,3 +114,51 @@ class MongoDBTicketDocument(Document):
             title=self.title,
             nsfw=self.nsfw,
         )
+
+    @classmethod
+    async def put_model(cls, model: TicketModel) -> MongoDBTicketDocument:
+        """Convert a [TicketModel][]{ data-preview } to a document and insert it into MongoDB.
+
+        Args:
+            model: The ticket model to persist.
+
+        Returns:
+            MongoDBTicketDocument: The inserted document.
+
+        Raises:
+            TicketCreationError: If a ticket with the same key already exists.
+            DatabaseOperationError: If an unexpected database error occurs.
+        """
+        user_docs = await MongoDBTicketUserDocument.put_many(
+            *model.recipients,
+            model.created_by,
+            *([model.closed_by] if model.closed_by else []),
+        )
+        resolved: dict[int, Link[MongoDBTicketUserDocument]] = {
+            doc.id: cast("Link[MongoDBTicketUserDocument]", cast("object", doc)) for doc in user_docs
+        }
+
+        doc = cls(
+            bot_id=model.bot_id,
+            key=model.key,
+            recipients=[resolved[r.user_id] for r in model.recipients],
+            channel_id=model.channel_id,
+            created_at=model.created_at,
+            created_by=resolved[model.created_by.user_id],
+            closed_at=model.closed_at,
+            closed_by=resolved[model.closed_by.user_id] if model.closed_by else None,
+            log_channel_message_id=model.log_channel_message_id,
+            status=model.status,
+            title=model.title,
+            nsfw=model.nsfw,
+        )
+        try:
+            await doc.insert()
+        except pymongo.errors.DuplicateKeyError as exc:
+            key_pattern = set((exc.details or {}).get("keyPattern", {}).keys())
+            if key_pattern == {"bot_id", "key"}:
+                raise TicketCreationError("A ticket with this key already exists") from exc
+            raise DatabaseOperationError("Failed to persist ticket") from exc
+        except pymongo.errors.PyMongoError as exc:
+            raise DatabaseOperationError("Failed to persist ticket") from exc
+        return doc

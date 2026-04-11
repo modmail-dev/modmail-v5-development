@@ -1,15 +1,8 @@
-"""Pydantic model for ticket messages.
-
-This module defines the TicketMessageModel class, which represents a message in a
-ticket. It includes attributes such as the author, content, and metadata like
-creation and deletion timestamps.
-"""
+"""Common Pydantic model for a ticket message."""
 
 from __future__ import annotations
 
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from modmail.enum import TicketMessageType
 
@@ -20,40 +13,35 @@ __all__ = ["TicketMessageModel"]
 
 
 class TicketMessageModel(BaseModel):
-    """Represents a message in a ticket.
+    """Common immutable model for a message in a ticket.
 
-    This model stores information about messages in a ticket, including the
-    author, content, and metadata such as creation and deletion timestamps.
-
-    Attributes:
-        bot_id: The unique identifier of the bot.
-        ticket_key: The unique key for the ticket.
-        message_id: The ID of the message in the ticket channel.
-        dm_messages: List of direct messages associated with this ticket message.
-        author: The author of the message (user).
-        content: The content of the message.
-        created_at: The timestamp when the message was created.
-        edited_at: The timestamp when the message was last edited (if applicable).
-        edited_by: The user who last edited the message (if applicable).
-        deleted_at: The timestamp when the message was deleted (if applicable).
-        deleted_by: The user who deleted the message (if applicable).
-        type: The type of the message (e.g., normal, system).
+    Since a ticket can have multiple recipients, DM delivery records are
+    stored in [`dm_messages`][], one per recipient.
     """
 
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     bot_id: int
+    """Discord application ID of the bot that owns this message."""
     ticket_key: str
-
-    message_id: int  # in the ticket channel
+    """Key of the parent ticket."""
+    message_id: int
+    """Discord message ID in the staff-side ticket channel."""
     dm_messages: list[TicketDMMessageModel]
-
+    """[TicketDMMessageModel][]{ data-preview } delivery records for this message, one per recipient."""
     author: TicketUserModel
+    """[TicketUserModel][]{ data-preview } who sent the message."""
     content: str
-    created_at: datetime
-    edited_at: datetime | None = None
+    """Raw text content of the message."""
+    created_at: AwareDatetime
+    """UTC-aware timestamp when the message was sent."""
+    edited_at: AwareDatetime | None = None
+    """UTC-aware timestamp of the most recent edit (`None` if [`edited_by`][] is unset)."""
     edited_by: TicketUserModel | None = None
-    deleted_at: datetime | None = None
+    """[TicketUserModel][]{ data-preview } who made the edit (`None` if [`edited_at`][] is unset)."""
+    deleted_at: AwareDatetime | None = None
+    """UTC-aware timestamp when the message was deleted (`None` if [`deleted_by`][] is unset)."""
     deleted_by: TicketUserModel | None = None
-
+    """[TicketUserModel][]{ data-preview } who deleted the message (`None` if not deleted)."""
     type: TicketMessageType
+    """Message type as a [TicketMessageType][]{ data-preview }."""

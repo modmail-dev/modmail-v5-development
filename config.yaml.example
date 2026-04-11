@@ -88,12 +88,19 @@ database_type: "mongodb"
 
 # Configurations for the SQL database type. Only required if database_type is sql.
 sql_config:
-  # Required: The SQL connection URI, supported SQL databases are:
-  #   * SQLite
-  # Example for SQLite: "sqlite+aiosqlite:///modmail.db"
-  # Example for PostgreSQL (does not work yet): "postgresql+asyncpg://user:password@localhost/modmail"
-  # For SQLite, in-memory database is not supported, you must use a file.
-  uri: "sqlite+aiosqlite:///modmail.db"
+  # Required: The SQL connection URI.
+  # The async driver suffix is injected automatically, so you may omit it.
+  # Supported dialects and example URIs:
+  #   SQLite (local file, no server needed):
+  #     "sqlite:///modmail.db"
+  #   PostgreSQL:
+  #     "postgresql://user:password@localhost/modmail"
+  #   MySQL:
+  #     "mysql://user:password@localhost/modmail"
+  #   MariaDB:
+  #     "mariadb://user:password@localhost/modmail"
+  # Note: SQLite in-memory databases are not supported; you must use a file.
+  uri: "sqlite:///modmail.db"
 
 # Configurations for the MongoDB database type. Only required if database_type is mongodb.
 mongodb_config:

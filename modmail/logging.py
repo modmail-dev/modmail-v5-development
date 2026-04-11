@@ -89,6 +89,13 @@ def setup_logging() -> None:
     except ImportError:
         pass
 
+    try:
+        import uvloop
+
+        tracebacks_suppress.append(uvloop)
+    except ImportError:
+        pass
+
     handler = RichHandler(
         show_level=True,
         rich_tracebacks=True,

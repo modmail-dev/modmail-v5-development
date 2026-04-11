@@ -1,99 +1,154 @@
-"""SQLAlchemy model for ticket users.
-
-This module defines the SQLTicketUserTable class, which represents
-the ticket user table in the database.
-"""
+"""SQLAlchemy model for the ticket table."""
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime
+import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, PrimaryKeyConstraint, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from modmail.backends.common import TicketModel
 from modmail.enum import TicketStatus
 
-from .base import SQLBase
+from .base import TABLE_OPTS, Snowflake, SQLBase
 from .ticket_recipient_model import SQLTicketRecipientTable
 from .ticket_user_model import SQLTicketUserTable
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = ["SQLTicketTable"]
 
 
 class SQLTicketTable(SQLBase):
-    """SQL model representing a ticket.
+    """SQL model for the ticket table.
 
-    This model stores information about a ticket, including its ID, key,
-    participants, channel ID, creation time, status, and other metadata.
+    A unique constraint on ([`bot_id`][], [`channel_id`][]) enforces one ticket per Discord channel.
+    Recipients are stored in a separate [SQLTicketRecipientTable][]{ data-preview } table.
 
-    Attributes:
-        bot_id: The unique identifier of the bot.
-        key: The unique key for the ticket.
-        recipients: List of users involved in the ticket.
-        channel_id: The ID of the channel associated with the ticket.
-        created_at: The timestamp when the ticket was created.
-        created_by: The user who created the ticket.
-        status: The current status of the ticket (open, closed, etc.).
-        closed_by: The user who closed the ticket (if applicable).
-        closed_at: The timestamp when the ticket was closed (if applicable).
-        log_channel_message_id: The ID of the thread info message when sent to log channel.
-        title: An optional title for the ticket.
-        nsfw: A boolean indicating if the ticket is NSFW (not safe for work).
+    **Primary keys:** [`bot_id`][], [`key`][]
     """
 
     __tablename__ = "ticket"
 
-    bot_id: Mapped[int] = mapped_column(primary_key=True)
-    key: Mapped[str] = mapped_column(String(12), primary_key=True)
+    bot_id: Mapped[Snowflake]
+    """Discord application ID of the bot that owns this ticket."""
+    key: Mapped[str] = mapped_column(String(12))
+    """Random 12-character alphanumeric ticket identifier."""
 
     recipients: Mapped[list[SQLTicketRecipientTable]] = relationship(
         cascade="all, delete-orphan", passive_deletes=True, lazy="selectin"
     )
-    channel_id: Mapped[int]
+    """Non-staff users who are parties to this ticket, as
+    [SQLTicketRecipientTable][]{ data-preview } rows.
+    """
+    channel_id: Mapped[Snowflake]
+    """Discord channel or forum-thread ID where staff interact."""
 
-    created_at: Mapped[datetime]
-    created_by_id: Mapped[int] = mapped_column(
+    created_at: Mapped[datetime.datetime]
+    """UTC-aware timestamp when the ticket was opened."""
+    created_by_id: Mapped[Snowflake] = mapped_column(
         ForeignKey("ticket_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
     )
+    """Discord snowflake ID of the user who opened the ticket."""
     created_by: Mapped[SQLTicketUserTable] = relationship(foreign_keys=[created_by_id], lazy="joined")
+    """[SQLTicketUserTable][]{ data-preview } who opened the ticket."""
 
-    closed_at: Mapped[datetime | None]
-    closed_by_id: Mapped[int | None] = mapped_column(
+    closed_at: Mapped[datetime.datetime | None]
+    """UTC-aware timestamp when the ticket was closed (`None` if [`closed_by`][] is unset)."""
+    closed_by_id: Mapped[Snowflake | None] = mapped_column(
         ForeignKey("ticket_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
     )
+    """Discord snowflake ID of the user who closed the ticket (`None` if [`closed_at`][] is unset)."""
     closed_by: Mapped[SQLTicketUserTable | None] = relationship(foreign_keys=[closed_by_id], lazy="joined")
+    """[SQLTicketUserTable][]{ data-preview } who closed the ticket
+    (`None` if [`closed_at`][] is unset).
+    """
 
-    log_channel_message_id: Mapped[int | None]
+    log_channel_message_id: Mapped[Snowflake | None]
+    """Summary message ID posted to the log channel on closure (`None` if not yet posted)."""
 
     status: Mapped[TicketStatus]
-    title: Mapped[str | None]
+    """Current lifecycle state as a [TicketStatus][]{ data-preview }."""
+    title: Mapped[str | None] = mapped_column(String(1024))
+    """Human-readable title for the ticket (`None` if unset)."""
     nsfw: Mapped[bool] = mapped_column(default=False)
+    """Whether the ticket channel is marked as age-restricted in Discord."""
 
-    __table_args__ = (UniqueConstraint("bot_id", "channel_id", name="uq_ticket_channel"),)
+    __table_args__ = (
+        PrimaryKeyConstraint("bot_id", "key"),
+        UniqueConstraint("bot_id", "channel_id", name="uq_ticket_channel"),
+        TABLE_OPTS,
+    )
 
-    async def get_model(self) -> TicketModel:
-        """Get the ticket model associated with this ticket.
+    def to_model(self) -> TicketModel:
+        """Convert this row to a [TicketModel][]{ data-preview }.
 
         Returns:
-            The converted TicketModel.
+            TicketModel: The converted common ticket model.
         """
-        recipients = await asyncio.gather(*[recipient.get_model() for recipient in self.recipients])
-        created_by = await self.created_by.get_model()
-        closed_by = await self.closed_by.get_model() if self.closed_by else None
-
         return TicketModel(
             bot_id=self.bot_id,
             key=self.key,
-            recipients=recipients,
+            recipients=[r.to_model() for r in self.recipients],
             channel_id=self.channel_id,
             created_at=self.created_at,
-            created_by=created_by,
+            created_by=self.created_by.to_model(),
             status=self.status,
-            closed_by=closed_by,
+            closed_by=self.closed_by.to_model() if self.closed_by else None,
             closed_at=self.closed_at,
             log_channel_message_id=self.log_channel_message_id,
             title=self.title,
             nsfw=self.nsfw,
+        )
+
+    @classmethod
+    async def put_model(cls, model: TicketModel, session: AsyncSession) -> None:
+        """Insert a new ticket and its recipient records within the provided session.
+
+        Note:
+            Must be called inside an active `session.begin()` block. The caller is
+            responsible for committing or rolling back the transaction.
+
+        Args:
+            model: The ticket to persist.
+            session: An open [AsyncSession][] with an active transaction.
+
+        Raises:
+            RuntimeError: If called outside an active `session.begin()` block.
+            sqlalchemy.exc.SQLAlchemyError: If an unexpected database error occurs.
+        """
+        if not session.in_transaction():
+            raise RuntimeError("put_model must be called inside an active session.begin() block")
+
+        await SQLTicketUserTable.put_many(
+            model.created_by,
+            *model.recipients,
+            *([model.closed_by] if model.closed_by else []),
+            session=session,
+        )
+
+        session.add(
+            cls(
+                bot_id=model.bot_id,
+                key=model.key,
+                channel_id=model.channel_id,
+                created_at=model.created_at,
+                created_by_id=model.created_by.user_id,
+                closed_at=model.closed_at,
+                closed_by_id=model.closed_by.user_id if model.closed_by else None,
+                log_channel_message_id=model.log_channel_message_id,
+                status=model.status,
+                title=model.title,
+                nsfw=model.nsfw,
+                recipients=[
+                    SQLTicketRecipientTable(
+                        bot_id=model.bot_id,
+                        ticket_key=model.key,
+                        user_id=recipient.user_id,
+                    )
+                    for recipient in model.recipients
+                ],
+            )
         )

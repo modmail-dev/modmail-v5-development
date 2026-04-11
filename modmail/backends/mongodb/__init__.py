@@ -1,13 +1,14 @@
-"""Provides MongoDB related classes and functions.
+"""MongoDB database backend package.
 
-This package contains MongoDB client implementation and related utilities for
-database operations.
+Exposes MongoDBBackend, the Beanie ODM implementation of DBBackend.
+
+Notes:
+    Modules from this directory should not import from ``modmail.core.*``
+    to avoid circular import issues.
 """
 
 from __future__ import annotations
 
-from .client import MongoDBClient
+from .backend import MongoDBBackend
 
-__all__ = [
-    "MongoDBClient",
-]
+__all__ = ["MongoDBBackend"]

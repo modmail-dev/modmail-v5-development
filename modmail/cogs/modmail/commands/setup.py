@@ -149,7 +149,8 @@ async def do_setup(cog: Modmail, ctx: commands.Context[Bot]) -> None:
     if response == 0:  # Using a new category/forum
         logger.info("Creating a new %s for Modmail", setup_type)
 
-        # Gives the bot the minimum permissions required to function properly, and hide from everyone else.
+        # Gives the bot the minimum permissions required to function properly,
+        # and hide from everyone else.
         overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
             ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
             me_user_or_role: cog.bot.staff_guild.MIN_PERMISSIONS_OVERWRITE,
@@ -328,7 +329,8 @@ async def do_setup(cog: Modmail, ctx: commands.Context[Bot]) -> None:
                 reason=await cog.translate(ctx, _("ftl-cmd-setup-log-channel-create-reason")),
             )
         except discord.HTTPException as e:
-            # something went wrong, there should be no exception here, but catching just in case of cache issues
+            # something went wrong, there should be no exception here,
+            # but catching just in case of cache issues
             if e.code == 30047:  # Maximum number pinned threads in this channel reached (1).  # noqa: PLR2004
                 logger.error(
                     "Could not pin the log channel thread in forum %s "

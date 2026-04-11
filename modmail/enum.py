@@ -1,7 +1,6 @@
-"""Contains enumeration classes used throughout the application.
+"""Enumeration types used throughout Modmail.
 
-This module defines various enumeration types that are used across the Modmail
-application, including access levels, activity types, status types, and more.
+Defines access levels, ticket states, activity types, and other shared enums.
 """
 
 from __future__ import annotations
@@ -14,10 +13,14 @@ if TYPE_CHECKING:
 
 
 class TicketMessageType(enum.Enum):
-    """The type of the ticket message.
+    """The type of a ticket message.
 
-    Represents the different types of messages that can be sent in a ticket,
-    including reply messages, DM messages, and internal messages.
+    Attributes:
+        reply: A staff reply sent to the user's DM.
+        dm: A message received from the user.
+        internal: An internal staff-only note.
+        close: A closure message sent when the ticket is closed via command.
+        sclose: A silent closure — no message is sent to the user.
     """
 
     reply = "reply"
@@ -30,8 +33,10 @@ class TicketMessageType(enum.Enum):
 class TicketStatus(enum.Enum):
     """Status of a ticket.
 
-    Represents the different states a ticket can be in, such as open, closed,
-    archived, or deleted.
+    Attributes:
+        open: The ticket is currently open.
+        closed_by_command: The ticket was closed via a command.
+        closed_by_deletion: The ticket was closed because its channel was deleted.
     """
 
     open = "open"
@@ -39,19 +44,25 @@ class TicketStatus(enum.Enum):
     closed_by_deletion = "closed_by_deletion"
 
     def is_open(self) -> bool:
-        """Check if the ticket status represents an open ticket.
+        """Check whether this status represents an open ticket.
 
         Returns:
-            True if the ticket is open, False otherwise.
+            True: if the status is `open`.
+            False: if the ticket is closed.
         """
         return self == TicketStatus.open
 
 
 class AccessLevel(enum.IntEnum):
-    """Permission access levels assignable to a profile.
+    """Permission access level assignable to a profile.
 
-    These levels represent the hierarchy of permissions that can be assigned
-    to user profiles within the system, from lowest (everyone) to highest (admin).
+    Ordered from lowest to highest privilege.
+
+    Attributes:
+        everyone: All users; no special permissions required.
+        staff: Basic staff access.
+        manager: Elevated staff access with management capabilities.
+        admin: Full administrative access.
     """
 
     everyone = 1
@@ -60,10 +71,10 @@ class AccessLevel(enum.IntEnum):
     admin = 4
 
     def __locale_str__(self) -> app_commands.locale_str:
-        """Get the localized string representation of the access level.
+        """Get the localized display name for this access level.
 
         Returns:
-            The localized string for this access level.
+            locale_str: the localized name.
         """
         # noinspection PyProtectedMember
         from .core import _
@@ -80,10 +91,17 @@ class AccessLevel(enum.IntEnum):
 
 
 class RequiredAccessLevel(enum.IntEnum):
-    """Required access level to run a command.
+    """Minimum access level required to run a command.
 
-    Differs from AccessLevel since owner cannot be assigned to a profile but
-    is used as a requirement level for certain commands.
+    Extends [`AccessLevel`][] with an additional `owner` tier that cannot be
+    assigned to a profile but can be required by certain commands.
+
+    Attributes:
+        everyone: No restriction; any user may run the command.
+        staff: Requires staff access or higher.
+        manager: Requires manager access or higher.
+        admin: Requires admin access or higher.
+        owner: Restricted to the bot owner only.
     """
 
     everyone = 1
@@ -93,10 +111,10 @@ class RequiredAccessLevel(enum.IntEnum):
     owner = 5
 
     def __locale_str__(self) -> app_commands.locale_str:
-        """Get the localized string representation of the required access level.
+        """Get the localized display name for this required access level.
 
         Returns:
-            The localized string for this required access level.
+            locale_str: the localized name.
         """
         # noinspection PyProtectedMember
         from .core import _
@@ -117,7 +135,9 @@ class RequiredAccessLevel(enum.IntEnum):
 class ProfileType(enum.Enum):
     """Type of profile owner.
 
-    Indicates whether a profile belongs to an individual user or a role.
+    Attributes:
+        user: The profile belongs to an individual Discord user.
+        role: The profile belongs to a Discord role.
     """
 
     user = "user"
@@ -127,7 +147,9 @@ class ProfileType(enum.Enum):
 class PermissionOverrideValue(enum.Enum):
     """Value of a permission override.
 
-    Represents whether a permission is explicitly allowed or denied.
+    Attributes:
+        allow: The permission is explicitly granted.
+        deny: The permission is explicitly denied.
     """
 
     allow = "allow"
@@ -136,13 +158,13 @@ class PermissionOverrideValue(enum.Enum):
 
 # Technically, this is not an enum, but storing in this file for consistency.
 class ProfileKey(NamedTuple):
-    """A key for identifying a profile in a dictionary.
+    """A composite key identifying a profile.
 
-    Used internally to reference profiles by their ID and type.
+    Used internally to look up profiles by ID and type.
 
     Attributes:
         profile_id: The unique identifier of the profile.
-        profile_type: The type of profile (user or role).
+        profile_type: Whether the profile belongs to a user or a role.
     """
 
     profile_id: int
@@ -150,10 +172,15 @@ class ProfileKey(NamedTuple):
 
 
 class ActivityType(enum.Enum):
-    """Types of activities a user or bot can display on Discord.
+    """Discord presence activity type.
 
-    Corresponds to the different status activities that can be shown
-    in a Discord presence (Playing, Streaming, Listening to, etc.).
+    Attributes:
+        playing: Playing a game.
+        streaming: Streaming on a platform.
+        listening: Listening to something.
+        watching: Watching something.
+        custom: A custom status message.
+        competing: Competing in an event.
     """
 
     playing = "playing"
@@ -164,13 +191,10 @@ class ActivityType(enum.Enum):
     competing = "competing"
 
     def __locale_str__(self) -> app_commands.locale_str:
-        """Get a localized string representation of the activity prefix.
-
-        Returns a locale_str representing the Discord prefix for the activity type
-        (e.g., "playing", "listening to", etc.)
+        """Get the localized Discord activity prefix for this type.
 
         Returns:
-            The localized activity prefix.
+            locale_str: the localized prefix (e.g. "Playing", "Listening to").
         """
         # noinspection PyProtectedMember
         from .core import _
@@ -191,9 +215,13 @@ class ActivityType(enum.Enum):
 
 
 class StatusType(enum.Enum):
-    """Types of online status on Discord.
+    """Discord online status.
 
-    Represents the different visibility states a user can have on Discord.
+    Attributes:
+        online: Shown as online (green).
+        idle: Shown as idle (yellow).
+        dnd: Do Not Disturb — shown as red.
+        offline: Shown as offline/invisible (grey).
     """
 
     online = "online"
@@ -202,10 +230,10 @@ class StatusType(enum.Enum):
     offline = "offline"
 
     def __str__(self) -> str:
-        """Get a string representation of the status.
+        """Get the human-readable name of this status.
 
         Returns:
-            The human-readable status name.
+            str: the display name (e.g. `"Do Not Disturb (dnd)"`).
         """
         match self:
             case StatusType.online:
@@ -218,10 +246,10 @@ class StatusType(enum.Enum):
                 return "Offline"
 
     def __locale_str__(self) -> app_commands.locale_str:
-        """Get a localized string representation of the status.
+        """Get the localized display name for this status.
 
         Returns:
-            The localized name of the status.
+            locale_str: the localized status name.
         """
         # noinspection PyProtectedMember
         from .core import _

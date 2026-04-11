@@ -1,27 +1,27 @@
-"""Provides migration functionality for the MongoDB database.
-
-This module handles database migrations using the Beanie migration system,
-allowing for schema evolution and data transformations between versions.
-"""
+"""MongoDB migration runner using the Beanie migration system."""
 
 from __future__ import annotations
 
 import asyncio
+import logging
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 __all__ = ["do_migration"]
 
 
-def do_migration(uri: str, db_name: str) -> None:
-    """Performs the migration of the MongoDB database.
+def _run_migration(uri: str, db_name: str) -> None:
+    """Run all pending Beanie migrations synchronously.
 
-    Executes all pending migrations for the specified database using Beanie's
-    migration system. Migrations are loaded from the local migrations directory.
+    Intended to be called from a worker process (via [`do_migration`][]) that
+    has no running event loop, so [`asyncio.run`][] can start a fresh one.
 
     Args:
-        uri: The MongoDB connection URI string.
-        db_name: The name of the database to migrate.
+        uri: The MongoDB connection URI.
+        db_name: Name of the database to migrate.
     """
+    logging.basicConfig(level=logging.INFO, format="%(levelname)-8s %(name)s: %(message)s")
+
     # Keep this import here to avoid logging issues.
     from beanie.executors import migrate
     from beanie.migrations.models import RunningDirections
@@ -37,3 +37,19 @@ def do_migration(uri: str, db_name: str) -> None:
         use_transaction=True,
     )
     asyncio.run(migrate.run_migrate(settings))
+
+
+async def do_migration(uri: str, db_name: str) -> None:
+    """Run all pending Beanie migrations against the given database.
+
+    Delegates to a worker process so the event loop is not blocked, and so
+    that the internal [`asyncio.run`][] call gets a loop-free process in
+    which to start its own event loop.
+
+    Args:
+        uri: The MongoDB connection URI.
+        db_name: Name of the database to migrate.
+    """
+    loop = asyncio.get_running_loop()
+    with ProcessPoolExecutor() as pool:
+        await loop.run_in_executor(pool, _run_migration, uri, db_name)

@@ -35,6 +35,7 @@ dependencies = [
     "rich~=14.3.0",
     "pydantic~=2.12.0",
     "pydantic-settings~=2.13.0",
+    "python-dotenv~=1.2.2",
     "packaging",  # For version parsing, should be installed by default but just in case
     "pyyaml~=6.0.3",
     "fluent-runtime~=0.4.0",
@@ -46,28 +47,44 @@ speed = [
     "uvloop>=0.22.1; platform_system != \"Windows\"",  # NOTE: uvloop 0.22.1 has known issues on Python 3.14 (debug mode crash), fallback to asyncio is handled in bot.py
 ]
 sqlite = [
-    "sqlalchemy[asyncio,aiosqlite]~=2.0.48",
-    "alembic~=1.18.0"
+    "sqlalchemy[asyncio,aiosqlite]~=2.0.49",
+    "alembic~=1.18.0",
+]
+postgresql = [
+    "sqlalchemy[asyncio,postgresql-asyncpg]~=2.0.49",
+    "alembic~=1.18.0",
+]
+mysql = [
+    "sqlalchemy[asyncio,asyncmy]~=2.0.49",
+    "alembic~=1.18.0",
+]
+mariadb = [
+    "sqlalchemy[asyncio,asyncmy]~=2.0.49",
+    "alembic~=1.18.0",
 ]
 mongodb = [
-    "beanie[zstd]~=2.0.0",
+    "beanie[zstd]~=2.0.1",
 ]
 
 [dependency-groups]
 dev = [
-    "ruff==0.15.6",  # When updating ruff version, update it in .pre-commit-config.yaml too
+    "ruff==0.15.9",  # When updating ruff version, update it in .pre-commit-config.yaml too
     "pyright==1.1.408",
-    "isort==8.0.1",  # When updating isort version, update it in .pre-commit-config.yaml too
     "pre-commit<5,>=4.5.1",  # When updating pre-commit version, update it in the tox "lint" section too
     "python-dotenv>=1.2.2",  # TODO: .env isn't supported/tested yet
     # When updating pytest plugins, update it below in the pytest "required_plugins" section too
     # TODO: unit testing and tox are currently disabled
-    "tox<5,>=4.50.0",  # When updating tox version, update it below in the [tool.tox] section too
+    "tox<5,>=4.52.0",  # When updating tox version, update it below in the [tool.tox] section too
     "pytest==9.0.2",
     "pytest-mock==3.15.1",
     "pytest-asyncio==1.3.0",
-    "pytest-cov==7.0.0",
+    "pytest-cov==7.1.0",
     "pip",  # For IDE detecting installed packages
+]
+docs = [
+    "zensical==0.0.31",
+    "mkdocstrings[python]==1.0.3",
+    "griffe-pydantic==1.3.1",
 ]
 debug = [
     "jishaku~=2.6.3",
@@ -98,20 +115,14 @@ explicit = true
 module-name = "modmail"
 module-root = ""  # default expects src/, we have everything in the root
 
-[tool.isort]
-profile = "black"  # ruff uses black profile
-line_length = 115
-combine_as_imports = true
-combine_star = true
-
 [tool.ruff]
 line-length = 115
 preview = true
-namespace-packages = ["modmail", "modmail/cogs", "modmail/backends"]
+namespace-packages = ["modmail", "modmail/cogs"]
 
 [tool.ruff.format]
 docstring-code-format = true
-docstring-code-line-length = 80
+docstring-code-line-length = 105
 line-ending = "lf"
 
 [tool.ruff.lint]
@@ -161,6 +172,7 @@ ignore = [
     "S101",    # Use of assert detected
     "SIM102",  # Single `if` instead of nested `if`
     "SIM108",  # Use of ternary instead of `if`-`else`
+    "DOC502",  # Raised exception is not explicitly raised (preview)
     "PLC0415", # `import` should be at the top-level of a file (preview)
     "PLR0915", # Too many statements in function
     "PLR0913", # Too many arguments
@@ -194,12 +206,18 @@ runtime-evaluated-base-classes = [
 "modmail/backends/sql/migrations/versions/*" = ["D415", "UP"]  # D415:  First line should end with a period, question mark, or exclamation point
 "modmail/cogs/*/commands/*.py" = ["TC002"]  # discord and commands are always kept as runtime imports in cogs
 "modmail/cogs/*/listeners/*.py" = ["TC002"]  # discord and commands are always kept as runtime imports in cogs
+"scripts/*.py" = ["S404", "S603", "S607"]  # Scripts intentionally use subprocess to invoke CLI tools
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]
+combine-as-imports = true
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 105
+max-line-length = 115
 
 [tool.ruff.lint.pylint]
 allow-dunder-method-names = ["__locale_str__"]
@@ -213,6 +231,7 @@ exclude = [
     "**/.venv",
     "**/.env",
     "dist",
+    "docs",
     "tests",  # Tests are disabled for now
 ]
 reportUnnecessaryTypeIgnoreComment = "warning"
@@ -230,7 +249,7 @@ venv = ".venv"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "module"
 asyncio_default_test_loop_scope = "module"
-addopts = "--cov=modmail --cov=modmail/cogs --cov=modmail/backends --cov-report html"
+addopts = "--cov=modmail --cov=modmail/cogs --cov-report html"
 testpaths = ["tests"]
 required_plugins = ["pytest-mock==3.15.1", "pytest-asyncio==1.3.0", "pytest-cov==7.0.0"]
 filterwarnings = [
@@ -252,7 +271,7 @@ exclude_also = [  # Exclude files from coverage report, regex patterns
 ]
 
 [tool.tox]
-requires = ["tox<5,>=4.32.0"]
+requires = ["tox<5,>=4.52.0"]
 envlist = ["3.14", "lint", "type"]
 
 [tool.tox.env_run_base]
@@ -272,3 +291,19 @@ groups = ["all"]
 commands = [
     ["pyright", { replace = "posargs", extend = true}],
 ]
+
+[tool.alembic]
+script_location = "modmail/backends/sql/migrations"
+prepend_sys_path = ["."]
+
+[[tool.alembic.post_write_hooks]]
+name = "ruff-format"
+type = "module"
+module = "ruff"
+options = "format REVISION_SCRIPT_FILENAME"
+
+[[tool.alembic.post_write_hooks]]
+name = "ruff-check"
+type = "module"
+module = "ruff"
+options = "check --fix REVISION_SCRIPT_FILENAME"

@@ -1,23 +1,14 @@
-"""SQL database backend implementation.
+"""SQL database backend package.
 
-This module provides SQL database backend functionality for the Modmail bot,
-including the client for database interaction.
+Exposes SQLBackend, the SQLAlchemy + aiosqlite implementation of DBBackend.
+
+Notes:
+    Modules from this directory should not import from ``modmail.core.*``
+    to avoid circular import issues.
 """
 
 from __future__ import annotations
 
-from .client import SQLClient
+from .backend import SQLBackend
 
-try:
-    import aiosqlite  # ensure aiosqlite is installed for static analysis tools
-
-    del aiosqlite
-except ImportError:
-    raise ImportError(
-        "The 'aiosqlite' package is required for the SQL backend. "
-        "Please install it with 'pip install sqlalchemy[asyncio,aiosqlite]'."
-    ) from None
-
-__all__ = [
-    "SQLClient",
-]
+__all__ = ["SQLBackend"]

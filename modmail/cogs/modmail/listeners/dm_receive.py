@@ -52,7 +52,8 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
         prefix = await cog.bot.get_prefix(message)
         if isinstance(prefix, str):
             prefix = [prefix]
-        # Check if the message contains a prefix, if not, send a message to the user that Modmail is not configured
+        # Check if the message contains a prefix, if not, send a message to the user
+        # that Modmail is not configured
         if not any(message.content.startswith(p) for p in prefix):
             logger.warning("Received a DM from %s, but Modmail is not configured.", message.author)
             logger.warning("Message content: %s", message.content)

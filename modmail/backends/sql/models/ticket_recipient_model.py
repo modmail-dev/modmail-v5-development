@@ -1,18 +1,13 @@
-"""Represents a recipient in a ticket.
-
-This module defines the SQLTicketRecipientTable class, which represents
-the ticket recipient table in the database. It includes information about
-the recipient user, the associated ticket, and other metadata.
-"""
+"""SQLAlchemy model for the ticket recipient table."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, ForeignKeyConstraint, String, UniqueConstraint
+from sqlalchemy import ForeignKey, ForeignKeyConstraint, PrimaryKeyConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import SQLBase
+from .base import TABLE_OPTS, Snowflake, SQLBase
 from .ticket_user_model import SQLTicketUserTable
 
 if TYPE_CHECKING:
@@ -22,31 +17,28 @@ __all__ = ["SQLTicketRecipientTable"]
 
 
 class SQLTicketRecipientTable(SQLBase):
-    """SQL model representing a recipient in a ticket.
+    """SQL model for the ticket recipient table.
 
-    This model stores information about a recipient user in a ticket,
-    including their user ID, the associated ticket, and other metadata.
+    Links a ticket to its non-staff participant users, one row per recipient.
 
-    Attributes:
-        id: A surrogate key for this table.
-        bot_id: The unique identifier of the bot.
-        ticket_key: The unique key for the ticket.
-        user_id: The ID of the recipient user.
-        user: The recipient user associated with this ticket.
+    **Primary keys:** [`bot_id`][], [`ticket_key`][], [`user_id`][]
     """
 
     __tablename__ = "ticket_recipient"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    bot_id: Mapped[int]
+    bot_id: Mapped[Snowflake]
+    """Discord application ID of the bot that owns this record."""
     ticket_key: Mapped[str] = mapped_column(String(12))
-    user_id: Mapped[int] = mapped_column(
+    """Key of the parent ticket."""
+    user_id: Mapped[Snowflake] = mapped_column(
         ForeignKey("ticket_user.user_id", ondelete="RESTRICT", onupdate="CASCADE")
     )
+    """Discord snowflake ID of the recipient."""
     user: Mapped[SQLTicketUserTable] = relationship(lazy="joined")
+    """[SQLTicketUserTable][]{ data-preview } for this recipient."""
 
     __table_args__ = (
-        UniqueConstraint("bot_id", "ticket_key", "user_id", name="uq_ticket_recipient"),
+        PrimaryKeyConstraint("bot_id", "ticket_key", "user_id"),
         ForeignKeyConstraint(
             ["bot_id", "ticket_key"],
             ["ticket.bot_id", "ticket.key"],
@@ -54,12 +46,13 @@ class SQLTicketRecipientTable(SQLBase):
             ondelete="CASCADE",
             onupdate="CASCADE",
         ),
+        TABLE_OPTS,
     )
 
-    async def get_model(self) -> TicketUserModel:
-        """Get the ticket user model associated with this recipient.
+    def to_model(self) -> TicketUserModel:
+        """Convert this row to a [TicketUserModel][]{ data-preview } via the joined user row.
 
         Returns:
-            TicketUserModel: The ticket user model.
+            TicketUserModel: The converted common user model.
         """
-        return await self.user.get_model()
+        return self.user.to_model()

@@ -9,7 +9,12 @@
 
 1. Copy `config.yaml.example` and rename it to `config.yaml`, then edit it with your settings
 2. Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then run `uv sync --locked --compile-bytecode --no-default-groups --extra speed --extra DBTYPE` to install the dependencies
-   - Replace `DBTYPE` with `mongodb` or `sqlite`, only these two are supported at the moment
+   - Replace `DBTYPE` with one of the supported database backends:
+     - `mongodb` — MongoDB
+     - `sqlite` — SQLite (local file, no server needed)
+     - `postgresql` — PostgreSQL *(untested)*
+     - `mysql` — MySQL *(untested)*
+     - `mariadb` — MariaDB *(untested)*
 3. Start the bot with `uv run python start.py`
 
 Please note that the database structure may change at any time, and database migrations between v5 alpha development versions are not available.

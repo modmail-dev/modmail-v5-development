@@ -53,8 +53,8 @@ async def status_command(cog: Utility, ctx: commands.Context[Bot], *, status: St
         status: The status or activity to set. Use "clear" to remove.
     """
     if not status:  # No status provided, show the current status
-        current_status = cog.bot.database_client.settings_model.status
-        current_activity = cog.bot.database_client.settings_model.activity
+        current_status = cog.bot.database_client.settings.status
+        current_activity = cog.bot.database_client.settings.activity
 
         if current_status is not None and current_activity is not None:
             current_status_message = await cog.translate(
