@@ -99,7 +99,7 @@ class EmbedProxy:
         else:
             self._timestamp = timestamp
 
-    async def to_embed(self, translator: Translator, locale: discord.Locale | str) -> discord.Embed:
+    def to_embed(self, translator: Translator, locale: discord.Locale | str) -> discord.Embed:
         """Convert the EmbedProxy to a discord.Embed object with translated strings.
 
         Args:
@@ -110,7 +110,7 @@ class EmbedProxy:
             The translated Discord embed object.
         """
 
-        async def translate(string: AnyStr | None) -> str | None:
+        def translate(string: AnyStr | None) -> str | None:
             """Translate a string using the translator.
 
             Args:
@@ -122,36 +122,34 @@ class EmbedProxy:
             if string is None:
                 return None
             if isinstance(string, locale_str):
-                translated_string = await translator.translate(string, locale)
+                translated_string = translator.translate_sync(string, locale)
                 if translated_string is not None:
                     return translated_string
                 return string.message
             return string
 
         embed = discord.Embed(
-            title=await translate(self.title),
-            url=await translate(self.url),
-            description=await translate(self.description),
+            title=translate(self.title),
+            url=translate(self.url),
+            description=translate(self.description),
             color=self.color,
             colour=self.colour,
             timestamp=self.timestamp,
         )
         if self.footer_text is not None or self.footer_icon_url is not None:
-            embed.set_footer(
-                text=await translate(self.footer_text), icon_url=await translate(self.footer_icon_url)
-            )
+            embed.set_footer(text=translate(self.footer_text), icon_url=translate(self.footer_icon_url))
         if self.image_url is not None:
-            embed.set_image(url=await translate(self.image_url))
+            embed.set_image(url=translate(self.image_url))
         if self.thumbnail_url is not None:
-            embed.set_thumbnail(url=await translate(self.thumbnail_url))
+            embed.set_thumbnail(url=translate(self.thumbnail_url))
         if self.author_name is not None:
             embed.set_author(
-                name=await translate(self.author_name),
-                url=await translate(self.author_url),
-                icon_url=await translate(self.author_icon_url),
+                name=translate(self.author_name),
+                url=translate(self.author_url),
+                icon_url=translate(self.author_icon_url),
             )
         for name, value, inline in self.fields:
-            embed.add_field(name=await translate(name), value=await translate(value), inline=inline)
+            embed.add_field(name=translate(name), value=translate(value), inline=inline)
         return embed
 
     @property

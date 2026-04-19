@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
-from modmail import CONFIG
 from modmail.core import _
 from modmail.errors import ModmailError
 
@@ -58,9 +57,7 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
             logger.warning("Received a DM from %s, but Modmail is not configured.", message.author)
             logger.warning("Message content: %s", message.content)
 
-            msg = await cog.bot.translator.translate(
-                _("ftl-msg-dm-received-not-configured", guild_name=staff_guild.guild.name), CONFIG.default_locale
-            )
+            msg = cog.bot.translate(_("ftl-msg-dm-received-not-configured", guild_name=staff_guild.guild.name))
             try:
                 await message.reply(msg)
                 if error_emoji:
@@ -89,9 +86,9 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
         if failed_recipients:
             # Send a message to ticket channel about the failed recipients
             failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
-            await cog.send(
-                await ticket.get_channel(),
-                _("ftl-dm-received-failed-recipients", recipients=failed_recipients_str),
+            await cog.bot.send_message(
+                _("ftl-msg-dm-received-failed-recipients", recipients=failed_recipients_str),
+                channel=await ticket.get_channel(),
             )
 
     except Exception:

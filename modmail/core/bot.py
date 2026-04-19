@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 import discord
 from discord.ext import commands
@@ -20,6 +20,8 @@ from ..backends import create_db_client
 from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
 from ..errors import DatabaseError, InstanceAlreadyRunningError, NoStaffGuildError
 from .internals import StaffGuild
+from .internals.context import Context
+from .internals.embed import EmbedProxy
 from .translator import Translator, _
 
 if TYPE_CHECKING:
@@ -111,6 +113,20 @@ class Bot(commands.Bot):
         """Wait until the bot is ready and the database is connected."""
         await super().wait_until_ready()
         await self._bot_initialized_event.wait()
+
+    async def get_context(self, message: discord.Message | discord.Interaction, *, cls: Any = Context) -> Context:
+        """Return a [`Context`][modmail.core.internals.context.Context] for the given message.
+
+        Args:
+            message: The message to get the context for.
+            cls: The context class to use.
+
+        Returns:
+            A [`Context`][modmail.core.internals.context.Context] instance.
+        """
+        if cls is not Context:
+            logger.warning("Custom context classes are not supported and may cause issues.")
+        return await super().get_context(message, cls=cls)
 
     async def setup_hook(self) -> None:
         """Initialize bot configuration and synchronize commands.
@@ -505,18 +521,16 @@ class Bot(commands.Bot):
 
         # Ignore command check failure errors
         if isinstance(exception, commands.CheckFailure):
-            if getattr(context, "_perm_check_reason", "").startswith("fail:"):  # The permission check failed
+            if getattr(context, "perm_check_reason", "").startswith("fail:"):  # The permission check failed
                 # noinspection PyUnresolvedReferences
                 logger.debug(
                     "%s is not allowed to run `%s` (%s)",
                     context.author,
                     context.command,
-                    context._perm_check_reason,  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
+                    getattr(context, "perm_check_reason", ""),
                 )
                 if context.interaction is not None:  # tell the user they don't have permission
-                    message = await self.translator.translate(
-                        _("ftl-msg-permission-denied"), context.interaction.locale
-                    )
+                    message = self.translate(_("ftl-msg-permission-denied"), ctx_or_locale=context)
                     await context.reply(message, ephemeral=True)
             return
 
@@ -534,18 +548,13 @@ class Bot(commands.Bot):
             )
 
             # Tell the user there was an error
+            message = self.translate(_("ftl-msg-command-invoke-error"), ctx_or_locale=context)
             if context.interaction is not None:
-                message = await self.translator.translate(
-                    _("ftl-msg-command-invoke-error"), context.interaction.locale
-                )
                 await context.reply(message, ephemeral=True)
             else:
                 permissions = context.channel.permissions_for(context.me)  # pyright: ignore [reportArgumentType]
                 if permissions.read_messages and permissions.send_messages:
-                    message = await self.translator.translate(
-                        _("ftl-msg-command-invoke-error"), CONFIG.default_locale
-                    )
-                    await context.reply(message, ephemeral=True)
+                    await context.reply(message)
             return
 
         await super().on_command_error(context, exception)
@@ -568,7 +577,7 @@ class Bot(commands.Bot):
         await super().on_error(event_method, *args, **kwargs)
 
     @staticmethod
-    async def on_before_invoke(ctx: commands.Context[Bot]) -> None:
+    async def on_before_invoke(ctx: Context) -> None:
         """Perform pre-command execution logging.
 
         Logs command execution attempts with permission check results if available.
@@ -576,13 +585,13 @@ class Bot(commands.Bot):
         Args:
             ctx: The context in which the command is being executed.
         """
-        if hasattr(ctx, "_perm_check_reason"):  # This gets injected by the permission check
+        if hasattr(ctx, "perm_check_reason"):  # This gets injected by the permission check
             # noinspection PyProtectedMember
             logger.debug(
                 "%s is running `%s`, allowed reason (%s)",
                 ctx.author,
                 ctx.command,
-                ctx._perm_check_reason,  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
+                ctx.perm_check_reason,
             )
         else:
             logger.debug("User %s is running the %s command.", ctx.author, ctx.command)
@@ -649,7 +658,7 @@ class Bot(commands.Bot):
             all_profiles.insert(0, user_profile)
         return all_profiles
 
-    async def _permission_check(self, ctx: commands.Context[Bot]) -> bool:
+    async def _permission_check(self, ctx: Context) -> bool:
         """Verify if a user has permission to execute a command.
 
         Args:
@@ -659,7 +668,7 @@ class Bot(commands.Bot):
             True if the user has permission to execute the command, False otherwise.
         """
         if ctx.author.bot:  # Ignore commands invoked by bots
-            ctx._perm_check_reason = "fail: bot"  # pyright: ignore [reportAttributeAccessIssue]
+            ctx.perm_check_reason = "fail: bot"
             return False
 
         if ctx.command is None:  # pragma: nocover ; When would this happen?
@@ -667,7 +676,7 @@ class Bot(commands.Bot):
             return True
 
         if await self.is_owner(ctx.author):
-            ctx._perm_check_reason = "pass: owner"  # pyright: ignore [reportAttributeAccessIssue]
+            ctx.perm_check_reason = "pass: owner"
             return True
 
         all_profiles = self.get_all_user_profiles(ctx.author)
@@ -682,10 +691,10 @@ class Bot(commands.Bot):
             for profile in all_profiles:
                 if i == 0:  # Check for override on the exact command name
                     if profile.permission_overrides.get(command_name) == PermissionOverrideValue.deny:
-                        ctx._perm_check_reason = f"fail: {profile.profile_id} deny {command_name}"  # pyright: ignore [reportAttributeAccessIssue]
+                        ctx.perm_check_reason = f"fail: {profile.profile_id} deny {command_name}"
                         return False
                     if profile.permission_overrides.get(command_name) == PermissionOverrideValue.allow:
-                        ctx._perm_check_reason = f"pass: {profile.profile_id} allow {command_name}"  # pyright: ignore [reportAttributeAccessIssue]
+                        ctx.perm_check_reason = f"pass: {profile.profile_id} allow {command_name}"
                         return True
                 elif command_access_level == RequiredAccessLevel.owner:
                     # Owner-only commands cannot be overridden by wildcard overrides on parent.
@@ -694,21 +703,21 @@ class Bot(commands.Bot):
 
                 # Check for wildcard override (on parents). e.g. "profile+" will match "profile add"
                 if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.deny:
-                    ctx._perm_check_reason = f"fail: {profile.profile_id} deny {command_name}+"  # pyright: ignore [reportAttributeAccessIssue]
+                    ctx.perm_check_reason = f"fail: {profile.profile_id} deny {command_name}+"
                     return False
 
                 if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.allow:
-                    ctx._perm_check_reason = f"pass: {profile.profile_id} allow {command_name}+"  # pyright: ignore [reportAttributeAccessIssue]
+                    ctx.perm_check_reason = f"pass: {profile.profile_id} allow {command_name}+"
                     return True
 
         # Owner check
         if command_access_level == RequiredAccessLevel.owner:
-            ctx._perm_check_reason = "fail: owner only"  # pyright: ignore [reportAttributeAccessIssue]
+            ctx.perm_check_reason = "fail: owner only"
             return False
 
         if CONFIG.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
             # If the command is set to everyone, allow it.
-            ctx._perm_check_reason = "pass: everyone"  # pyright: ignore [reportAttributeAccessIssue]
+            ctx.perm_check_reason = "pass: everyone"
             return True
 
         for profile in all_profiles:
@@ -717,15 +726,15 @@ class Bot(commands.Bot):
 
             # Check if the user has the required access level for the command.
             if profile.access_level >= command_access_level:
-                ctx._perm_check_reason = (  # pyright: ignore [reportAttributeAccessIssue]
+                ctx.perm_check_reason = (
                     f"pass: {profile.profile_id} level {profile.access_level} >= {command_access_level}"
                 )
                 return True
 
-        ctx._perm_check_reason = f"fail: no access {command_access_level}"  # pyright: ignore [reportAttributeAccessIssue]
+        ctx.perm_check_reason = f"fail: no access {command_access_level}"
         return False
 
-    async def _bot_can_run_check(self, ctx: commands.Context[Bot]) -> bool:
+    async def _bot_can_run_check(self, ctx: Context) -> bool:
         """Verify if the bot has necessary permissions to execute a command.
 
         Args:
@@ -743,6 +752,109 @@ class Bot(commands.Bot):
         #     """
         #     return True
         return True  # pragma: nocover ; TODO: Implement this check
+
+    # TODO: implement caching
+    def translate(
+        self,
+        string: discord.app_commands.locale_str,
+        *,
+        ctx_or_locale: commands.Context[Any] | discord.Locale | str | None = None,
+    ) -> str:
+        """Translate a message using the bot's Translator.
+
+        Determines the appropriate locale from the context and translates the string.
+        If `ctx_or_locale` is `None`, the default locale is used.
+
+        Args:
+            string: The locale string to translate.
+            ctx_or_locale: Either a [`Context`][] to derive the locale from the interaction,
+                a [`discord.Locale`][] or locale string to use directly,
+                or `None` to use the default locale.
+
+        Returns:
+            The translated string or the original message if translation fails.
+        """
+        locale: discord.Locale | str = CONFIG.default_locale
+
+        if isinstance(ctx_or_locale, commands.Context):
+            if ctx_or_locale.interaction is not None:
+                locale = ctx_or_locale.interaction.locale
+        elif isinstance(ctx_or_locale, discord.Locale | str):
+            locale = ctx_or_locale
+
+        message = self.translator.translate_sync(string, locale)
+        if message is None:
+            logger.warning("Failed to translate message: %s", string)
+            return string.message
+        return message
+
+    async def send_message(
+        self,
+        content: str | discord.app_commands.locale_str | None,
+        *,
+        channel: discord.abc.Messageable,
+        auto_embed: bool = True,
+        original_message: discord.Message | None = None,
+        **kwargs: Any,
+    ) -> discord.Message:
+        """Send a message with automatic embedding and locale string translation.
+
+        Handles translation of locale strings, automatic embedding, and
+        proper channel-based sending.
+
+        Args:
+            content: The message content to send.
+            channel: The channel or context to send to.
+            auto_embed: Whether to automatically convert the content to an embed.
+            original_message: If set, edits this message instead of sending a new one.
+            **kwargs: Additional keyword arguments passed to the underlying send or edit.
+
+        Other Parameters:
+            ephemeral: If the message should only be visible to the user who started the interaction.
+                Only valid when `channel` is a [commands.Context][].
+
+        Returns:
+            The sent Discord message object.
+        """
+        locale: discord.Locale | str = CONFIG.default_locale
+
+        if isinstance(channel, commands.Context):
+            channel = cast("Context", channel)
+            if channel.interaction is not None and kwargs.get("ephemeral"):
+                locale = channel.interaction.locale
+
+        if "embed" in kwargs or "embeds" in kwargs or content is None:
+            auto_embed = False
+
+        if auto_embed:
+            embed = EmbedProxy(description=content)  # TODO: Format with color/style
+            kwargs["embed"] = embed.to_embed(self.translator, locale)
+            content = None
+
+        if isinstance(content, discord.app_commands.locale_str):
+            content = self.translate(content, ctx_or_locale=locale)
+
+        if "embed" in kwargs:
+            embed = kwargs["embed"]
+            if isinstance(embed, EmbedProxy):
+                kwargs["embed"] = embed.to_embed(self.translator, locale)
+
+        if "embeds" in kwargs:
+            embeds: list[discord.Embed] = []
+            for embed in kwargs["embeds"]:
+                if isinstance(embed, EmbedProxy):
+                    embeds.append(embed.to_embed(self.translator, locale))
+                else:
+                    embeds.append(embed)
+            kwargs["embeds"] = embeds
+
+        if not isinstance(channel, commands.Context):
+            kwargs.pop("ephemeral", None)
+
+        if original_message is not None:
+            kwargs.pop("reference", None)
+            return await original_message.edit(content=content, **kwargs)
+        return await channel.send(content, **kwargs)
 
     @staticmethod
     def get_log_url(key: str) -> str:

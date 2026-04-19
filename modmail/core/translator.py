@@ -53,7 +53,7 @@ for allowed_locale in CONFIG.allowed_locales:
 class Translator(app_commands.Translator):
     """Custom translator for Modmail using FluentLocalization."""
 
-    async def translate(
+    def translate_sync(
         self,
         string: locale_str,
         locale: discord.Locale | str,
@@ -97,16 +97,37 @@ class Translator(app_commands.Translator):
                 continue
             if hasattr(value, "__locale_str__"):
                 # If the value is a locale_str, translate it (recursive call)
-                string.extras[key] = await self.translate(value.__locale_str__(), locale, context)
+                string.extras[key] = self.translate_sync(value.__locale_str__(), locale, context)
             elif isinstance(value, locale_str):
                 # TODO: check if this works
-                string.extras[key] = await self.translate(value, locale, context)
+                string.extras[key] = self.translate_sync(value, locale, context)
             elif isinstance(value, FluentTypes):
                 string.extras[key] = value
             else:
                 string.extras[key] = str(value)
 
         return l10n.format_value(message, string.extras)
+
+    async def translate(
+        self,
+        string: locale_str,
+        locale: discord.Locale | str,
+        context: app_commands.TranslationContextTypes | None = None,
+    ) -> str | None:
+        """Translate a message using FluentLocalization.
+
+        Forwards to [`translate_sync`][modmail.core.translator.Translator.translate_sync].
+        Required by the [`app_commands.Translator`][] abstract interface.
+
+        Args:
+            string: The string to translate.
+            locale: The locale to translate to, could be a discord.Locale object or a locale string.
+            context: The context in which the translation is used (ignored in this implementation).
+
+        Returns:
+            The translated string or None if translation isn't available.
+        """
+        return self.translate_sync(string, locale, context)
 
 
 def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> locale_str:

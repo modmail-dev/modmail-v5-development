@@ -25,9 +25,7 @@ from .embed import EmbedProxy
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from discord.ext import commands
-
-    from ..bot import Bot
+    from .context import Context
     from .staff_guild import StaffGuild
 
 __all__ = ["TicketView"]
@@ -200,9 +198,7 @@ class TicketView:
             embed_proxies.append((recipient.name, embed))
 
         embed_proxies.sort(key=operator.itemgetter(0))  # Sort by recipient name
-        embeds = await asyncio.gather(*[
-            embed.to_embed(self.bot.translator, CONFIG.default_locale) for _x, embed in embed_proxies
-        ])
+        embeds = [embed.to_embed(self.bot.translator, CONFIG.default_locale) for _x, embed in embed_proxies]
 
         # Set the timestamp for the first embed
         embeds[0].timestamp = datetime.datetime.now(datetime.UTC)
@@ -210,7 +206,7 @@ class TicketView:
 
     def format_ticket_channel_embed(
         self,
-        original_message: discord.Message | tuple[commands.Context[Bot], str],
+        original_message: discord.Message | tuple[Context, str],
         message_type: TicketMessageType,
     ) -> EmbedProxy:
         """Format the embed for the given message that is sent to the ticket channel.
@@ -253,7 +249,7 @@ class TicketView:
 
     def format_dm_channel_embed(
         self,
-        original_message: discord.Message | tuple[commands.Context[Bot], str],
+        original_message: discord.Message | tuple[Context, str],
         message_type: TicketMessageType,
     ) -> EmbedProxy:
         """Format the ticket embed for the given message that is sent to the DM channel.
@@ -302,14 +298,14 @@ class TicketView:
         logger.debug("Processing DM message from %s: %s", message.author, message.content)
         channel = await self.get_channel()
         embed_proxy = self.format_ticket_channel_embed(message, TicketMessageType.dm)
-        embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
+        embed = embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
         coros: list[Awaitable[Any]] = [channel.send(embed=embed)]
 
         # Send the message to all other recipients in the ticket
         other_recipients = [recipient for recipient in self.recipients if recipient != message.author]
         if other_recipients:
             embed_proxy = self.format_dm_channel_embed(message, TicketMessageType.dm)
-            embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
+            embed = embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
             coros.extend([recipient.send(embed=embed) for recipient in other_recipients])
 
         sent_messages = await asyncio.gather(*coros, return_exceptions=True)
@@ -367,7 +363,7 @@ class TicketView:
         return failed_recipients
 
     async def process_reply_message(
-        self, ctx: commands.Context[Bot], message: str, message_type: TicketMessageType = TicketMessageType.reply
+        self, ctx: Context, message: str, message_type: TicketMessageType = TicketMessageType.reply
     ) -> list[discord.User | discord.Member]:
         """Process a reply, close, or note message and send it to the DM channel if applicable.
 
@@ -386,14 +382,14 @@ class TicketView:
         logger.debug("Processing %s message in ticket %s: %s", message_type, self.model.key, message)
         channel = await self.get_channel()
         embed_proxy = self.format_ticket_channel_embed((ctx, message), message_type)
-        embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
+        embed = embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
 
         coros: list[Awaitable[Any]] = [channel.send(embed=embed)]
 
         # Send the message to all recipients in the ticket
         if message_type in {TicketMessageType.reply, TicketMessageType.close}:
             embed_proxy = self.format_dm_channel_embed((ctx, message), message_type)
-            embed = await embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
+            embed = embed_proxy.to_embed(self.bot.translator, CONFIG.default_locale)
             coros.extend([recipient.send(embed=embed) for recipient in self.recipients])
 
         sent_messages = await asyncio.gather(*coros, return_exceptions=True)

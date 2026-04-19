@@ -10,9 +10,8 @@ from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
     from discord import Interaction
-    from discord.ext import commands
 
-    from ..bot import Bot
+    from .context import Context
 
 __all__ = ["Str"]
 
@@ -21,7 +20,7 @@ class StrStripConverter:
     """A converter that strips whitespace from strings."""
 
     @classmethod
-    async def convert(cls, ctx: commands.Context[Bot], value: str) -> str:
+    async def convert(cls, ctx: Context, value: str) -> str:
         """Convert a string by stripping whitespace.
 
         Args:

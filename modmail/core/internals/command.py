@@ -17,7 +17,7 @@ from ... import CONFIG
 from ...errors import NotInTicketError, StaffGuildNotConfiguredError
 
 if TYPE_CHECKING:
-    from ..bot import Bot
+    from .context import Context
 
 __all__ = [
     "LazyHybridCommand",
@@ -294,7 +294,7 @@ def in_modmail_ticket() -> Any:
         A check function that returns True if the command is in a Modmail ticket.
     """
 
-    async def predicate(ctx: commands.Context[Bot]) -> bool:
+    async def predicate(ctx: Context) -> bool:
         """Check if the command is being invoked in a Modmail ticket.
 
         Args:

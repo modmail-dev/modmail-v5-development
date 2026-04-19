@@ -10,9 +10,8 @@ import logging
 from typing import TYPE_CHECKING
 
 import discord
-from discord.ext import commands
 
-from modmail.core import Bot, _, in_modmail_ticket, lazy_hybrid_command, staff_only, wrap
+from modmail.core import Context, _, in_modmail_ticket, lazy_hybrid_command, staff_only, wrap
 from modmail.errors import ModmailError
 
 if TYPE_CHECKING:
@@ -41,7 +40,7 @@ logger = logging.getLogger(__name__)
 @in_modmail_ticket()
 async def reply_command(
     cog: Modmail,
-    ctx: commands.Context[Bot],
+    ctx: Context,
     attachment: discord.Attachment | None,
     *,
     message: str = "",
@@ -65,11 +64,11 @@ async def reply_command(
     """
     # TODO: Support sending stickers
     if not message and not attachment:
-        await cog.reply(ctx, _("ftl-cmd-reply-message-empty"), ephemeral=True, auto_embed=False)
+        await ctx.reply(_("ftl-cmd-reply-message-empty"), ephemeral=True, auto_embed=False)
         return
 
     if ctx.interaction is not None:
-        await cog.reply(ctx, _("ftl-cmd-reply-message-sending"), delete_after=3, ephemeral=True, auto_embed=False)
+        await ctx.reply(_("ftl-cmd-reply-message-sending"), delete_after=3, ephemeral=True, auto_embed=False)
 
     assert isinstance(ctx.channel, discord.TextChannel | discord.Thread)
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
@@ -82,11 +81,11 @@ async def reply_command(
         if failed_recipients:
             # Send a message about the failed recipients
             failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
-            await cog.send(ctx, _("ftl-cmd-reply-message-failed-recipients", recipients=failed_recipients_str))
+            await ctx.send_message(_("ftl-cmd-reply-message-failed-recipients", recipients=failed_recipients_str))
 
     except Exception:
         logger.exception("Failed to send reply in %s", ctx.channel)
-        await cog.reply(ctx, _("ftl-cmd-reply-message-failed"))
+        await ctx.reply(_("ftl-cmd-reply-message-failed"))
     else:
         if ctx.interaction is not None:
             await ctx.interaction.delete_original_response()
