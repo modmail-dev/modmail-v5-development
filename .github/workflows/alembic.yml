@@ -1,0 +1,39 @@
+name: Alembic Migration Check
+
+on:
+  push:
+    paths:
+      - "modmail/backends/sql/**"
+      - "modmail/backends/common/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/alembic.yml"
+  pull_request:
+    paths:
+      - "modmail/backends/sql/**"
+      - "modmail/backends/common/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/alembic.yml"
+
+jobs:
+  sqlite:
+    name: Migration check (SQLite)
+    runs-on: ubuntu-latest
+    env:
+      ALEMBIC_URL: sqlite+aiosqlite:///./test.db
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: pyproject.toml
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra sqlite
+      - name: Upgrade to head
+        run: uv run alembic upgrade head
+      - name: Downgrade to base
+        run: uv run alembic downgrade base
+      - name: Re-upgrade (round-trip check)
+        run: uv run alembic upgrade head

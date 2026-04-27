@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.10.11,<0.11.0"]
+requires = ["uv_build>=0.11,<0.12"]
 build-backend = "uv_build"
 
 [project]
@@ -69,8 +69,8 @@ mongodb = [
 [dependency-groups]
 dev = [
     "ruff==0.15.12",  # When updating ruff version, update it in .pre-commit-config.yaml too
-    "pyright==1.1.409",
-    "pre-commit<5,>=4.6.0",  # When updating pre-commit version, update it in the tox "lint" section too
+    "pyright==1.1.409",  # When updating pyright version, update it in workflows/ci.yml too
+    "pre-commit-uv<5,>=4.2.1",  # When updating pre-commit version, update it in the tox "lint" section too
     "python-dotenv>=1.2.2",  # TODO: .env isn't supported/tested yet
     # When updating pytest plugins, update it below in the pytest "required_plugins" section too
     # TODO: unit testing and tox are currently disabled
@@ -282,7 +282,7 @@ commands = [["pytest"]]
 [tool.tox.env.lint]
 description = "run linters (pre-commit)"
 skip_install = true
-deps = ["pre-commit<5,>=4.6.0"]
+deps = ["pre-commit-uv<5,>=4.2.1"]
 commands = [["pre-commit", { replace = "posargs", default = ["run", "--all-files"], extend = true} ]]
 
 [tool.tox.env.type]
