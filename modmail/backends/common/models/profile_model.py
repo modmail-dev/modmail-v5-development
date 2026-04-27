@@ -32,5 +32,22 @@ class ProfileModel(BaseModel):
 
     tag: str | None = None
     """Short display label for this profile (`None` if unset)."""
-    colour: int | None = None
+    color: int | None = None
     """Discord color integer, e.g. `0xFFFFFF` for white (`None` if unset)."""
+
+    @property
+    def is_empty(self) -> bool:
+        """`True` when the profile has no meaningful configuration and can be safely removed."""
+        return all((
+            self.access_level is None,
+            self.color is None,
+            self.tag is None,
+            not self.permission_overrides,
+        ))
+
+    @property
+    def mention(self) -> str:
+        """Discord user mention string."""
+        if self.profile_type == ProfileType.role:
+            return f"<@&{self.profile_id}>"
+        return f"<@{self.profile_id}>"

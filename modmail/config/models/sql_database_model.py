@@ -14,7 +14,7 @@ __all__ = ["SQLDatabaseConfig"]
 
 # Maps dialect names to their required async driver.  Users may omit the driver
 # suffix (e.g. "postgresql://...") and Modmail injects it automatically.
-# "postgres" is a common alias for "postgresql" and is normalised on load.
+# "postgres" is a common alias for "postgresql" and is normalized on load.
 _DIALECT_DRIVERS: dict[str, str] = {
     "sqlite": "aiosqlite",
     "postgresql": "asyncpg",
@@ -23,7 +23,7 @@ _DIALECT_DRIVERS: dict[str, str] = {
     "mariadb": "asyncmy",
 }
 
-# Dialects whose bare name should be normalised to a canonical form understood
+# Dialects whose bare name should be normalized to a canonical form understood
 # by SQLAlchemy (e.g. "postgres" → "postgresql").
 _DIALECT_ALIASES: dict[str, str] = {
     "postgres": "postgresql",
@@ -38,7 +38,7 @@ class SQLDatabaseConfig(BaseModel):
             ``+asyncpg``) is injected automatically if omitted, so
             ``postgresql://...`` and ``postgresql+asyncpg://...`` are
             both accepted.  The ``postgres`` dialect alias is also
-            normalised to ``postgresql``.
+            normalized to ``postgresql``.
     """
 
     uri: SecretStr  # the SQL connection URI
@@ -54,7 +54,7 @@ class SQLDatabaseConfig(BaseModel):
         that any valid URI structure (query strings, IPv6 hosts, encoded
         credentials, triple-slash SQLite paths, etc.) is handled correctly.
         The async driver suffix is appended to the scheme when absent, and
-        dialect aliases such as ``postgres`` are normalised to their canonical
+        dialect aliases such as ``postgres`` are normalized to their canonical
         SQLAlchemy name.
 
         Args:
@@ -65,7 +65,7 @@ class SQLDatabaseConfig(BaseModel):
 
         Raises:
             ValueError: If the URI has no scheme, or the dialect is not
-                recognised.
+                recognized.
         """
         raw = v.get_secret_value()
         parsed = urlsplit(raw)
@@ -83,7 +83,7 @@ class SQLDatabaseConfig(BaseModel):
 
         if dialect not in _DIALECT_DRIVERS:
             raise ValueError(
-                f"Unrecognised SQL dialect {dialect!r} in URI. "
+                f"Unrecognized SQL dialect {dialect!r} in URI. "
                 f"Supported dialects: {', '.join(sorted(_DIALECT_DRIVERS))}."
             )
 

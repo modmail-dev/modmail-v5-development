@@ -132,7 +132,7 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("tag", sa.String(length=128), nullable=True),
-        sa.Column("colour", sa.Integer(), nullable=True),
+        sa.Column("color", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(
             ["bot_id"],
             ["settings.bot_id"],

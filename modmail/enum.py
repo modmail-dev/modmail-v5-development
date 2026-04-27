@@ -221,7 +221,7 @@ class StatusType(enum.Enum):
         online: Shown as online (green).
         idle: Shown as idle (yellow).
         dnd: Do Not Disturb — shown as red.
-        offline: Shown as offline/invisible (grey).
+        offline: Shown as offline/invisible (gray).
     """
 
     online = "online"

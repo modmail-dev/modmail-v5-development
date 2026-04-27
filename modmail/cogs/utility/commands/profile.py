@@ -1,26 +1,20 @@
-"""Profile management commands for the Modmail bot.
-
-This module implements commands for managing user and role profiles including:
-- Adding and removing profiles.
-- Customizing profile appearance (color, tag).
-- Managing permission overrides for commands.
-- Setting access levels for users and roles.
-"""
+"""Profile management commands."""
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Final, NamedTuple
+from typing import TYPE_CHECKING, Any, Final
 
 import discord
 from discord.ext import commands
 
 from modmail import CONFIG, utils
 from modmail.backends.common import ProfileModel
-from modmail.core import Context, Str, _, lazy_hybrid_group, wrap
+from modmail.core import Context, ProfileLookup, _, lazy_hybrid_group, wrap
 from modmail.enum import AccessLevel, PermissionOverrideValue, ProfileType, RequiredAccessLevel
+from modmail.errors import DatabaseOperationError
 
 if TYPE_CHECKING:
     from .. import Utility
@@ -30,285 +24,837 @@ __all__ = ["profile_command"]
 logger = logging.getLogger(__name__)
 
 
-class _ProfileCustomizeView(discord.ui.View, ABC):
-    """Abstract base class for profile customization views.
+class ProfileCustomizeModal(discord.ui.Modal):
+    """Modal for customizing a profile's appearance settings."""
 
-    The real implementation is created dynamically in make_profile_customize_view().
-    """
-
-    @abstractmethod
-    def set_original_message(self, message: discord.Message) -> None:
-        """Set the message that sent this view.
-
-        This should be called after sending the message so the view can reference and edit it.
+    def __init__(
+        self,
+        ctx: Context,
+        *,
+        editor_view: ProfileEditorView,
+        timeout: float = 300.0,
+    ) -> None:
+        """Build the modal with the current customization fields.
 
         Args:
-            message: The Discord.py message from the original .send().
+            ctx: The command context used for translation and author checks.
+            editor_view: The parent [`ProfileEditorView`][] that owns the shared profile state.
+            timeout: Seconds before the modal stops accepting input.
         """
+        super().__init__(title=ctx.translate(_("ftl-modal-profile-customize-title")), timeout=timeout)
+        self._ctx = ctx
+        self._editor_view = editor_view
 
-
-# TODO: move ProfileDetail and _get_profile_detail into a converter/transformer in converters.py
-
-
-class ProfileDetail(NamedTuple):
-    """Container for profile information.
-
-    Attributes:
-        mention: String representation/mention of the profile entity.
-        profile_id: Unique identifier for the profile.
-        profile_type: Type of profile (user or role).
-    """
-
-    mention: str
-    profile_id: int
-    profile_type: ProfileType | None
-
-
-def _get_profile_detail(
-    *, user_or_role: discord.Member | discord.User | discord.Role | None = None, id_: int | None = None
-) -> ProfileDetail | None:
-    """Get sanitized profile details from raw user/role/id inputs.
-
-    Args:
-        user_or_role: The Discord User or Role when the type is known.
-        id_: The profile's ID if type is unknown.
-
-    Returns:
-        A ProfileDetail of the user/role/id_, or None if no valid input was provided.
-    """
-    profile_mention: str
-    profile_id: int
-    profile_type: ProfileType | None
-
-    if user_or_role is not None:
-        profile_id = user_or_role.id
-        if isinstance(user_or_role, discord.Role):
-            if user_or_role.is_default():
-                profile_mention = "@everyone"
-            else:
-                profile_mention = user_or_role.mention
-            profile_type = ProfileType.role
-        else:
-            profile_mention = user_or_role.mention
-            profile_type = ProfileType.user
-    elif id_ is not None:
-        profile_mention = f"`{id_}`"
-        profile_id = id_
-        profile_type = None
-    else:
-        return None
-    return ProfileDetail(profile_mention, profile_id, profile_type)
-
-
-def _check_is_bot(user_or_role: discord.Member | discord.User | discord.Role) -> bool:
-    """Check if the user or role is a bot or bot's role.
-
-    Args:
-        user_or_role: The user or role to check.
-
-    Returns:
-        True if the user or role is a bot, False otherwise.
-    """
-    if isinstance(user_or_role, discord.Member | discord.User):
-        return user_or_role.bot
-    return bool(user_or_role.tags is not None and user_or_role.tags.is_bot_managed())
-
-
-def make_profile_customize_view(
-    cog: Utility, ctx: Context, profile_detail: ProfileDetail, profile: ProfileModel
-) -> type[_ProfileCustomizeView]:
-    """Create a UI view for customizing profiles.
-
-    Args:
-        cog: The Utility cog instance.
-        ctx: The context of the command.
-        profile_detail: The profile detail containing ID, mention and type.
-        profile: The profile to customize.
-
-    Returns:
-        A Discord.py UI view class for customizing the profile with buttons and selects
-        for managing appearance and access level.
-    """
-    # Stores the previous interaction so we can delete the response later
-    previous_interaction: discord.Interaction | None = None
-
-    ui_button_label = ctx.translate(_("ftl-view-profile-button-customize-label"))
-
-    if profile.access_level is not None:
-        # If the profile has an access level, set the placeholder to the current access level
-        ui_select_level_placeholder = ctx.translate(profile.access_level.__locale_str__())
-    else:
-        ui_select_level_placeholder = ctx.translate(_("ftl-view-profile-select-level-placeholder"))
-
-    # noinspection PyPep8Naming
-    LEVEL_NONE: Final[str] = "None"  # noqa: N806
-    ui_select_level_options = [
-        # An option to remove the access level for this profile
-        discord.SelectOption(
-            label=ctx.translate(_("ftl-view-profile-select-level-option-none")), value=LEVEL_NONE
-        ),
-        discord.SelectOption(label=ctx.translate(_("ftl-access-level-everyone")), value=AccessLevel.everyone.name),
-        discord.SelectOption(label=ctx.translate(_("ftl-access-level-staff")), value=AccessLevel.staff.name),
-        discord.SelectOption(label=ctx.translate(_("ftl-access-level-manager")), value=AccessLevel.manager.name),
-        discord.SelectOption(label=ctx.translate(_("ftl-access-level-admin")), value=AccessLevel.admin.name),
-    ]
-
-    ui_title = ctx.translate(_("ftl-modal-profile-customize-title"))
-    ui_colour_label = ctx.translate(_("ftl-modal-profile-customize-colour"))
-    ui_tag_label = ctx.translate(_("ftl-modal-profile-customize-tag"))
-
-    class ProfileCustomizeModal(discord.ui.Modal, title=ui_title):
-        """Modal for customizing profile appearance."""
-
-        colour: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
-            label=ui_colour_label,
-            placeholder="#000000",
-            default=utils.int_to_colour_hex(profile.colour) if profile.colour is not None else None,
+        self.color: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
+            label=ctx.translate(_("ftl-modal-profile-customize-color")),
+            placeholder=ctx.translate(_("ftl-modal-profile-customize-color-placeholder")),
+            default=utils.int_to_color_hex(self.profile.color) if self.profile.color is not None else None,
             required=False,
         )
-        tag: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
-            label=ui_tag_label,
-            default=profile.tag if profile.tag is not None else None,
+        self.tag: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
+            label=ctx.translate(_("ftl-modal-profile-customize-tag")),
+            default=self.profile.tag if self.profile.tag is not None else None,
             required=False,
             max_length=128,
         )
+        self.add_item(self.color)
+        self.add_item(self.tag)
 
-        async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
-            """Check if the interaction is from the user who invoked the command.
+    @property
+    def profile(self) -> ProfileModel:
+        """The current customized profile model."""
+        return self._editor_view.profile
 
-            Returns:
-                True if the interaction is from the user who invoked the command, False otherwise.
-            """
-            return interaction.user == ctx.author
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Return `True` only when the interaction originates from the command invoker."""
+        return interaction.user == self._ctx.author
 
-        async def on_submit(self, interaction: discord.Interaction) -> None:
-            """Handle submission of the modal."""
-            nonlocal profile, previous_interaction
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        """Validate and persist the submitted customization values, then refresh the card.
 
-            if previous_interaction is not None:
-                # Delete the previous interaction response if it exists
-                await previous_interaction.delete_original_response()
-            previous_interaction = interaction
+        Args:
+            interaction: The submission interaction from Discord.
+        """
+        to_update: dict[str, Any] = {}
 
-            to_update: dict[str, Any] = {}
+        if (
+            self.color.value
+            and re.match(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$", self.color.value) is None
+        ):
+            await interaction.response.send_message(
+                self._ctx.translate(_("ftl-modal-profile-customize-color-invalid")),
+                ephemeral=True,
+            )
+            return
 
-            # Check if colour hex is invalid
-            if self.colour.value and re.match(r"^#?[0-9a-fA-F]{6}$", self.colour.value) is None:
+        color = utils.color_hex_to_int(self.color.value) if self.color.value else None
+        if color != self.profile.color:
+            to_update["color"] = color
+
+        tag = self.tag.value or None
+        if tag != self.profile.tag:
+            to_update["tag"] = tag
+
+        if to_update:
+            new_profile = self.profile.model_copy(update=to_update)
+            try:
+                await self._ctx.bot.database_client.update_profile(new_profile)
+            except DatabaseOperationError as e:
+                logger.error("Failed to update profile %d customization: %s", new_profile.profile_id, e)
                 await interaction.response.send_message(
-                    ctx.translate(_("ftl-modal-profile-customize-colour-invalid")),
+                    self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
                     ephemeral=True,
                 )
                 return
+            logger.debug("Updated profile %d customization: %s.", new_profile.profile_id, to_update)
+            self._editor_view.profile = new_profile
 
-            colour = utils.colour_hex_to_int(self.colour.value) if self.colour.value else None
-            if colour != profile.colour:
-                to_update["colour"] = colour
-                # Update the default value of the modal
-                ProfileCustomizeModal.colour.default = (
-                    utils.int_to_colour_hex(colour) if colour is not None else None
-                )
+        await self._editor_view.rebuild()
+        await interaction.response.send_message(
+            self._ctx.translate(_("ftl-modal-profile-customize-success", profile=self.profile.mention)),
+            ephemeral=True,
+        )
 
-            tag = self.tag.value or None
-            if tag != profile.tag:
-                to_update["tag"] = tag
-                # Update the default value of the modal
-                ProfileCustomizeModal.tag.default = tag
 
-            if to_update:
-                new_profile = profile.model_copy(deep=True, update=to_update)
-                await ctx.bot.database_client.update_profile(new_profile)
-                logger.debug("Updated profile %d with %s.", new_profile.profile_id, to_update)
-                profile = new_profile
+class ProfileAddOverrideModal(discord.ui.Modal):
+    """Modal for adding an allow or deny permission override to a profile."""
 
+    def __init__(
+        self,
+        ctx: Context,
+        *,
+        editor_view: ProfileEditorView,
+        override_value: PermissionOverrideValue,
+        timeout: float = 300.0,
+    ) -> None:
+        """Build the modal with a command name text input.
+
+        Args:
+            ctx: The command context used for translation and author checks.
+            editor_view: The parent [`ProfileEditorView`][] that owns the shared profile state.
+            override_value: Whether to allow or deny the entered command.
+            timeout: Seconds before the modal stops accepting input.
+        """
+        super().__init__(
+            title=ctx.translate(
+                _("ftl-modal-profile-add-override-allow-title")
+                if override_value == PermissionOverrideValue.allow
+                else _("ftl-modal-profile-add-override-deny-title")
+            ),
+            timeout=timeout,
+        )
+        self._ctx = ctx
+        self._editor_view = editor_view
+        self._override_value = override_value
+
+        self.command_name: discord.ui.TextInput[ProfileAddOverrideModal] = discord.ui.TextInput(
+            label=ctx.translate(_("ftl-modal-profile-add-override-command-label")),
+            placeholder=ctx.translate(_("ftl-modal-profile-add-override-command-placeholder")),
+            required=True,
+        )
+        self.add_item(self.command_name)
+
+    @property
+    def profile(self) -> ProfileModel:
+        """The current customized profile model."""
+        return self._editor_view.profile
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Return `True` only when the interaction originates from the command invoker."""
+        return interaction.user == self._ctx.author
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        """Validate the command name and persist the override, then refresh the card.
+
+        Args:
+            interaction: The submission interaction from Discord.
+        """
+        command_name = utils.sanitize_user_command_name(self.command_name.value)
+        command_name_no_wildcard = command_name.split("+")[0].strip()
+
+        for bot_command in self._ctx.bot.walk_commands():
+            bot_command_name = utils.get_command_name(bot_command)
+            if bot_command_name == command_name_no_wildcard:
+                if "+" in command_name and not isinstance(bot_command, commands.Group):
+                    command_name = command_name_no_wildcard
+                if self._ctx.bot.get_command_access_level(bot_command) == RequiredAccessLevel.owner:
+                    if not await self._ctx.bot.is_owner(self._ctx.author):
+                        await interaction.response.send_message(
+                            self._ctx.translate(_("ftl-cmd-profile-override-owner-command", command=command_name)),
+                            ephemeral=True,
+                        )
+                        return
+                break
+        else:
             await interaction.response.send_message(
-                ctx.translate(_("ftl-modal-profile-customize-success", name=profile_detail.mention)),
+                self._ctx.translate(_("ftl-cmd-profile-override-command-not-found", command=command_name)),
                 ephemeral=True,
             )
+            return
 
-    class ProfileCustomizeView(_ProfileCustomizeView):
-        """A view for customizing the profile."""
-
-        def __init__(self) -> None:
-            super().__init__()
-            self._original_message: discord.Message | None = None
-
-        def set_original_message(self, message: discord.Message) -> None:
-            """Set the original message that sent this view.
-
-            Args:
-                message: The Discord.py message from the original .send().
-            """
-            self._original_message = message
-
-        async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
-            """Check if the interaction is from the user who invoked the command.
-
-            Returns:
-                True if the interaction is from the user who invoked the command, False otherwise.
-            """
-            return interaction.user == ctx.author
-
-        async def on_timeout(self) -> None:
-            """Disable all components of this view when timed out."""
-            self.stop()
-
-            for children in self.children:
-                if hasattr(children, "disabled"):
-                    children.disabled = True  # pyright: ignore [reportAttributeAccessIssue]
-
-            if self._original_message is not None:
-                await self._original_message.edit(view=self)
-
-        @discord.ui.select(placeholder=ui_select_level_placeholder, options=ui_select_level_options)
-        async def level_select(
-            self, interaction: discord.Interaction, select: discord.ui.Select[ProfileCustomizeView]
-        ) -> None:
-            """Handle selection of access level."""
-            nonlocal profile, previous_interaction
-
-            if previous_interaction is not None:
-                # Delete the previous interaction response if it exists
-                await previous_interaction.delete_original_response()
-            previous_interaction = interaction
-
-            selected_option = select.values[0]
-            if selected_option == LEVEL_NONE:
-                selected_level: AccessLevel | None = None
-            else:
-                selected_level = AccessLevel[selected_option]
-
-            if profile.access_level != selected_level:
-                new_profile = profile.model_copy(deep=True, update={"access_level": selected_level})
-                await ctx.bot.database_client.update_profile(new_profile)
-                logger.debug("Updated profile access level for %d to %s.", new_profile.profile_id, selected_level)
-                profile = new_profile
-
-                if selected_level is None or selected_level == AccessLevel.everyone:
-                    # Remove the profile's access from the Modmail category
-                    await ctx.bot.staff_guild.revoke_access(profile.profile_id, profile.profile_type)
-                else:
-                    # Add the profile's access to the Modmail category
-                    await ctx.bot.staff_guild.grant_access(profile.profile_id, profile.profile_type)
-
+        if self.profile.permission_overrides.get(command_name) == self._override_value:
             await interaction.response.send_message(
-                ctx.translate(
-                    _(
-                        "ftl-view-profile-select-level-success",
-                        name=profile_detail.mention,
-                        level=selected_level if selected_level is not None else "None",
-                    ),
+                self._ctx.translate(
+                    _("ftl-modal-profile-add-override-already-allow", command=command_name)
+                    if self._override_value == PermissionOverrideValue.allow
+                    else _("ftl-modal-profile-add-override-already-deny", command=command_name)
                 ),
                 ephemeral=True,
             )
+            return
 
-        @discord.ui.button(label=ui_button_label, style=discord.ButtonStyle.primary)
-        async def customize_button(
-            self, interaction: discord.Interaction, button: discord.ui.Button[ProfileCustomizeView]
-        ) -> None:
-            """Open the modal for profile customization."""
-            await interaction.response.send_modal(ProfileCustomizeModal())
+        overrides = self.profile.permission_overrides.copy()
+        overrides[command_name] = self._override_value
+        new_profile = self.profile.model_copy(update={"permission_overrides": overrides})
+        try:
+            await self._ctx.bot.database_client.update_profile(new_profile)
+        except DatabaseOperationError as e:
+            logger.error("Failed to set override %r on profile %d: %s", command_name, new_profile.profile_id, e)
+            await interaction.response.send_message(
+                self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                ephemeral=True,
+            )
+            return
+        logger.debug(
+            "Set %s override for command %r on profile %d.",
+            self._override_value.value,
+            command_name,
+            new_profile.profile_id,
+        )
+        self._editor_view.profile = new_profile
+        await self._editor_view.rebuild()
 
-    return ProfileCustomizeView
+        await interaction.response.send_message(
+            self._ctx.translate(
+                _("ftl-view-profile-editor-override-allow-success", command=command_name)
+                if self._override_value == PermissionOverrideValue.allow
+                else _("ftl-view-profile-editor-override-deny-success", command=command_name)
+            ),
+            ephemeral=True,
+        )
+
+
+class ProfileRemoveOverrideModal(discord.ui.Modal):
+    """Modal for removing a permission override by name (used when there are more than 25)."""
+
+    def __init__(self, ctx: Context, *, editor_view: ProfileEditorView, timeout: float = 300.0) -> None:
+        """Build the modal with an override name text input.
+
+        Args:
+            ctx: The command context used for translation and author checks.
+            editor_view: The parent [`ProfileEditorView`][] that owns the shared profile state.
+            timeout: Seconds before the modal stops accepting input.
+        """
+        super().__init__(title=ctx.translate(_("ftl-modal-profile-remove-override-title")), timeout=timeout)
+        self._ctx = ctx
+        self._editor_view = editor_view
+
+        self.override_name: discord.ui.TextInput[ProfileRemoveOverrideModal] = discord.ui.TextInput(
+            label=ctx.translate(_("ftl-modal-profile-remove-override-name-label")),
+            placeholder=ctx.translate(_("ftl-modal-profile-remove-override-name-placeholder")),
+            required=True,
+        )
+        self.add_item(self.override_name)
+
+    @property
+    def profile(self) -> ProfileModel:
+        """The current customized profile model."""
+        return self._editor_view.profile
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Return `True` only when the interaction originates from the command invoker."""
+        return interaction.user == self._ctx.author
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        """Remove the named override from the profile, then refresh the card.
+
+        Args:
+            interaction: The submission interaction from Discord.
+        """
+        name = utils.sanitize_user_command_name(self.override_name.value)
+
+        if name not in self.profile.permission_overrides:
+            await interaction.response.send_message(
+                self._ctx.translate(_("ftl-modal-profile-remove-override-not-found", command=name)),
+                ephemeral=True,
+            )
+            return
+
+        if not await self._editor_view.remove_override(name, interaction):
+            return
+
+        await self._editor_view.rebuild()
+        await interaction.response.send_message(
+            self._ctx.translate(_("ftl-modal-profile-remove-override-success", command=name)),
+            ephemeral=True,
+        )
+
+
+class ConfirmDeleteView(discord.ui.LayoutView):
+    """Ephemeral Component v2 confirm/cancel card shown before deleting a profile."""
+
+    def __init__(
+        self,
+        ctx: Context,
+        *,
+        editor_view: ProfileEditorView,
+        interaction: discord.Interaction,
+        timeout: float = 120.0,
+    ) -> None:
+        """Build the card with confirm text and confirm/cancel buttons.
+
+        Args:
+            ctx: The command context used for translation and author checks.
+            editor_view: The [`ProfileEditorView`][] that owns the profile to delete.
+            interaction: The interaction that opened this card (used to clean up on timeout).
+            timeout: Seconds before the confirmation card expires.
+        """
+        super().__init__(timeout=timeout)
+        self._ctx = ctx
+        self._editor_view = editor_view
+        self._interaction = interaction
+
+        confirm_btn: discord.ui.Button[ConfirmDeleteView] = discord.ui.Button(
+            label=ctx.translate(_("ftl-view-profile-editor-delete-btn-confirm")),
+            style=discord.ButtonStyle.danger,
+        )
+        confirm_btn.callback = self._on_confirm
+
+        cancel_btn: discord.ui.Button[ConfirmDeleteView] = discord.ui.Button(
+            label=ctx.translate(_("ftl-view-prompt-cancel-label")),
+            style=discord.ButtonStyle.secondary,
+        )
+        cancel_btn.callback = self._on_cancel
+
+        action_row: discord.ui.ActionRow[ConfirmDeleteView] = discord.ui.ActionRow()
+        action_row.add_item(confirm_btn)
+        action_row.add_item(cancel_btn)
+
+        self.add_item(
+            discord.ui.Container(
+                discord.ui.TextDisplay(ctx.translate(_("ftl-view-profile-editor-delete-confirm"))),
+                discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+                action_row,
+            )
+        )
+
+    @property
+    def profile(self) -> ProfileModel:
+        """The current customized profile model."""
+        return self._editor_view.profile
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Return `True` only when the interaction originates from the command invoker."""
+        return interaction.user == self._ctx.author
+
+    async def _on_confirm(self, interaction: discord.Interaction) -> None:
+        """Delete the profile, revoke channel access, and show a terminal card.
+
+        Args:
+            interaction: The button interaction from Discord.
+        """
+        try:
+            await self._ctx.bot.database_client.delete_profile(profile_id=self.profile.profile_id)
+        except DatabaseOperationError as e:
+            logger.error("Failed to delete profile %d: %s", self.profile.profile_id, e)
+            await interaction.response.send_message(
+                self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                ephemeral=True,
+            )
+            return
+        logger.debug("Deleted profile %d.", self.profile.profile_id)
+        self.stop()
+
+        # Only staff+ levels have Discord channel access; everyone/None do not.
+        access_sync_failed = False
+        if self.profile.access_level is not None and self.profile.access_level != AccessLevel.everyone:
+            try:
+                await self._ctx.bot.staff_guild.revoke_access(self.profile.profile_id, self.profile.profile_type)
+            except Exception as e:
+                logger.error("Failed to revoke Discord access for profile %d: %s", self.profile.profile_id, e)
+                access_sync_failed = True
+
+        await self._editor_view.close(
+            self._ctx.translate(_("ftl-view-profile-editor-deleted-content", profile=self.profile.mention)),
+            color=discord.Color.blurple(),
+        )
+
+        await interaction.response.edit_message(
+            content=self._ctx.translate(_("ftl-view-profile-editor-delete-success", profile=self.profile.mention)),
+            view=None,
+        )
+        if access_sync_failed:
+            await interaction.followup.send(
+                self._ctx.translate(_("ftl-view-profile-editor-access-sync-failed")),
+                ephemeral=True,
+            )
+
+    async def _on_cancel(self, interaction: discord.Interaction) -> None:
+        """Dismiss the ephemeral confirm message without deleting.
+
+        Args:
+            interaction: The button interaction from Discord.
+        """
+        await interaction.response.defer()
+        with contextlib.suppress(discord.HTTPException):
+            await interaction.delete_original_response()
+        self.stop()
+
+    async def on_timeout(self) -> None:
+        """Delete the ephemeral confirm card when it expires."""
+        with contextlib.suppress(discord.HTTPException):
+            await self._interaction.delete_original_response()
+
+
+class ProfileEditorView(discord.ui.LayoutView):
+    """In-place editor for a user or role profile.
+
+    Renders the full profile state (access level, customization, overrides) inside
+    a single updating card. Every interaction rebuilds the card in place via
+    [`_render`][].
+
+    Warning:
+        Set `message` after sending so the view can edit its card on timeout.
+
+    Examples:
+        ```python
+        view = ProfileEditorView(ctx=ctx, profile=profile)
+        await view.build()
+        msg = await ctx.reply(view=view)
+        view.message = msg
+        ```
+    """
+
+    _LEVEL_NONE: Final[str] = "None"
+    _SELECT_MAX: Final[int] = 25  # use a remove-select up to this many overrides; modal text input above
+
+    def __init__(
+        self,
+        ctx: Context,
+        *,
+        profile: ProfileModel,
+        timeout: float = 300.0,
+    ) -> None:
+        """Build the editor without rendering — call `build()` before sending.
+
+        Args:
+            ctx: The command context used for translation and author checks.
+            profile: The [`ProfileModel`][] to edit — updated in place as the user interacts.
+            timeout: Seconds of inactivity before the editor times out and becomes non-interactive.
+        """
+        super().__init__(timeout=timeout)
+        self._ctx = ctx
+        self.profile = profile
+        """The profile being edited, updated in place as the user interacts."""
+        self.message: discord.Message | None = None
+        """The sent editor message (set by the caller after sending)."""
+        self._done_card: discord.ui.Container[ProfileEditorView] | None = None
+
+    async def remove_override(self, key: str, interaction: discord.Interaction) -> bool:
+        """Remove an override by name, then persist or auto-delete the profile.
+
+        On a database error the ephemeral error message is sent via `interaction` and
+        `False` is returned so the caller can early-return without rendering.
+
+        Args:
+            key: Override name to remove.
+            interaction: Used to send an ephemeral error if the update fails.
+
+        Returns:
+            `True` on success, `False` on database error.
+        """
+        overrides = self.profile.permission_overrides.copy()
+        if key not in overrides:
+            return True  # just in case, but caller should make sure this doesn't happen
+
+        del overrides[key]
+        new_profile = self.profile.model_copy(update={"permission_overrides": overrides})
+
+        try:
+            await self._ctx.bot.database_client.update_profile(new_profile)
+        except DatabaseOperationError as e:
+            logger.error("Failed to remove override %r from profile %d: %s", key, new_profile.profile_id, e)
+            await interaction.response.send_message(
+                self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                ephemeral=True,
+            )
+            return False
+        self.profile = new_profile
+        return True
+
+    async def close(self, content: str, *, color: discord.Color | None = None) -> None:
+        """Transition the editor to its final non-interactive state.
+
+        Stops the view, rebuilds the card, and edits the message in place.
+
+        Args:
+            content: Text to display in the final card.
+            color: Accent color for the final container (`None` defaults to red).
+        """
+        if color is None:
+            color = discord.Color.red()
+
+        self._done_card = discord.ui.Container(discord.ui.TextDisplay(content), accent_color=color)
+        self.stop()
+        await self.rebuild()
+
+    async def build(self) -> None:
+        """Clear and rebuild the container for the current profile state.
+
+        Must be called before sending the initial message and after each state change.
+        """
+        self.clear_items()
+        self.add_item(self._build_container())
+
+    async def rebuild(self) -> None:
+        """Rebuild the card and silently push the update to the editor message."""
+        await self.build()
+        if self.message is not None:
+            with contextlib.suppress(discord.HTTPException):
+                await self.message.edit(view=self)
+
+    async def _render(self, interaction: discord.Interaction) -> None:
+        """Rebuild the card and edit the message in place via `interaction`.
+
+        Args:
+            interaction: The triggering interaction (used for the edit response).
+        """
+        await self.build()
+        await interaction.response.edit_message(view=self)
+
+    @staticmethod
+    def _btn(
+        label: str,
+        style: discord.ButtonStyle,
+        callback: Any,
+    ) -> discord.ui.Button[ProfileEditorView]:
+        """Create a button bound to `callback`.
+
+        Args:
+            label: Button label text.
+            style: Discord button style.
+            callback: Async callable to invoke on click.
+
+        Returns:
+            The configured button.
+        """
+        btn: discord.ui.Button[ProfileEditorView] = discord.ui.Button(label=label, style=style)
+        btn.callback = callback
+        return btn
+
+    def _build_container(self) -> discord.ui.Container[ProfileEditorView]:
+        """Build and return the container for the current editor state.
+
+        Returns:
+            The constructed [`discord.ui.Container`][] for the active state.
+        """
+        if self._done_card is not None:
+            return self._done_card
+
+        # ── Header: mention + type label + delete button ──
+
+        header_text = self._ctx.translate(
+            _(
+                "ftl-view-profile-editor-header",
+                profile=self.profile.mention,
+                type=_("ftl-view-profile-editor-type-user")
+                if self.profile.profile_type == ProfileType.user
+                else _("ftl-view-profile-editor-type-role"),
+            )
+        )
+
+        async def on_delete(interaction: discord.Interaction) -> None:
+            await interaction.response.send_message(
+                ephemeral=True,
+                view=ConfirmDeleteView(self._ctx, editor_view=self, interaction=interaction),
+            )
+
+        # ── Summary: current level, tag, color ──
+
+        summary_text = self._ctx.translate(
+            _(
+                "ftl-view-profile-editor-summary",
+                level=self.profile.access_level
+                if self.profile.access_level is not None
+                else _("ftl-view-profile-editor-level-none"),
+                tag=self.profile.tag if self.profile.tag is not None else _("ftl-view-profile-editor-not-set"),
+                color=utils.int_to_color_hex(self.profile.color)
+                if self.profile.color is not None
+                else _("ftl-view-profile-editor-not-set"),
+            )
+        )
+
+        # ── Access level select ──
+
+        level_options = [
+            discord.SelectOption(
+                label=self._ctx.translate(_("ftl-view-profile-editor-level-none")),
+                value=self._LEVEL_NONE,
+                default=self.profile.access_level is None,
+            ),
+            discord.SelectOption(
+                label=self._ctx.translate(_("ftl-access-level-everyone")),
+                value=AccessLevel.everyone.name,
+                default=self.profile.access_level == AccessLevel.everyone,
+            ),
+            discord.SelectOption(
+                label=self._ctx.translate(_("ftl-access-level-staff")),
+                value=AccessLevel.staff.name,
+                default=self.profile.access_level == AccessLevel.staff,
+            ),
+            discord.SelectOption(
+                label=self._ctx.translate(_("ftl-access-level-manager")),
+                value=AccessLevel.manager.name,
+                default=self.profile.access_level == AccessLevel.manager,
+            ),
+            discord.SelectOption(
+                label=self._ctx.translate(_("ftl-access-level-admin")),
+                value=AccessLevel.admin.name,
+                default=self.profile.access_level == AccessLevel.admin,
+            ),
+        ]
+        level_select: discord.ui.Select[ProfileEditorView] = discord.ui.Select(
+            placeholder=self._ctx.translate(_("ftl-view-profile-editor-select-level-placeholder")),
+            options=level_options,
+        )
+
+        async def on_level_select(interaction: discord.Interaction) -> None:
+            selected_option = level_select.values[0]
+            selected_level: AccessLevel | None = (
+                None if selected_option == self._LEVEL_NONE else AccessLevel[selected_option]
+            )
+
+            if self.profile.access_level == selected_level:
+                logger.debug(
+                    "Access level didn't change for profile %d, skipping update.", self.profile.profile_id
+                )
+                await interaction.response.defer()
+                return
+
+            old_level = self.profile.access_level
+            new_profile = self.profile.model_copy(update={"access_level": selected_level})
+            try:
+                await self._ctx.bot.database_client.update_profile(new_profile)
+            except DatabaseOperationError as e:
+                logger.error("Failed to update profile %d access level: %s", new_profile.profile_id, e)
+                await interaction.response.send_message(
+                    self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                    ephemeral=True,
+                )
+                return
+            logger.debug("Updated profile %d access level to %s.", new_profile.profile_id, selected_level)
+            self.profile = new_profile
+
+            # "everyone" profiles don't get Discord channel access, so only sync when
+            # crossing the everyone/staff boundary (not on changes within staff+).
+            previously_had_access = old_level is not None and old_level != AccessLevel.everyone
+            now_has_access = selected_level is not None and selected_level != AccessLevel.everyone
+
+            access_sync_failed = False
+            try:
+                if previously_had_access and not now_has_access:
+                    await self._ctx.bot.staff_guild.revoke_access(
+                        self.profile.profile_id, self.profile.profile_type
+                    )
+                elif not previously_had_access and now_has_access:
+                    await self._ctx.bot.staff_guild.grant_access(
+                        self.profile.profile_id, self.profile.profile_type
+                    )
+            except Exception as e:
+                logger.error("Failed to sync Discord access for profile %d: %s", self.profile.profile_id, e)
+                access_sync_failed = True
+
+            await self._render(interaction)
+            if access_sync_failed:
+                await interaction.followup.send(
+                    self._ctx.translate(_("ftl-view-profile-editor-access-sync-failed")),
+                    ephemeral=True,
+                )
+
+        level_select.callback = on_level_select
+
+        # ── Appearance button ──
+
+        async def on_customize(interaction: discord.Interaction) -> None:
+            await interaction.response.send_modal(ProfileCustomizeModal(self._ctx, editor_view=self))
+
+        components: list[discord.ui.Item[ProfileEditorView]] = [
+            discord.ui.Section(
+                discord.ui.TextDisplay(header_text),
+                accessory=self._btn(
+                    self._ctx.translate(_("ftl-view-profile-editor-btn-delete")),
+                    discord.ButtonStyle.danger,
+                    on_delete,
+                ),
+            ),
+            discord.ui.Separator(visible=True),
+            discord.ui.TextDisplay(summary_text),
+            discord.ui.ActionRow(level_select),
+            discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+            discord.ui.ActionRow(
+                self._btn(
+                    self._ctx.translate(_("ftl-view-profile-editor-btn-customize")),
+                    discord.ButtonStyle.primary,
+                    on_customize,
+                )
+            ),
+            discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+            *self._build_overrides_section(),
+        ]
+
+        return discord.ui.Container(*components, accent_color=discord.Color.blurple())
+
+    def _build_overrides_section(self) -> list[discord.ui.Item[ProfileEditorView]]:
+        """Build the overrides header, list, remove select, and add buttons.
+
+        Returns:
+            A list of Component v2 items for the overrides section of the editor card.
+        """
+        # ── Header: override count ──
+
+        overrides_header = self._ctx.translate(
+            _("ftl-view-profile-editor-overrides-header", count=len(self.profile.permission_overrides))
+        )
+        result: list[discord.ui.Item[ProfileEditorView]] = [discord.ui.TextDisplay(overrides_header)]
+
+        # ── Add buttons ──
+
+        async def on_add_allow(interaction: discord.Interaction) -> None:
+            await interaction.response.send_modal(
+                ProfileAddOverrideModal(self._ctx, editor_view=self, override_value=PermissionOverrideValue.allow)
+            )
+
+        async def on_add_deny(interaction: discord.Interaction) -> None:
+            await interaction.response.send_modal(
+                ProfileAddOverrideModal(self._ctx, editor_view=self, override_value=PermissionOverrideValue.deny)
+            )
+
+        add_allow_btn = self._btn(
+            self._ctx.translate(_("ftl-view-profile-editor-btn-add-allow")),
+            discord.ButtonStyle.success,
+            on_add_allow,
+        )
+        add_deny_btn = self._btn(
+            self._ctx.translate(_("ftl-view-profile-editor-btn-add-deny")),
+            discord.ButtonStyle.danger,
+            on_add_deny,
+        )
+
+        # ── Override list and remove controls ──
+
+        if self.profile.permission_overrides:
+            lines = [
+                self._ctx.translate(
+                    _("ftl-view-profile-editor-override-line-allow", command=k)
+                    if v == PermissionOverrideValue.allow
+                    else _("ftl-view-profile-editor-override-line-deny", command=k)
+                )
+                for k, v in self.profile.permission_overrides.items()
+            ]
+            result.append(discord.ui.TextDisplay("\n".join(lines)))
+
+            if len(self.profile.permission_overrides) <= self._SELECT_MAX:
+                # ── Remove select ──
+
+                remove_options = [
+                    discord.SelectOption(
+                        label=k,
+                        value=k,
+                        description=self._ctx.translate(
+                            _("ftl-view-profile-editor-override-value-allow")
+                            if v == PermissionOverrideValue.allow
+                            else _("ftl-view-profile-editor-override-value-deny")
+                        ),
+                    )
+                    for k, v in self.profile.permission_overrides.items()
+                ]
+                remove_select: discord.ui.Select[ProfileEditorView] = discord.ui.Select(
+                    placeholder=self._ctx.translate(_("ftl-view-profile-editor-select-remove-placeholder")),
+                    options=remove_options,
+                )
+
+                async def on_remove_override(interaction: discord.Interaction) -> None:
+                    key = remove_select.values[0]
+                    # Guard against the profile being mutated between the last rebuild and now.
+                    if key in self.profile.permission_overrides:
+                        if not await self.remove_override(key, interaction):
+                            return
+                    await self._render(interaction)
+
+                remove_select.callback = on_remove_override
+                result.extend([
+                    discord.ui.ActionRow(remove_select),
+                    discord.ui.ActionRow(add_allow_btn, add_deny_btn),
+                ])
+            else:
+
+                async def on_remove_by_name(interaction: discord.Interaction) -> None:
+                    await interaction.response.send_modal(ProfileRemoveOverrideModal(self._ctx, editor_view=self))
+
+                result.append(
+                    discord.ui.ActionRow(
+                        add_allow_btn,
+                        add_deny_btn,
+                        self._btn(
+                            self._ctx.translate(_("ftl-view-profile-editor-btn-remove-override")),
+                            discord.ButtonStyle.secondary,
+                            on_remove_by_name,
+                        ),
+                    )
+                )
+        else:
+            result.append(discord.ui.ActionRow(add_allow_btn, add_deny_btn))
+
+        return result
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Return `True` only when the interaction originates from the command invoker."""
+        return interaction.user == self._ctx.author
+
+    async def on_timeout(self) -> None:
+        """Replace the card with a timed-out terminal state."""
+        await self.close(
+            self._ctx.translate(_("ftl-view-profile-editor-timeout-content")),
+            color=discord.Color.yellow(),
+        )
+
+
+class ProfileListView(discord.ui.LayoutView):
+    """Read-only card listing all configured profiles."""
+
+    def __init__(self, ctx: Context, *, profiles: list[ProfileModel]) -> None:
+        """Build the list card from the given profiles.
+
+        Args:
+            ctx: The command context used for translation.
+            profiles: All profiles to display.
+        """
+        super().__init__(timeout=1.0)  # non-interactive
+
+        lines = [
+            ctx.translate(
+                _(
+                    "ftl-cmd-profile-list-row",
+                    mention=profile.mention,
+                    level=profile.access_level
+                    if profile.access_level is not None
+                    else _("ftl-cmd-profile-list-no-level"),
+                    overrides=_("ftl-cmd-profile-list-overrides", count=len(profile.permission_overrides)),
+                )
+            )
+            for profile in profiles
+        ]
+
+        title = ctx.translate(_("ftl-cmd-profile-list-title", count=len(profiles)))
+        tip = ctx.translate(_("ftl-cmd-profile-list-tip"))
+        content = f"{title}\n\n" + "\n".join(lines)
+
+        children: list[discord.ui.Item[ProfileListView]] = [
+            discord.ui.TextDisplay(content),
+            discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small),
+            discord.ui.TextDisplay(tip),
+        ]
+        self.add_item(discord.ui.Container(*children, accent_color=discord.Color.blurple()))
 
 
 @lazy_hybrid_group(
@@ -317,347 +863,116 @@ def make_profile_customize_view(
     description=_("ftl-cmd-profile-description"),
 )
 async def profile_command(cog: Utility, ctx: Context) -> None:
-    """View and manage profile settings.
-
-    This group command provides access to all profile management functionality
-    including creating, editing, and deleting profiles, as well as managing
-    permission overrides.
+    """List every profile that has been created, sorted by access level.
 
     Args:
-        cog: The Utility cog instance.
+        cog: The [`Utility`][] cog instance.
         ctx: The command context.
     """
+    profiles = ctx.bot.database_client.profiles
+    if not profiles:
+        await ctx.reply(_("ftl-cmd-profile-list-empty"))
+        return
+
+    sorted_profiles = sorted(profiles, key=lambda p: (-int(p.access_level or 0), p.profile_type.value))
+    await ctx.reply(view=ProfileListView(ctx, profiles=sorted_profiles))
 
 
-@wrap(discord.app_commands.rename, user_or_role=_("ftl-cmd-profile-add-param-user-or-role-name"))
-@wrap(discord.app_commands.describe, user_or_role=_("ftl-cmd-profile-add-param-user-or-role-description"))
-@profile_command.command(name=_("ftl-cmd-profile-add-name"), description=_("ftl-cmd-profile-add-description"))
-async def profile_add_command(
-    cog: Utility, ctx: Context, user_or_role: discord.Member | discord.User | discord.Role
-) -> None:
-    """Create a new profile for a user or role.
+@wrap(discord.app_commands.rename, target=_("ftl-cmd-profile-edit-param-target-name"))
+@wrap(discord.app_commands.describe, target=_("ftl-cmd-profile-edit-param-target-description"))
+@profile_command.command(name=_("ftl-cmd-profile-edit-name"), description=_("ftl-cmd-profile-edit-description"))
+async def profile_edit_command(cog: Utility, ctx: Context, target: ProfileLookup) -> None:
+    """Open an editor for a user or role's profile.
 
-    Creates a profile in the database and immediately provides customization options
-    through an interactive view.
+    Creates a temporary profile first if none exists. The editor allows changing the
+    access level, tag, color, and per-command permission overrides all from one card.
 
     Args:
-        cog: The Utility cog instance.
+        cog: The [`Utility`][modmail.cogs.utility.Utility] cog instance.
         ctx: The command context.
-        user_or_role: The user or role whose profile should be created.
+        target: The resolved [`ProfileResult`][] for the target user or role.
     """
-    if _check_is_bot(user_or_role):
-        await ctx.reply(_("ftl-cmd-profile-no-bot"))
-        return
+    profile = target.profile
+    if profile is None:
+        profile = ProfileModel(
+            bot_id=CONFIG.bot.bot_id,
+            profile_id=target.entity.id,
+            profile_type=target.profile_type,
+        )
 
-    profile_detail = _get_profile_detail(user_or_role=user_or_role)
-
-    # These can't be None, assert for type checker
-    assert profile_detail is not None
-    assert profile_detail.profile_type is not None
-
-    # Check if the user/role already have a profile
-    existing_profile = cog.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
-    if existing_profile is not None:
-        await ctx.reply(_("ftl-cmd-profile-add-already-exists", name=profile_detail.mention))
-        return
-
-    new_profile = ProfileModel(
-        bot_id=CONFIG.bot.bot_id,
-        profile_id=profile_detail.profile_id,
-        profile_type=profile_detail.profile_type,
-    )
-    await cog.bot.database_client.update_profile(new_profile)
-
-    view = (make_profile_customize_view(cog, ctx, profile_detail, new_profile))()
-    message = await ctx.reply(_("ftl-cmd-profile-add-success", name=profile_detail.mention), view=view)
-    view.set_original_message(message)
+    view = ProfileEditorView(ctx=ctx, profile=profile)
+    await view.build()
+    message = await ctx.reply(view=view)
+    view.message = message
 
 
-@wrap(discord.app_commands.rename, user_or_role=_("ftl-cmd-profile-delete-param-user-or-role-name"))
-@wrap(discord.app_commands.describe, user_or_role=_("ftl-cmd-profile-delete-param-user-or-role-description"))
+@wrap(
+    discord.app_commands.rename,
+    target=_("ftl-cmd-profile-delete-param-target-name"),
+    id_=_("ftl-cmd-profile-delete-param-id-name"),
+)
+@wrap(
+    discord.app_commands.describe,
+    target=_("ftl-cmd-profile-delete-param-target-description"),
+    id_=_("ftl-cmd-profile-delete-param-id-description"),
+)
 @profile_command.command(
     name=_("ftl-cmd-profile-delete-name"), description=_("ftl-cmd-profile-delete-description")
 )
 async def profile_delete_command(
     cog: Utility,
     ctx: Context,
-    user_or_role: discord.Member | discord.User | discord.Role | None,
-    id_: int | None,  # in case role/user was deleted TODO: auto delete on bot start so this isn't necessary
+    target: ProfileLookup | None,
+    id_: int | None,
 ) -> None:
-    """Delete a profile associated with a user or role.
+    """Delete a profile, removing all overrides and access level settings.
 
-    Removes the profile and all associated customizations and permission overrides
-    from the database.
+    Exactly one of `target` or `id_` must be provided. The `id_` parameter
+    exists for cases where the Discord user or role has already been deleted and
+    can no longer be resolved by mention or name.
+
+    Also revokes Modmail category access for the deleted profile if it had
+    staff-or-above access.
 
     Args:
-        cog: The Utility cog instance.
+        cog: The [`Utility`][modmail.cogs.utility.Utility] cog instance.
         ctx: The command context.
-        user_or_role: The user or role whose profile should be deleted.
-        id_: The profile ID to delete if the user/role is no longer accessible.
+        target: The resolved [`ProfileResult`][] for the target user or role
+            (`None` when using `id_` instead).
+        id_: Raw snowflake ID of the profile to delete, used when the Discord entity
+            no longer exists (`None` when using `target` instead).
     """
-    if user_or_role is not None and id_ is not None:
+    if target is not None and id_ is not None:
         await ctx.reply(_("ftl-cmd-profile-delete-both"))
         return
 
-    profile_detail = _get_profile_detail(user_or_role=user_or_role, id_=id_)
-    if profile_detail is None:
+    if target is not None:
+        profile = target.profile
+    elif id_ is not None:
+        profile = next((p for p in ctx.bot.database_client.profiles if p.profile_id == id_), None)
+    else:
         await ctx.reply(_("ftl-cmd-profile-delete-none"))
         return
 
-    await cog.bot.database_client.delete_profile(profile_id=profile_detail.profile_id)
-    if profile_detail.profile_type is not None and user_or_role is not None and not _check_is_bot(user_or_role):
-        # Remove access from the Modmail category if not a bot
-        await cog.bot.staff_guild.revoke_access(profile_detail.profile_id, profile_detail.profile_type)
-
-    await ctx.reply(_("ftl-cmd-profile-delete-success", name=profile_detail.mention))
-
-
-@wrap(discord.app_commands.rename, user_or_role=_("ftl-cmd-profile-edit-param-user-or-role-name"))
-@wrap(discord.app_commands.describe, user_or_role=_("ftl-cmd-profile-edit-param-user-or-role-description"))
-@profile_command.command(name=_("ftl-cmd-profile-edit-name"), description=_("ftl-cmd-profile-edit-description"))
-async def profile_edit_command(
-    cog: Utility,
-    ctx: Context,
-    user_or_role: discord.Member | discord.User | discord.Role,
-) -> None:
-    """Customize a user or role's profile.
-
-    Opens an interactive view for editing a profile's appearance settings and
-    access level. Creates a new profile if one doesn't exist.
-
-    Args:
-        cog: The Utility cog instance.
-        ctx: The command context.
-        user_or_role: The user or role whose profile should be edited.
-    """
-    if _check_is_bot(user_or_role):
-        await ctx.reply(_("ftl-cmd-profile-no-bot"))
-        return
-
-    profile_detail = _get_profile_detail(user_or_role=user_or_role)
-
-    # These can't be None, assert for type checker
-    assert profile_detail is not None
-    assert profile_detail.profile_type is not None
-
-    # Check if the user/role has an existing profile
-    profile = cog.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
     if profile is None:
-        # Create a new profile if it doesn't exist
-        profile = ProfileModel(
-            bot_id=CONFIG.bot.bot_id,
-            profile_id=profile_detail.profile_id,
-            profile_type=profile_detail.profile_type,
-        )
-        await cog.bot.database_client.update_profile(profile)
-
-    view = (make_profile_customize_view(cog, ctx, profile_detail, profile))()
-    message = await ctx.reply(_("ftl-cmd-profile-edit-message", name=profile_detail.mention), view=view)
-    view.set_original_message(message)
-
-
-async def _update_permission_override(
-    cog: Utility,
-    ctx: Context,
-    user_or_role: discord.Member | discord.User | discord.Role,
-    command_name: Str,
-    override_value: PermissionOverrideValue,
-) -> None:
-    """Update the permission override for a user or role.
-
-    Helper function for the allow and deny commands that modifies command access
-    permissions for specific users or roles.
-
-    Args:
-        cog: The Utility cog instance.
-        ctx: The command context.
-        user_or_role: The user or role to update permissions for.
-        command_name: The command name to override permissions for.
-        override_value: The permission value to set (allow or deny).
-    """
-    if _check_is_bot(user_or_role):
-        await ctx.reply(_("ftl-cmd-profile-no-bot"))
+        await ctx.reply(_("ftl-cmd-profile-delete-not-found"))
         return
 
-    # Sanitize the command name
-    command_name = utils.sanitize_user_command_name(command_name)
-    command_name_no_wildcard = command_name.split("+")[0].strip()
-
-    # Check if the command name is valid
-    for bot_command in cog.bot.walk_commands():
-        bot_command_name = utils.get_command_name(bot_command)
-
-        if bot_command_name == command_name_no_wildcard:
-            if "+" in command_name and not isinstance(bot_command, commands.Group):
-                command_name = command_name_no_wildcard  # Remove the wildcard
-
-            if cog.bot.get_command_access_level(bot_command) == RequiredAccessLevel.owner:
-                # Trying to override an owner-only command
-                if not await cog.bot.is_owner(ctx.author):
-                    await ctx.reply(_("ftl-cmd-profile-override-owner-command", command=command_name))
-                    return
-            break  # Command found, exit the loop
-    else:
-        # Command not found
-        await ctx.reply(_("ftl-cmd-profile-override-command-not-found", command=command_name))
+    try:
+        await ctx.bot.database_client.delete_profile(profile_id=profile.profile_id)
+    except DatabaseOperationError as e:
+        logger.error("Failed to delete profile %d: %s", profile.profile_id, e)
+        await ctx.reply(_("ftl-cmd-profile-delete-failed"))
         return
 
-    profile_detail = _get_profile_detail(user_or_role=user_or_role)
+    access_sync_failed = False
+    if profile.access_level is not None and profile.access_level != AccessLevel.everyone:
+        try:
+            await ctx.bot.staff_guild.revoke_access(profile.profile_id, profile.profile_type)
+        except Exception as e:
+            logger.error("Failed to revoke Discord access for profile %d: %s", profile.profile_id, e)
+            access_sync_failed = True
 
-    # These can't be None, assert for type checker
-    assert profile_detail is not None
-    assert profile_detail.profile_type is not None
-
-    # Check if the profile exists in the database
-    profile = cog.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
-    if profile is None:
-        # Create a new profile if it doesn't exist
-        profile = ProfileModel(
-            bot_id=CONFIG.bot.bot_id,
-            profile_id=profile_detail.profile_id,
-            profile_type=profile_detail.profile_type,
-        )
-
-    # Update the overrides
-    overrides = profile.permission_overrides.copy()
-    overrides[command_name] = override_value
-    new_profile = profile.model_copy(deep=True, update={"permission_overrides": overrides})
-
-    await cog.bot.database_client.update_profile(new_profile)
-    if override_value == PermissionOverrideValue.allow:
-        await ctx.reply(_("ftl-cmd-profile-allow-success", name=profile_detail.mention, command=command_name))
-    else:
-        await ctx.reply(_("ftl-cmd-profile-deny-success", name=profile_detail.mention, command=command_name))
-
-
-@wrap(
-    discord.app_commands.rename,
-    user_or_role=_("ftl-cmd-profile-allow-param-user-or-role-name"),
-    command_name=_("ftl-cmd-profile-allow-param-command-name-name"),
-)
-@wrap(
-    discord.app_commands.describe,
-    user_or_role=_("ftl-cmd-profile-allow-param-user-or-role-description"),
-    command_name=_("ftl-cmd-profile-allow-param-command-name-description"),
-)
-@profile_command.command(name=_("ftl-cmd-profile-allow-name"), description=_("ftl-cmd-profile-allow-description"))
-async def profile_allow_command(
-    cog: Utility,
-    ctx: Context,
-    user_or_role: discord.Member | discord.User | discord.Role,
-    *,
-    command_name: Str,
-) -> None:
-    """Allow a user or role to use a specific command.
-
-    Grants permission to use a command without having the normally required
-    access level. Particularly useful for allowing lower-level users to access
-    specific higher-level commands.
-
-    Args:
-        cog: The Utility cog instance.
-        ctx: The command context.
-        user_or_role: The user or role to grant permission to.
-        command_name: The command to allow access to. Can include wildcards using "+" for command groups.
-    """
-    await _update_permission_override(cog, ctx, user_or_role, command_name, PermissionOverrideValue.allow)
-
-
-@wrap(
-    discord.app_commands.rename,
-    user_or_role=_("ftl-cmd-profile-deny-param-user-or-role-name"),
-    command_name=_("ftl-cmd-profile-deny-param-command-name-name"),
-)
-@wrap(
-    discord.app_commands.describe,
-    user_or_role=_("ftl-cmd-profile-deny-param-user-or-role-description"),
-    command_name=_("ftl-cmd-profile-deny-param-command-name-description"),
-)
-@profile_command.command(name=_("ftl-cmd-profile-deny-name"), description=_("ftl-cmd-profile-deny-description"))
-async def profile_deny_command(
-    cog: Utility,
-    ctx: Context,
-    user_or_role: discord.Member | discord.User | discord.Role,
-    *,
-    command_name: Str,
-) -> None:
-    """Deny a user or role from using a specific command.
-
-    Prevents the use of a command even if the user or role would normally have
-    the required access level to use it.
-
-    Args:
-        cog: The Utility cog instance.
-        ctx: The command context.
-        user_or_role: The user or role to deny permission to.
-        command_name: The command to deny access to. Can include wildcards using "+" for command groups.
-    """
-    await _update_permission_override(cog, ctx, user_or_role, command_name, PermissionOverrideValue.deny)
-
-
-@wrap(
-    discord.app_commands.rename,
-    user_or_role=_("ftl-cmd-profile-unset-param-user-or-role-name"),
-    command_name=_("ftl-cmd-profile-unset-param-command-name-name"),
-)
-@wrap(
-    discord.app_commands.describe,
-    user_or_role=_("ftl-cmd-profile-unset-param-user-or-role-description"),
-    command_name=_("ftl-cmd-profile-unset-param-command-name-description"),
-)
-@profile_command.command(name=_("ftl-cmd-profile-unset-name"), description=_("ftl-cmd-profile-unset-description"))
-async def profile_unset_command(
-    cog: Utility,
-    ctx: Context,
-    user_or_role: discord.Member | discord.User | discord.Role,
-    *,
-    command_name: Str | None,
-) -> None:
-    """Remove command permission overrides for a user or role.
-
-    Removes specific or all command permission overrides, returning the commands
-    to their default access level requirements for the specified user or role.
-
-    Args:
-        cog: The Utility cog instance.
-        ctx: The command context.
-        user_or_role: The user or role to remove overrides for.
-        command_name: The specific command override to remove, or None to remove all overrides.
-    """
-    if _check_is_bot(user_or_role):
-        await ctx.reply(_("ftl-cmd-profile-no-bot"))
-        return
-
-    profile_detail = _get_profile_detail(user_or_role=user_or_role)
-
-    # These can't be None, assert for type checker
-    assert profile_detail is not None
-    assert profile_detail.profile_type is not None
-
-    # Check if the profile exists in the database
-    profile = cog.bot.database_client.get_profile(profile_detail.profile_id, profile_detail.profile_type)
-    if profile is None:
-        await ctx.reply(_("ftl-cmd-profile-unset-profile-not-found", name=profile_detail.mention))
-        return
-
-    if command_name is not None:
-        # Sanitize the command name
-        command_name = utils.sanitize_user_command_name(command_name)
-
-        # Check if the command override exists
-        if command_name not in profile.permission_overrides:
-            await ctx.reply(
-                _("ftl-cmd-profile-unset-override-not-found", name=profile_detail.mention, command=command_name),
-            )
-            return
-
-        overrides = profile.permission_overrides.copy()
-        # Remove the override
-        del overrides[command_name]
-    else:
-        # Remove all overrides
-        overrides = {}
-    new_profile = profile.model_copy(deep=True, update={"permission_overrides": overrides})
-
-    await cog.bot.database_client.update_profile(new_profile)
-    await ctx.reply(_("ftl-cmd-profile-unset-success", name=profile_detail.mention, command=command_name))
+    await ctx.reply(_("ftl-cmd-profile-delete-success", profile=profile.mention))
+    if access_sync_failed:
+        await ctx.reply(_("ftl-view-profile-editor-access-sync-failed"), ephemeral=True)

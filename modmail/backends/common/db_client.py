@@ -254,11 +254,24 @@ class DBClient:
     async def sync_profiles(self) -> None:
         """Update the local cache with all profiles from the database.
 
+        Empty profiles discovered during sync are pruned from the database and excluded
+        from the cache. Prune failures are logged and suppressed so they do not abort the sync.
+
         Raises:
             DatabaseOperationError: If the backend fetch call fails.
         """
         all_profiles = await self._backend.fetch_all_profiles()
-        self._profiles_mapping = {ProfileKey(p.profile_id, p.profile_type): p for p in all_profiles}
+        profiles: dict[ProfileKey, ProfileModel] = {}
+        for p in all_profiles:
+            if p.is_empty:
+                try:
+                    await self._backend.remove_profile(p.profile_id)
+                    logger.debug("Pruned empty profile %d during sync.", p.profile_id)
+                except DatabaseOperationError:
+                    logger.warning("Failed to prune empty profile %d during sync.", p.profile_id, exc_info=True)
+                continue
+            profiles[ProfileKey(p.profile_id, p.profile_type)] = p
+        self._profiles_mapping = profiles
         logger.debug("Synchronized %d profiles from database.", len(self._profiles_mapping))
 
     def get_profile(self, profile_id: int, profile_type: ProfileType) -> ProfileModel | None:
@@ -277,12 +290,18 @@ class DBClient:
     async def update_profile(self, profile: ProfileModel) -> None:
         """Persist a [ProfileModel][]{ data-preview } to the database and update the local cache.
 
+        If the profile has no meaningful configuration ([`ProfileModel.is_empty`][]) it is
+        deleted instead of persisted, keeping the database free of empty records.
+
         Args:
-            profile: The profile to create or update.
+            profile: The profile to create, update, or delete if empty.
 
         Raises:
-            DatabaseOperationError: If the backend persist call fails.
+            DatabaseOperationError: If the backend call fails.
         """
+        if profile.is_empty:
+            await self.delete_profile(profile.profile_id)
+            return
         await self._backend.persist_profile(profile)
         self._profiles[ProfileKey(profile.profile_id, profile.profile_type)] = profile
         logger.debug("Updated profile %s/%s in cache.", profile.profile_id, profile.profile_type, stacklevel=2)

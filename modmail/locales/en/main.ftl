@@ -46,100 +46,131 @@ ftl-cmd-status-clear-description = Clear the status of the Modmail bot.
 ## Command: Utility.profile
 
 ftl-cmd-profile-name = profile
-ftl-cmd-profile-description = View a list of all profiles.
-ftl-cmd-profile-fallback-name = view
+ftl-cmd-profile-description = View and manage permission profiles for users and roles.
+ftl-cmd-profile-fallback-name = list
 
-ftl-cmd-profile-no-bot = Bots cannot have profiles.
+## Modals: profile appearance and override
 
-ftl-modal-profile-customize-title = Customize Profile
-ftl-modal-profile-customize-colour = Colour
-ftl-modal-profile-customize-colour-invalid = Invalid colour. Please use a colour hex code (e.g. #FF0000 for red).
+ftl-modal-profile-customize-title = Customize Appearance
+ftl-modal-profile-customize-color = Color
+ftl-modal-profile-customize-color-placeholder = #000000
+ftl-modal-profile-customize-color-invalid = Invalid color. Please use a color hex code (e.g. #FF0000 for red).
 ftl-modal-profile-customize-tag = Tag
-# :param $name: the name of the user or role
-ftl-modal-profile-customize-success = Successfully customized the profile of { $name }.
-ftl-view-profile-button-customize-label = Customize
-ftl-view-profile-select-level-placeholder = Change access level
-ftl-view-profile-select-level-option-none = None
-# :param $level: the name of the access level ('None' when unsetting)
-# :param $name: the name of the user or role
-ftl-view-profile-select-level-success = { $level ->
-   *[default] Successfully set the permission access level of { $name } to { $level }.
-    [None]    Successfully removed the permission access level of { $name }.
+# :param $profile: the mention of the user or role
+ftl-modal-profile-customize-success = Updated the appearance of { $profile }.
+
+ftl-modal-profile-remove-override-title = Remove Override
+ftl-modal-profile-remove-override-name-label = Override Name
+ftl-modal-profile-remove-override-name-placeholder = e.g. reply, profile+
+# :param $command: the override name entered
+ftl-modal-profile-remove-override-not-found = No override named `{ $command }` exists on this profile.
+# :param $command: the override name removed
+ftl-modal-profile-remove-override-success = Removed the override for `{ $command }`.
+
+ftl-modal-profile-add-override-allow-title = Allow Command
+ftl-modal-profile-add-override-deny-title = Deny Command
+ftl-modal-profile-add-override-command-label = Command Name
+ftl-modal-profile-add-override-command-placeholder = e.g. reply, profile+
+# :param $command: the command name
+ftl-modal-profile-add-override-already-allow = `{ $command }` is already allowed on this profile.
+# :param $command: the command name
+ftl-modal-profile-add-override-already-deny = `{ $command }` is already denied on this profile.
+
+## Profile editor card (ProfileEditorView)
+
+# :param $profile: the mention of the user or role
+# :param $type: "User" or "Role"
+ftl-view-profile-editor-header = ### Profile: { $profile }
+    **Type**: { $type }
+ftl-view-profile-editor-type-user = User
+ftl-view-profile-editor-type-role = Role
+# :param $level: the access level label or "None"
+# :param $tag: the tag value or "Not set"
+# :param $color: the hex color string or "Not set"
+ftl-view-profile-editor-summary = **Access Level**: { $level }  •  **Tag**: { $tag }  •  **Color**: { $color }
+ftl-view-profile-editor-level-none = None
+ftl-view-profile-editor-not-set = Not set
+ftl-view-profile-editor-select-level-placeholder = Change access level…
+ftl-view-profile-editor-btn-delete = Delete
+ftl-view-profile-editor-btn-customize = Customize
+ftl-view-profile-editor-btn-add-allow = + Allow
+ftl-view-profile-editor-btn-add-deny = + Deny
+# :param $count: number of overrides
+ftl-view-profile-editor-overrides-header = { $count ->
+    [0]    **Permission Overrides** — None
+   *[other] **Permission Overrides** ({ $count })
 }
+ftl-view-profile-editor-select-remove-placeholder = Remove override…
+ftl-view-profile-editor-btn-remove-override = Remove Override
+ftl-view-profile-editor-override-value-allow = Allow
+ftl-view-profile-editor-override-value-deny = Deny
+# :param $command: the command name
+ftl-view-profile-editor-override-line-allow = ✅ `{ $command }`
+# :param $command: the command name
+ftl-view-profile-editor-override-line-deny = ❌ `{ $command }`
+# :param $command: the command name
+ftl-view-profile-editor-override-allow-success = ✅ Allowed `{ $command }` on this profile.
+# :param $command: the command name
+ftl-view-profile-editor-override-deny-success = ❌ Denied `{ $command }` on this profile.
+ftl-view-profile-editor-delete-confirm = Are you sure you want to delete this profile? This cannot be undone.
+ftl-view-profile-editor-delete-btn-confirm = Delete Profile
+# :param $profile: the mention of the user or role
+ftl-view-profile-editor-delete-success = Deleted the profile of { $profile }.
+# :param $profile: the mention of the user or role
+ftl-view-profile-editor-deleted-content =
+    ### Profile deleted
+    The profile of { $profile } has been removed.
+ftl-view-profile-editor-timeout-content =
+    ### Editor timed out
+    No changes have been saved since this message expired. Run the command again to reopen.
+ftl-view-profile-editor-update-failed = Something went wrong. Please try again.
+ftl-view-profile-editor-access-sync-failed = Profile updated, but Discord channel permissions could not be synced.
 
-## Subcommand: Utility.profile.add
+## Subcommand: Utility.profile.list (fallback)
 
-ftl-cmd-profile-add-name = add
-ftl-cmd-profile-add-description = Create a profile for a user or role.
-ftl-cmd-profile-add-param-user-or-role-name = user_or_role
-ftl-cmd-profile-add-param-user-or-role-description = The user or role whose profile should be created.
-# The following params can be used for the next 2 lines
-# :param $name: the name of the user or role
-ftl-cmd-profile-add-already-exists = { $name } already has a profile.
-ftl-cmd-profile-add-success = Successfully created a profile for { $name }.
-
-## Subcommand: Utility.profile.delete
-
-ftl-cmd-profile-delete-name = delete
-ftl-cmd-profile-delete-description = Delete a profile.
-ftl-cmd-profile-delete-param-user-or-role-name = user_or_role
-ftl-cmd-profile-delete-param-user-or-role-description = The user or role whose profile should be deleted.
-ftl-cmd-profile-delete-both = Please only enter a user, role, or ID.
-ftl-cmd-profile-delete-none = Please provide a user, role, or ID.
-# :param $name: the name of the user or role or ID
-ftl-cmd-profile-delete-success = Deleted the profile of { $name }.
+# :param $count: the number of profiles
+ftl-cmd-profile-list-title = ### Profiles ({ $count })
+ftl-cmd-profile-list-empty = No profiles have been configured yet.
+ftl-cmd-profile-list-no-level = No access level
+# :param $count: number of overrides
+ftl-cmd-profile-list-overrides = { $count ->
+    [0]     no overrides
+    [one]   { $count } override
+   *[other] { $count } overrides
+}
+# :param $mention: the profile mention
+# :param $level: the access level label
+# :param $overrides: the formatted override count string
+ftl-cmd-profile-list-row = - **{ $mention }** — { $level } · { $overrides }
+ftl-cmd-profile-list-tip = -# Use `/{ ftl-cmd-profile-name } { ftl-cmd-profile-edit-name }` to add or update a profile.
 
 ## Subcommand: Utility.profile.edit
 
 ftl-cmd-profile-edit-name = edit
-ftl-cmd-profile-edit-description = Customize the profile.
-ftl-cmd-profile-edit-param-user-or-role-name = user_or_role
-ftl-cmd-profile-edit-param-user-or-role-description = The user or role whose profile should be customized.
-# :param $name: the name of the user or role
-ftl-cmd-profile-edit-message = Customizing the profile of { $name }.
+ftl-cmd-profile-edit-description = Edit a profile's access level, appearance, and command overrides.
+ftl-cmd-profile-edit-param-target-name = user_or_role
+ftl-cmd-profile-edit-param-target-description = The user or role whose profile to edit.
 
-## Subcommand: Utility.profile.allow
+## Subcommand: Utility.profile.delete
 
-ftl-cmd-profile-allow-name = allow
-ftl-cmd-profile-allow-description = Allow users of this profile to use a command.
-ftl-cmd-profile-allow-param-user-or-role-name = user_or_role
-ftl-cmd-profile-allow-param-user-or-role-description = The user or role to allow.
-ftl-cmd-profile-allow-param-command-name-name = command-name
-ftl-cmd-profile-allow-param-command-name-description = The command to allow. Can include wildcards using "+" for command groups.
-# :param $name: the name of the user or role
-# :param $command: the name of the command
-ftl-cmd-profile-allow-success = Allowed { $name } to use { $command }.
-# The following params can be used for the next 2 lines
+ftl-cmd-profile-delete-name = delete
+ftl-cmd-profile-delete-description = Delete a profile, removing all access settings and command overrides.
+ftl-cmd-profile-delete-param-target-name = user_or_role
+ftl-cmd-profile-delete-param-target-description = The user or role whose profile should be deleted.
+ftl-cmd-profile-delete-param-id-name = id
+ftl-cmd-profile-delete-param-id-description = Raw Discord ID to use when the user or role no longer exists in the server.
+ftl-cmd-profile-delete-both = Provide either a user or role, or an ID — not both.
+ftl-cmd-profile-delete-none = Provide a user, role, or ID.
+ftl-cmd-profile-delete-not-found = No profile found for that user, role, or ID.
+# :param $profile: the mention of the user or role or ID
+ftl-cmd-profile-delete-success = Deleted the profile of { $profile }.
+ftl-cmd-profile-delete-failed = Failed to delete the profile. Please try again.
+
+## Shared override error messages
+
 # :param $command: the name of the command
 ftl-cmd-profile-override-owner-command = Only bot owners can override this command.
-ftl-cmd-profile-override-command-not-found = Command { $command } not found.
-
-## Subcommand: Utility.profile.deny
-
-ftl-cmd-profile-deny-name = deny
-ftl-cmd-profile-deny-description = Deny users of this profile from using a command.
-ftl-cmd-profile-deny-param-user-or-role-name = user_or_role
-ftl-cmd-profile-deny-param-user-or-role-description = The user or role to deny.
-ftl-cmd-profile-deny-param-command-name-name = command-name
-ftl-cmd-profile-deny-param-command-name-description = The command to deny. Can include wildcards using "+" for command groups.
-# :param $name: the name of the user or role
-# :param $command: the name of the command
-ftl-cmd-profile-deny-success = Denied { $name } from using { $command }.
-
-## Subcommand: Utility.profile.unset
-
-ftl-cmd-profile-unset-name = unset
-ftl-cmd-profile-unset-description = Remove an allow/deny override from this profile on a command.
-ftl-cmd-profile-unset-param-user-or-role-name = user_or_role
-ftl-cmd-profile-unset-param-user-or-role-description = The user or role to remove the override from.
-ftl-cmd-profile-unset-param-command-name-name = command-name
-ftl-cmd-profile-unset-param-command-name-description = The command to remove the override from. Leave blank to remove all overrides.
-# The following params can be used for the next 3 lines
-# :param $name: the name of the user or role
-# :param $command: the name of the command
-ftl-cmd-profile-unset-success = The override for { $name } on { $command } has been unset.
-ftl-cmd-profile-unset-profile-not-found = { $name } does not have a profile.
-ftl-cmd-profile-unset-override-not-found = No override exists on { $command } for { $name }.
+ftl-cmd-profile-override-command-not-found = Command `{ $command }` not found.
 
 ## Command: Modmail.setup
 
@@ -361,6 +392,16 @@ ftl-msg-log-embed-open-footer = Ticket Open
 ftl-msg-log-embed-closed-footer = Ticket Closed by @{ $user }
 ftl-msg-log-embed-closed-footer-unknown-closer = Ticket Closed
 ftl-msg-log-embed-no-content-description = *No content*
+
+### ========================
+###    Converter errors
+### ========================
+
+## Profile converter errors
+
+# :param $argument: the raw argument string supplied by the user
+ftl-error-converter-profile-not-found = Could not find a user or role matching "{ $argument }".
+ftl-error-converter-profile-is-bot = Bots cannot have profiles.
 
 ### ========================
 ###          Models

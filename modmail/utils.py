@@ -1,9 +1,4 @@
-"""Utility functions module.
-
-This module contains utility functions that provide common, reusable functionality
-for the project. These functions are designed to be used across different parts
-of the codebase to avoid redundancy and promote code reuse.
-"""
+"""Shared utility functions used across the project."""
 
 from __future__ import annotations
 
@@ -12,6 +7,8 @@ import weakref
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
+import discord
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -19,9 +16,10 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MultiKeyCollection",
-    "colour_hex_to_int",
+    "color_hex_to_int",
     "get_command_name",
-    "int_to_colour_hex",
+    "int_to_color_hex",
+    "is_bot",
     "sanitize_user_command_name",
     "strtobool",
 ]
@@ -42,8 +40,8 @@ def strtobool(val: str) -> bool:
         ValueError: If the input string is not a recognized truth value.
 
     Note:
-        True values are 'y', 'yes', 't', 'true', 'on', and '1'.
-        False values are 'n', 'no', 'f', 'false', 'off', and '0'.
+        True values are `y`, `yes`, `t`, `true`, `on`, and `1`.
+        False values are `n`, `no`, `f`, `false`, `off`, and `0`.
     """
     val = val.casefold()
     if val in {"y", "yes", "t", "true", "on", "1"}:
@@ -53,28 +51,45 @@ def strtobool(val: str) -> bool:
     raise ValueError(f"invalid truth value {val!r}")
 
 
-def int_to_colour_hex(value: int) -> str:
-    """Convert an integer to a hex color string.
+def int_to_color_hex(value: int) -> str:
+    """Convert a 24-bit integer to a `#RRGGBB` hex color string.
+
+    32-bit values are treated as RGBA (`0xRRGGBBAA`); the low alpha byte is discarded.
 
     Args:
-        value: The hex-integer value to convert.
+        value: RGB (`0xRRGGBB`) color integer.
 
     Returns:
-        A hex color string in the format '#RRGGBB'.
+        Hex color string in `#RRGGBB` format, or `#000000` if the value is out of range.
     """
-    return f"#{value:06X}"
+    if not 0 <= value <= 0xFFFFFFFF:  # noqa: PLR2004
+        return "#000000"
+    return f"#{(value >> 8) & 0xFFFFFF:06X}" if value > 0xFFFFFF else f"#{value:06X}"  # noqa: PLR2004
 
 
-def colour_hex_to_int(value: str) -> int:
-    """Convert a hex color string to an integer.
+def color_hex_to_int(value: str) -> int:
+    """Convert a hex color string to a 24-bit RGB integer.
+
+    Accepts 3-digit shorthand (`RGB` → `RRGGBB`), 6-digit RGB (`RRGGBB`), and
+    8-digit RGBA (`RRGGBBAA`) — all with or without a leading `#`.
+    8-digit values have the trailing alpha byte discarded.
 
     Args:
-        value: The hex color string in the format '#RRGGBB' or 'RRGGBB'.
+        value: Hex color string in `#RGB`, `#RRGGBB`, or `#RRGGBBAA` format.
 
     Returns:
-        The hex-integer value of the color.
+        24-bit RGB integer, or `0x000000` if the input is not valid hex or exceeds 32 bits.
     """
-    return int(value.lstrip("#"), 16)
+    stripped = value.lstrip("#")
+    if len(stripped) == 3:  # noqa: PLR2004
+        stripped = "".join(c * 2 for c in stripped)
+    try:
+        n = int(stripped, 16)
+    except ValueError:
+        return 0x000000
+    if n > 0xFFFFFFFF:  # noqa: PLR2004
+        return 0x000000
+    return (n >> 8) & 0xFFFFFF if n > 0xFFFFFF else n  # noqa: PLR2004
 
 
 def sanitize_user_command_name(command_name: str) -> str:
@@ -102,16 +117,17 @@ def sanitize_user_command_name(command_name: str) -> str:
 
 
 def get_command_name(command: commands.Command[Any, Any, Any]) -> str:
-    """Get the command name from a command object.
+    """Derive the display name from a [`discord.ext.commands.Command`][].
 
-    Extracts the command name from the callback function name,
-    removing "_command" suffix and replacing underscores with spaces.
+    Strips the `_command` suffix from the callback name and replaces underscores with
+    spaces. Falls back to [`discord.ext.commands.Command.qualified_name`][] if the suffix
+    is absent.
 
     Args:
-        command: The discord.py command object.
+        command: The command to extract the name from.
 
     Returns:
-        The formatted command name.
+        Human-readable command name.
     """
     # Check if the command has an override set in the config.
     command_name = command.callback.__name__.casefold()
@@ -188,7 +204,7 @@ class MultiKeyCollection[T]:
         return f"{self.__class__.__name__}({self.key_names}){self.primary_index}"
 
     def __getitem__(self, key_value: tuple[str, Any]) -> T | None:
-        """Get an object by any of its key.
+        """Get an object by any of its keys.
 
         Args:
             key_value: The key, value pair to search for.
@@ -313,12 +329,12 @@ class MultiKeyCollection[T]:
                 self.other_indices[key][value] = weakref.ref(obj, partial(self._cleanup_ref, key=key, value=value))
 
     def _cleanup_ref(self, ref: weakref.ReferenceType[T], key: str, value: Any) -> None:
-        """Remove weakref from index when object is garbage collected.
+        """Remove a dead weakref from the index when its object is garbage collected.
 
         Args:
-            ref: The weak reference to the object.
-            key: The key in the index.
-            value: The value in the index.
+            ref: Dead weak reference (unused).
+            key: Index key the entry lives under.
+            value: Index value identifying the entry to remove.
         """
         if key in self.other_indices and value in self.other_indices[key]:
             del self.other_indices[key][value]
@@ -366,3 +382,17 @@ class MultiKeyCollection[T]:
                         self.other_indices[k].pop(i, None)
                         break
         return obj
+
+
+def is_bot(user_or_role: discord.Member | discord.User | discord.Role) -> bool:
+    """Check if a user or role is a bot.
+
+    Args:
+        user_or_role: The member, user, or role to check.
+
+    Returns:
+        `True` if `user_or_role` is a bot user or a bot-managed role.
+    """
+    if isinstance(user_or_role, discord.Member | discord.User):
+        return user_or_role.bot
+    return user_or_role.tags is not None and user_or_role.tags.is_bot_managed()

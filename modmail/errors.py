@@ -13,6 +13,8 @@ from discord.ext import commands
 if TYPE_CHECKING:
     import datetime
 
+    from discord.app_commands import locale_str
+
 __all__ = [
     "BadPermissionsError",
     "CacheNotReadyError",
@@ -20,6 +22,7 @@ __all__ = [
     "DatabaseError",
     "DatabaseOperationError",
     "InstanceAlreadyRunningError",
+    "LocalizedBadArgumentError",
     "ModmailError",
     "NoModmailCategoryError",
     "NoStaffGuildError",
@@ -159,3 +162,24 @@ class StaffGuildNotConfiguredError(ModmailError, commands.CheckFailure):
 
     Raised when an operation requires the staff guild to be configured, but it is not.
     """
+
+
+class LocalizedBadArgumentError(ModmailError, commands.BadArgument):
+    """A [`commands.BadArgument`][] that carries a [`locale_str`][] key.
+
+    Raised by converters and transformers when an argument cannot be resolved.
+    [`Bot.on_command_error`][modmail.core.bot.Bot.on_command_error] translates
+    [`locale_key`][] into the invoking user's locale before sending the reply.
+
+    Attributes:
+        locale_key: The Fluent message key used to produce the translated error text.
+    """
+
+    def __init__(self, key: locale_str) -> None:
+        """Initialize with a locale key.
+
+        Args:
+            key: The Fluent message key for the translated error message.
+        """
+        self.locale_key = key
+        super().__init__(str(key))

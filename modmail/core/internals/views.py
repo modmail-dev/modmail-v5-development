@@ -8,10 +8,15 @@ import logging
 from typing import TYPE_CHECKING
 
 import discord
+from discord.app_commands import locale_str
+
+from ..translator import _
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from typing import Any
+
+    from .context import Context
 
 __all__ = ["PromptChoicesView", "PromptView"]
 
@@ -29,7 +34,7 @@ class PromptView(discord.ui.LayoutView):
 
     Examples:
         ```python
-        view = PromptView(content="What is your name?", ..., bot=bot, channel_id=channel.id)
+        view = PromptView(ctx=ctx, content="What is your name?", timeout=120.0)
         message = await channel.send(view=view)
         view.message = message
         timed_out = await view.wait()
@@ -40,21 +45,15 @@ class PromptView(discord.ui.LayoutView):
     def __init__(
         self,
         *,
-        content: str,
-        cancel_label: str,
-        user: discord.User | discord.Member,
-        bot: discord.Client,
-        channel_id: int,
+        ctx: Context,
+        content: str | locale_str,
         timeout: float,
     ) -> None:
         """Build the card layout with the prompt text and cancel button.
 
         Args:
+            ctx: The command context used for translation, author, and channel.
             content: Prompt text shown inside the card (supports Discord Markdown).
-            cancel_label: Label for the danger-styled cancel button.
-            user: The user allowed to interact with this view.
-            bot: Discord client used to register the message listener in `wait()`.
-            channel_id: ID of the channel to listen for the reply in.
             timeout: Seconds before the view stops accepting interactions.
         """
         super().__init__(timeout=timeout)
@@ -65,13 +64,16 @@ class PromptView(discord.ui.LayoutView):
         self.canceled = False
         """`True` if the user clicked the cancel button (as opposed to a timeout or external
         cancellation)."""
-        self._bot = bot
-        self._channel_id = channel_id
-        self._user = user
+        self._bot = ctx.bot
+        self._channel_id = ctx.channel.id
+        self._user = ctx.author
         self._wait_task: asyncio.Task[discord.Message] | None = None
 
+        if isinstance(content, locale_str):
+            content = ctx.translate(content)
+
         cancel_btn: discord.ui.Button[PromptView] = discord.ui.Button(
-            label=cancel_label,
+            label=ctx.translate(_("ftl-view-prompt-cancel-label")),
             style=discord.ButtonStyle.danger,
         )
         cancel_btn.callback = self._on_cancel
@@ -100,7 +102,7 @@ class PromptView(discord.ui.LayoutView):
             await interaction.message.delete()
         self.stop()
 
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Allow only the invoking user to interact with this view.
 
         Args:
@@ -148,7 +150,7 @@ class PromptView(discord.ui.LayoutView):
         # handles the edit. On success, disable buttons here.
         if not self.canceled and not timed_out and self.message is not None:
             self._disable_buttons()
-            with contextlib.suppress(discord.NotFound):
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
 
         return timed_out
@@ -157,7 +159,7 @@ class PromptView(discord.ui.LayoutView):
         """Disable all buttons when the view times out."""
         if self.message is not None:
             self._disable_buttons()
-            with contextlib.suppress(discord.NotFound):
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
 
 
@@ -173,7 +175,7 @@ class PromptChoicesView(discord.ui.LayoutView):
 
     Examples:
         ```python
-        view = PromptChoicesView(content="Pick one:", choices=["A", "B", "C"], ...)
+        view = PromptChoicesView(ctx=ctx, content="Pick one:", choices=["A", "B", "C"], timeout=120.0)
         message = await channel.send(view=view)
         view.message = message
         timed_out = await view.wait()
@@ -184,19 +186,17 @@ class PromptChoicesView(discord.ui.LayoutView):
     def __init__(
         self,
         *,
-        content: str,
-        choices: list[str],
-        cancel_label: str,
-        user: discord.User | discord.Member,
+        ctx: Context,
+        content: str | locale_str,
+        choices: list[str | locale_str],
         timeout: float,
     ) -> None:
         """Build the card layout with the prompt text and choice buttons.
 
         Args:
+            ctx: The command context used for translation and author checks.
             content: Prompt text shown inside the card (supports Discord Markdown).
             choices: Ordered list of button labels for each selectable option.
-            cancel_label: Label for the danger-styled cancel button.
-            user: The user allowed to interact with this view.
             timeout: Seconds before the view stops accepting interactions.
         """
         super().__init__(timeout=timeout)
@@ -204,11 +204,16 @@ class PromptChoicesView(discord.ui.LayoutView):
         """Index of the chosen option, or `None` if canceled or timed out."""
         self.message: discord.Message | None = None
         """The prompt message (set by the caller after sending, used for cleanup on timeout)."""
-        self._user = user
+        self._user = ctx.author
         self._buttons: list[discord.ui.Button[PromptChoicesView]] = []
+
+        if isinstance(content, locale_str):
+            content = ctx.translate(content)
 
         action_row: discord.ui.ActionRow[PromptChoicesView] = discord.ui.ActionRow()
         for i, label in enumerate(choices):
+            if isinstance(label, locale_str):
+                label = ctx.translate(label)
             btn: discord.ui.Button[PromptChoicesView] = discord.ui.Button(
                 label=label, style=discord.ButtonStyle.primary
             )
@@ -217,7 +222,7 @@ class PromptChoicesView(discord.ui.LayoutView):
             self._buttons.append(btn)
 
         cancel: discord.ui.Button[PromptChoicesView] = discord.ui.Button(
-            label=cancel_label, style=discord.ButtonStyle.danger
+            label=ctx.translate(_("ftl-view-prompt-cancel-label")), style=discord.ButtonStyle.danger
         )
         cancel.callback = self._on_cancel
         action_row.add_item(cancel)
@@ -261,7 +266,7 @@ class PromptChoicesView(discord.ui.LayoutView):
             await interaction.message.delete()
         self.stop()
 
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Allow only the invoking user to interact with this view.
 
         Args:
@@ -286,5 +291,5 @@ class PromptChoicesView(discord.ui.LayoutView):
         """Disable all buttons when the view times out."""
         if self.message is not None:
             self._disable_buttons()
-            with contextlib.suppress(discord.NotFound):
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)

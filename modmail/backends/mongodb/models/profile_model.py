@@ -42,7 +42,7 @@ class MongoDBProfileDocument(Document):
 
     tag: str | None = None
     """Short display label for this profile (`None` if unset)."""
-    colour: int | None = None
+    color: int | None = None
     """Discord color integer, e.g. `0xFFFFFF` for white (`None` if unset)."""
 
     class Settings:

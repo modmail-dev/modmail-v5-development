@@ -66,7 +66,7 @@ class SetupWizardView(discord.ui.LayoutView):
         ```python
         wizard = SetupWizardView(ctx=ctx, show_reconfigure_warning=False, timeout=300.0)
         await wizard.build()
-        msg = await ctx.reply(None, view=wizard)
+        msg = await ctx.reply(view=wizard)
         wizard.message = msg
         timed_out = await wizard.wait()
         ```
@@ -476,7 +476,7 @@ class SetupWizardView(discord.ui.LayoutView):
             )
         )
         if self.message is not None:
-            with contextlib.suppress(discord.NotFound):
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
 
     async def show_error(self, text: str) -> None:
@@ -493,10 +493,10 @@ class SetupWizardView(discord.ui.LayoutView):
             )
         )
         if self.message is not None:
-            with contextlib.suppress(discord.NotFound):
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
 
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Allow only the invoking user to interact with this view.
 
         Args:
@@ -512,7 +512,7 @@ class SetupWizardView(discord.ui.LayoutView):
         self._step = _WizardStep.TIMEOUT
         await self.build()
         if self.message is not None:
-            with contextlib.suppress(discord.NotFound):
+            with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
 
 
@@ -531,8 +531,8 @@ async def setup_command(cog: Modmail, ctx: Context) -> None:
         cog: The Modmail cog instance.
         ctx: The command context containing information about the invocation.
     """
-    if ctx.guild is None or ctx.guild.id != cog.bot.staff_guild.guild_id:
-        await ctx.reply(_("ftl-cmd-setup-wrong-guild", guild_name=cog.bot.staff_guild.guild.name))
+    if ctx.guild is None or ctx.guild.id != ctx.bot.staff_guild.guild_id:
+        await ctx.reply(_("ftl-cmd-setup-wrong-guild", guild_name=ctx.bot.staff_guild.guild.name))
         return
 
     if setup_lock.locked():
@@ -568,7 +568,7 @@ async def do_setup(ctx: Context) -> None:
     wizard = SetupWizardView(ctx=ctx, show_reconfigure_warning=ctx.bot.staff_guild.is_configured())
     await wizard.build()
 
-    wizard.message = await ctx.reply(None, view=wizard)
+    wizard.message = await ctx.reply(view=wizard)
     timed_out = await wizard.wait()
 
     if timed_out or wizard.canceled or not wizard.completed:

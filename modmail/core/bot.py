@@ -18,7 +18,7 @@ from packaging.version import Version
 from .. import CONFIG, __version__, utils
 from ..backends import create_db_client
 from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
-from ..errors import DatabaseError, InstanceAlreadyRunningError, NoStaffGuildError
+from ..errors import DatabaseError, InstanceAlreadyRunningError, LocalizedBadArgumentError, NoStaffGuildError
 from .internals import StaffGuild
 from .internals.context import Context
 from .internals.embed import EmbedProxy
@@ -506,60 +506,74 @@ class Bot(commands.Bot):
         await self.database_client.update_settings(activity=None, status=None)
         await self.set_bot_presence()
 
-    async def on_command_error(self, context: commands.Context[Any], exception: commands.CommandError, /) -> None:
+    async def on_command_error(self, context: commands.Context[Any], exception: commands.CommandError) -> None:
         """Handle command execution errors.
-
-        Ignores CommandNotFound and CheckFailure errors, passes others to parent handler.
 
         Args:
             context: The context in which the command was executed.
             exception: The error that occurred during execution.
         """
-        # Ignore command not found errors
-        if isinstance(exception, commands.CommandNotFound):
+        # Slash/hybrid non-CommandErrors arrive wrapped in HybridCommandError; unwrap once.
+        exc: commands.CommandError | discord.app_commands.AppCommandError = exception
+        if isinstance(exc, commands.HybridCommandError):
+            exc = exc.original
+
+        if isinstance(exc, commands.CommandNotFound | discord.app_commands.CommandNotFound):
             return
 
-        # Ignore command check failure errors
-        if isinstance(exception, commands.CheckFailure):
-            if getattr(context, "perm_check_reason", "").startswith("fail:"):  # The permission check failed
-                # noinspection PyUnresolvedReferences
+        if isinstance(exc, LocalizedBadArgumentError):
+            message = self.translate(exc.locale_key, ctx_or_locale=context)
+            if context.interaction is not None:
+                await context.reply(message, ephemeral=True)
+            else:
+                # Always true for DM channel and group channel
+                permissions = context.channel.permissions_for(context.me)  # pyright: ignore[reportArgumentType]
+                if permissions.read_messages and permissions.send_messages:
+                    await context.reply(message)
+            return
+
+        if isinstance(exc, commands.CheckFailure | discord.app_commands.CheckFailure):
+            if getattr(context, "perm_check_reason", "").startswith("fail:"):
                 logger.debug(
                     "%s is not allowed to run `%s` (%s)",
                     context.author,
                     context.command,
                     getattr(context, "perm_check_reason", ""),
                 )
-                if context.interaction is not None:  # tell the user they don't have permission
+                if context.interaction is not None:
                     message = self.translate(_("ftl-msg-permission-denied"), ctx_or_locale=context)
                     await context.reply(message, ephemeral=True)
             return
 
-        if isinstance(exception, commands.CommandInvokeError):
-            if isinstance(exception.original, NoStaffGuildError):
+        # commands.CommandInvokeError — prefix command body raised an exception.
+        # discord.app_commands.CommandInvokeError — slash/hybrid body raised a non-CommandError.
+        # Both carry .original with the underlying exception.
+        if isinstance(exc, commands.CommandInvokeError | discord.app_commands.CommandInvokeError):
+            if isinstance(exc.original, NoStaffGuildError):
                 await self._not_in_guild_close()
                 return
 
             logger.info(
                 "[red]Command %s failed with an uncaught error: %s",
                 context.command,
-                exception.original,
-                exc_info=exception,
+                exc.original,
+                exc_info=exc,
                 extra={"markup": True},
             )
 
-            # Tell the user there was an error
             message = self.translate(_("ftl-msg-command-invoke-error"), ctx_or_locale=context)
             if context.interaction is not None:
                 await context.reply(message, ephemeral=True)
             else:
-                permissions = context.channel.permissions_for(context.me)  # pyright: ignore [reportArgumentType]
+                # Always true for DM channel and group channel
+                permissions = context.channel.permissions_for(context.me)  # pyright: ignore[reportArgumentType]
                 if permissions.read_messages and permissions.send_messages:
                     await context.reply(message)
             return
 
         await super().on_command_error(context, exception)
 
-    async def on_error(self, event_method: str, /, *args: Any, **kwargs: Any) -> None:
+    async def on_error(self, event_method: str, *args: Any, **kwargs: Any) -> None:
         """Handle errors that occur during event processing.
 
         When NoStaffGuildError is raised, log a critical error and exit the bot.
@@ -679,8 +693,18 @@ class Bot(commands.Bot):
             ctx.perm_check_reason = "pass: owner"
             return True
 
-        all_profiles = self.get_all_user_profiles(ctx.author)
         command_access_level = self.get_command_access_level(ctx.command)
+
+        if (
+            CONFIG.permission.discord_admin_bypass
+            and isinstance(ctx.author, discord.Member)
+            and ctx.author.guild_permissions.administrator
+            and command_access_level != RequiredAccessLevel.owner
+        ):
+            ctx.perm_check_reason = "pass: discord admin bypass"
+            return True
+
+        all_profiles = self.get_all_user_profiles(ctx.author)
 
         # If the command is a subcommand, if so, add the parents of the command (in reverse order).
         commands_to_check = [ctx.command, *ctx.command.parents]
@@ -790,7 +814,7 @@ class Bot(commands.Bot):
 
     async def send_message(
         self,
-        content: str | discord.app_commands.locale_str | None,
+        content: str | discord.app_commands.locale_str | None = None,
         *,
         channel: discord.abc.Messageable,
         auto_embed: bool = True,

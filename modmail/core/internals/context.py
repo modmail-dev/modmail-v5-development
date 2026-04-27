@@ -115,24 +115,12 @@ class Context(commands.Context[Any]):
         """
         wait_for = float(wait_for)
 
-        cancel_label = self.translate(_("ftl-view-prompt-cancel-label"))
-
-        if isinstance(content, locale_str):
-            content = self.translate(content)
-
-        view = PromptView(
-            content=content or "",
-            cancel_label=cancel_label,
-            user=self.author,
-            bot=self.bot,
-            channel_id=self.channel.id,
-            timeout=wait_for,
-        )
+        view = PromptView(ctx=self, content=content or "", timeout=wait_for)
 
         if reply:
-            prompt_message = await self.reply(None, auto_embed=False, view=view, **kwargs)
+            prompt_message = await self.reply(auto_embed=False, view=view, **kwargs)
         else:
-            prompt_message = await self.send_message(None, auto_embed=False, view=view, **kwargs)
+            prompt_message = await self.send_message(auto_embed=False, view=view, **kwargs)
         view.message = prompt_message
 
         timed_out = await view.wait()
@@ -172,24 +160,12 @@ class Context(commands.Context[Any]):
         """
         wait_for = float(wait_for)
 
-        cancel_label = self.translate(_("ftl-view-prompt-cancel-label"))
-
-        choices_labels = [self.translate(c) if isinstance(c, locale_str) else c for c in choices]
-        if isinstance(content, locale_str):
-            content = self.translate(content)
-
-        view = PromptChoicesView(
-            content=content or "",
-            choices=choices_labels,
-            cancel_label=cancel_label,
-            user=self.author,
-            timeout=wait_for,
-        )
+        view = PromptChoicesView(ctx=self, content=content or "", choices=choices, timeout=wait_for)
 
         if reply:
-            prompt_message = await self.reply(None, auto_embed=False, view=view, **kwargs)
+            prompt_message = await self.reply(auto_embed=False, view=view, **kwargs)
         else:
-            prompt_message = await self.send_message(None, auto_embed=False, view=view, **kwargs)
+            prompt_message = await self.send_message(auto_embed=False, view=view, **kwargs)
         view.message = prompt_message
 
         timed_out = await view.wait()

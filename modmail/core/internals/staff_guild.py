@@ -496,7 +496,7 @@ class StaffGuild:
             overwrite.read_messages = True
             coros += [storage_channel.set_permissions(user_or_role, overwrite=overwrite, reason=reason)]
 
-        await asyncio.gather(*coros)
+        await asyncio.gather(*coros, return_exceptions=True)
 
     async def revoke_access(self, profile_id: int, profile_type: ProfileType) -> None:
         """Revoke read access to the Modmail category or forum for a profile.
@@ -546,7 +546,7 @@ class StaffGuild:
                     coros += [storage_channel.set_permissions(user_or_role, overwrite=overwrite, reason=reason)]
 
         if coros:
-            await asyncio.gather(*coros)
+            await asyncio.gather(*coros, return_exceptions=True)
 
     async def get_ticket(
         self, /, user_or_channel: discord.User | discord.Member | discord.TextChannel | discord.Thread
@@ -638,13 +638,13 @@ class StaffGuild:
             A [`discord.Embed`][] colored and timestamped to reflect the ticket's current state.
         """
         embed = EmbedProxy(title=title, description=description)
-        # TODO: configable colours
+        # TODO: configable colors
         if ticket.status.is_open():
-            embed.colour = discord.Colour.green()
+            embed.color = discord.Color.green()
             embed.set_footer(text=_("ftl-msg-log-embed-open-footer"))
             embed.timestamp = ticket.created_at
         else:
-            embed.colour = discord.Colour.red()
+            embed.color = discord.Color.red()
             if not ticket.closed_by or ticket.closed_by.user_id == self.guild.me.id:
                 embed.set_footer(text=_("ftl-msg-log-embed-closed-footer-unknown-closer"))
             else:

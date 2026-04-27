@@ -240,10 +240,10 @@ class TicketView:
         embed.timestamp = created_at
 
         if message_type == TicketMessageType.dm:
-            embed.colour = discord.Color.blue()
+            embed.color = discord.Color.blue()
             embed.set_footer(text=_("ftl-msg-ticket-channel-embed-footer", message_id=str(message_id)))
         elif message_type == TicketMessageType.reply:
-            embed.colour = discord.Color.green()
+            embed.color = discord.Color.green()
             # TODO
         return embed
 
@@ -280,9 +280,9 @@ class TicketView:
         embed.timestamp = created_at
 
         if message_type == TicketMessageType.dm:
-            embed.colour = discord.Color.orange()
+            embed.color = discord.Color.orange()
         elif message_type == TicketMessageType.reply:
-            embed.colour = discord.Color.green()
+            embed.color = discord.Color.green()
             # TODO
         return embed
 

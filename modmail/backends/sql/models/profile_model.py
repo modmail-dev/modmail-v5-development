@@ -45,7 +45,7 @@ class SQLProfileTable(SQLBase):
     """[SQLPermissionOverrideTable][]{ data-preview } overrides for individual commands."""
     tag: Mapped[str | None] = mapped_column(String(128))
     """Short display label for this profile (`None` if unset)."""
-    colour: Mapped[int | None] = mapped_column(Integer())
+    color: Mapped[int | None] = mapped_column(Integer())
     """Discord color integer, e.g. `0xFFFFFF` for white (`None` if unset)."""
 
     __table_args__ = (PrimaryKeyConstraint("bot_id", "profile_id", "profile_type"), TABLE_OPTS)
@@ -62,7 +62,7 @@ class SQLProfileTable(SQLBase):
             profile_type=self.profile_type,
             access_level=self.access_level,
             tag=self.tag,
-            colour=self.colour,
+            color=self.color,
             permission_overrides={
                 override.command_name: override.override_value for override in self.permission_overrides
             },
