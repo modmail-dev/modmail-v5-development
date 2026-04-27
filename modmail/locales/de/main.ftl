@@ -115,8 +115,6 @@ ftl-view-profile-editor-override-deny-success = ❌ `{ $command }` für dieses P
 ftl-view-profile-editor-delete-confirm = Bist du sicher, dass du dieses Profil löschen möchtest? Dies kann nicht rückgängig gemacht werden.
 ftl-view-profile-editor-delete-btn-confirm = Profil löschen
 # :param $profile: the mention of the user or role
-ftl-view-profile-editor-delete-success = Profil von { $profile } gelöscht.
-# :param $profile: the mention of the user or role
 ftl-view-profile-editor-deleted-content =
     ### Profil gelöscht
     Das Profil von { $profile } wurde entfernt.

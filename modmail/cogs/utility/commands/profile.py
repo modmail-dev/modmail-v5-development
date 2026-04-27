@@ -76,19 +76,18 @@ class ProfileCustomizeModal(discord.ui.Modal):
         Args:
             interaction: The submission interaction from Discord.
         """
-        to_update: dict[str, Any] = {}
-        changed = self._editor_view.resync_profile()
         if (
             self.color.value
             and re.match(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$", self.color.value) is None
         ):
-            if changed:
-                await self._editor_view.rebuild()
             await interaction.response.send_message(
                 self._ctx.translate(_("ftl-modal-profile-customize-color-invalid")),
                 ephemeral=True,
             )
             return
+
+        to_update: dict[str, Any] = {}
+        changed = self._editor_view.resync_profile()
 
         color = utils.color_hex_to_int(self.color.value) if self.color.value else None
         if color != self.profile.color:
@@ -389,20 +388,17 @@ class ConfirmDeleteView(discord.ui.LayoutView):
                 logger.error("Failed to revoke Discord access for profile %d: %s", self.profile.profile_id, e)
                 access_sync_failed = True
 
-        await self._editor_view.close(
-            self._ctx.translate(_("ftl-view-profile-editor-deleted-content", profile=self.profile.mention)),
-            color=discord.Color.blurple(),
-        )
-
-        await interaction.response.edit_message(
-            content=self._ctx.translate(_("ftl-view-profile-editor-delete-success", profile=self.profile.mention)),
-            view=None,
+        close_message = self._ctx.translate(
+            _("ftl-view-profile-editor-deleted-content", profile=self.profile.mention)
         )
         if access_sync_failed:
-            await interaction.followup.send(
-                self._ctx.translate(_("ftl-view-profile-editor-access-sync-failed")),
-                ephemeral=True,
-            )
+            close_message += "\n" + self._ctx.translate(_("ftl-view-profile-editor-access-sync-failed"))
+
+        await self._editor_view.close(close_message, color=discord.Color.blurple())
+
+        await interaction.response.defer()
+        with contextlib.suppress(discord.HTTPException):
+            await interaction.delete_original_response()
 
     async def _on_cancel(self, interaction: discord.Interaction) -> None:
         """Dismiss the ephemeral confirm message without deleting.
@@ -538,6 +534,7 @@ class ProfileEditorView(discord.ui.LayoutView):
                 profile_type=self.profile.profile_type,
             )
         if changed := current != self.profile:
+            logger.debug("Profile %d changed externally, resyncing editor view.", self.profile.profile_id)
             self.profile = current
         return changed
 
@@ -621,6 +618,19 @@ class ProfileEditorView(discord.ui.LayoutView):
         )
 
         async def on_delete(interaction: discord.Interaction) -> None:
+            if (
+                self._ctx.bot.database_client.get_profile(self.profile.profile_id, self.profile.profile_type)
+                is None
+            ):
+                # The profile doesn't exist in the first place
+                await interaction.response.defer()
+                await self.close(
+                    self._ctx.translate(
+                        _("ftl-view-profile-editor-deleted-content", profile=self.profile.mention)
+                    ),
+                    color=discord.Color.blurple(),
+                )
+                return
             await interaction.response.send_message(
                 ephemeral=True,
                 view=ConfirmDeleteView(self._ctx, editor_view=self, interaction=interaction),
@@ -745,6 +755,8 @@ class ProfileEditorView(discord.ui.LayoutView):
         # ── Appearance button ──
 
         async def on_customize(interaction: discord.Interaction) -> None:
+            if self.resync_profile():
+                await self.rebuild()
             await interaction.response.send_modal(ProfileCustomizeModal(self._ctx, editor_view=self))
 
         components: list[discord.ui.Item[ProfileEditorView]] = [

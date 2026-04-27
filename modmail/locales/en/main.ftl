@@ -115,8 +115,6 @@ ftl-view-profile-editor-override-deny-success = ❌ Denied `{ $command }` on thi
 ftl-view-profile-editor-delete-confirm = Are you sure you want to delete this profile? This cannot be undone.
 ftl-view-profile-editor-delete-btn-confirm = Delete Profile
 # :param $profile: the mention of the user or role
-ftl-view-profile-editor-delete-success = Deleted the profile of { $profile }.
-# :param $profile: the mention of the user or role
 ftl-view-profile-editor-deleted-content =
     ### Profile deleted
     The profile of { $profile } has been removed.
