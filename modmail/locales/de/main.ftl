@@ -120,9 +120,6 @@ ftl-view-profile-editor-delete-success = Profil von { $profile } gelöscht.
 ftl-view-profile-editor-deleted-content =
     ### Profil gelöscht
     Das Profil von { $profile } wurde entfernt.
-ftl-view-profile-editor-timeout-content =
-    ### Editor abgelaufen
-    Seit dieser Nachricht abgelaufen ist, wurden keine Änderungen gespeichert. Führe den Befehl erneut aus, um fortzufahren.
 ftl-view-profile-editor-update-failed = Etwas ist schiefgelaufen. Bitte versuche es erneut.
 ftl-view-profile-editor-access-sync-failed = Profil aktualisiert, aber die Discord-Kanalberechtigungen konnten nicht synchronisiert werden.
 

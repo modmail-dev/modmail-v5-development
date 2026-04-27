@@ -120,9 +120,6 @@ ftl-view-profile-editor-delete-success = Deleted the profile of { $profile }.
 ftl-view-profile-editor-deleted-content =
     ### Profile deleted
     The profile of { $profile } has been removed.
-ftl-view-profile-editor-timeout-content =
-    ### Editor timed out
-    No changes have been saved since this message expired. Run the command again to reopen.
 ftl-view-profile-editor-update-failed = Something went wrong. Please try again.
 ftl-view-profile-editor-access-sync-failed = Profile updated, but Discord channel permissions could not be synced.
 

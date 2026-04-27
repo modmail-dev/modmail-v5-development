@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import re
@@ -76,11 +77,13 @@ class ProfileCustomizeModal(discord.ui.Modal):
             interaction: The submission interaction from Discord.
         """
         to_update: dict[str, Any] = {}
-
+        changed = self._editor_view.resync_profile()
         if (
             self.color.value
             and re.match(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$", self.color.value) is None
         ):
+            if changed:
+                await self._editor_view.rebuild()
             await interaction.response.send_message(
                 self._ctx.translate(_("ftl-modal-profile-customize-color-invalid")),
                 ephemeral=True,
@@ -101,6 +104,8 @@ class ProfileCustomizeModal(discord.ui.Modal):
                 await self._ctx.bot.database_client.update_profile(new_profile)
             except DatabaseOperationError as e:
                 logger.error("Failed to update profile %d customization: %s", new_profile.profile_id, e)
+                if changed:
+                    await self._editor_view.rebuild()
                 await interaction.response.send_message(
                     self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
                     ephemeral=True,
@@ -192,7 +197,10 @@ class ProfileAddOverrideModal(discord.ui.Modal):
             )
             return
 
+        changed = self._editor_view.resync_profile()
         if self.profile.permission_overrides.get(command_name) == self._override_value:
+            if changed:
+                await self._editor_view.rebuild()
             await interaction.response.send_message(
                 self._ctx.translate(
                     _("ftl-modal-profile-add-override-already-allow", command=command_name)
@@ -210,6 +218,8 @@ class ProfileAddOverrideModal(discord.ui.Modal):
             await self._ctx.bot.database_client.update_profile(new_profile)
         except DatabaseOperationError as e:
             logger.error("Failed to set override %r on profile %d: %s", command_name, new_profile.profile_id, e)
+            if changed:
+                await self._editor_view.rebuild()
             await interaction.response.send_message(
                 self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
                 ephemeral=True,
@@ -273,7 +283,10 @@ class ProfileRemoveOverrideModal(discord.ui.Modal):
         """
         name = utils.sanitize_user_command_name(self.override_name.value)
 
+        changed = self._editor_view.resync_profile()
         if name not in self.profile.permission_overrides:
+            if changed:
+                await self._editor_view.rebuild()
             await interaction.response.send_message(
                 self._ctx.translate(_("ftl-modal-profile-remove-override-not-found", command=name)),
                 ephemeral=True,
@@ -281,6 +294,8 @@ class ProfileRemoveOverrideModal(discord.ui.Modal):
             return
 
         if not await self._editor_view.remove_override(name, interaction):
+            if changed:
+                await self._editor_view.rebuild()
             return
 
         await self._editor_view.rebuild()
@@ -426,7 +441,7 @@ class ProfileEditorView(discord.ui.LayoutView):
     """
 
     _LEVEL_NONE: Final[str] = "None"
-    _SELECT_MAX: Final[int] = 25  # use a remove-select up to this many overrides; modal text input above
+    _SELECT_MAX: Final[int] = 25  # use a remove-select up to this many overrides
 
     def __init__(
         self,
@@ -449,6 +464,11 @@ class ProfileEditorView(discord.ui.LayoutView):
         self.message: discord.Message | None = None
         """The sent editor message (set by the caller after sending)."""
         self._done_card: discord.ui.Container[ProfileEditorView] | None = None
+        """When set, this card is rendered instead of the interactive editor."""
+        self._disabled: bool = False
+        """When `True`, all interactive elements are rendered disabled (set on timeout)."""
+        self._profile_sync_task: asyncio.Task[None] | None = None
+        """Periodically re-renders the card when the profile is changed externally."""
 
     async def remove_override(self, key: str, interaction: discord.Interaction) -> bool:
         """Remove an override by name, then persist or auto-delete the profile.
@@ -465,7 +485,7 @@ class ProfileEditorView(discord.ui.LayoutView):
         """
         overrides = self.profile.permission_overrides.copy()
         if key not in overrides:
-            return True  # just in case, but caller should make sure this doesn't happen
+            return True
 
         del overrides[key]
         new_profile = self.profile.model_copy(update={"permission_overrides": overrides})
@@ -498,6 +518,38 @@ class ProfileEditorView(discord.ui.LayoutView):
         self.stop()
         await self.rebuild()
 
+    def stop(self) -> None:
+        """Stop the view and cancel the background sync task."""
+        if self._profile_sync_task is not None:
+            self._profile_sync_task.cancel()
+        super().stop()
+
+    def resync_profile(self) -> bool:
+        """Sync [`profile`][] from the DB cache, falling back to a blank profile if not found.
+
+        Returns:
+            `True` if [`profile`][] changed, `False` if it was already up to date.
+        """
+        current = self._ctx.bot.database_client.get_profile(self.profile.profile_id, self.profile.profile_type)
+        if current is None:
+            current = ProfileModel(
+                bot_id=self.profile.bot_id,
+                profile_id=self.profile.profile_id,
+                profile_type=self.profile.profile_type,
+            )
+        if changed := current != self.profile:
+            self.profile = current
+        return changed
+
+    async def _profile_sync_loop(self) -> None:
+        """Periodically check the DB cache and re-render the card if the profile changed."""
+        while not self.is_finished():
+            await asyncio.sleep(30)
+            if self.is_finished():
+                break
+            if self.resync_profile():
+                await self.rebuild()
+
     async def build(self) -> None:
         """Clear and rebuild the container for the current profile state.
 
@@ -505,6 +557,8 @@ class ProfileEditorView(discord.ui.LayoutView):
         """
         self.clear_items()
         self.add_item(self._build_container())
+        if self._profile_sync_task is None:
+            self._profile_sync_task = asyncio.create_task(self._profile_sync_loop())
 
     async def rebuild(self) -> None:
         """Rebuild the card and silently push the update to the editor message."""
@@ -527,6 +581,8 @@ class ProfileEditorView(discord.ui.LayoutView):
         label: str,
         style: discord.ButtonStyle,
         callback: Any,
+        *,
+        disabled: bool = False,
     ) -> discord.ui.Button[ProfileEditorView]:
         """Create a button bound to `callback`.
 
@@ -534,11 +590,12 @@ class ProfileEditorView(discord.ui.LayoutView):
             label: Button label text.
             style: Discord button style.
             callback: Async callable to invoke on click.
+            disabled: Whether the button should be rendered as non-interactive.
 
         Returns:
             The configured button.
         """
-        btn: discord.ui.Button[ProfileEditorView] = discord.ui.Button(label=label, style=style)
+        btn: discord.ui.Button[ProfileEditorView] = discord.ui.Button(label=label, style=style, disabled=disabled)
         btn.callback = callback
         return btn
 
@@ -616,6 +673,7 @@ class ProfileEditorView(discord.ui.LayoutView):
         level_select: discord.ui.Select[ProfileEditorView] = discord.ui.Select(
             placeholder=self._ctx.translate(_("ftl-view-profile-editor-select-level-placeholder")),
             options=level_options,
+            disabled=self._disabled,
         )
 
         async def on_level_select(interaction: discord.Interaction) -> None:
@@ -624,11 +682,15 @@ class ProfileEditorView(discord.ui.LayoutView):
                 None if selected_option == self._LEVEL_NONE else AccessLevel[selected_option]
             )
 
+            changed = self.resync_profile()
             if self.profile.access_level == selected_level:
                 logger.debug(
                     "Access level didn't change for profile %d, skipping update.", self.profile.profile_id
                 )
-                await interaction.response.defer()
+                if changed:
+                    await self._render(interaction)
+                else:
+                    await interaction.response.defer()
                 return
 
             old_level = self.profile.access_level
@@ -637,10 +699,17 @@ class ProfileEditorView(discord.ui.LayoutView):
                 await self._ctx.bot.database_client.update_profile(new_profile)
             except DatabaseOperationError as e:
                 logger.error("Failed to update profile %d access level: %s", new_profile.profile_id, e)
-                await interaction.response.send_message(
-                    self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
-                    ephemeral=True,
-                )
+                if changed:
+                    await self._render(interaction)
+                    await interaction.followup.send(
+                        self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                        ephemeral=True,
+                    )
+                else:
+                    await interaction.response.send_message(
+                        self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                        ephemeral=True,
+                    )
                 return
             logger.debug("Updated profile %d access level to %s.", new_profile.profile_id, selected_level)
             self.profile = new_profile
@@ -685,6 +754,7 @@ class ProfileEditorView(discord.ui.LayoutView):
                     self._ctx.translate(_("ftl-view-profile-editor-btn-delete")),
                     discord.ButtonStyle.danger,
                     on_delete,
+                    disabled=self._disabled,
                 ),
             ),
             discord.ui.Separator(visible=True),
@@ -696,6 +766,7 @@ class ProfileEditorView(discord.ui.LayoutView):
                     self._ctx.translate(_("ftl-view-profile-editor-btn-customize")),
                     discord.ButtonStyle.primary,
                     on_customize,
+                    disabled=self._disabled,
                 )
             ),
             discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
@@ -733,11 +804,13 @@ class ProfileEditorView(discord.ui.LayoutView):
             self._ctx.translate(_("ftl-view-profile-editor-btn-add-allow")),
             discord.ButtonStyle.success,
             on_add_allow,
+            disabled=self._disabled,
         )
         add_deny_btn = self._btn(
             self._ctx.translate(_("ftl-view-profile-editor-btn-add-deny")),
             discord.ButtonStyle.danger,
             on_add_deny,
+            disabled=self._disabled,
         )
 
         # ── Override list and remove controls ──
@@ -771,14 +844,15 @@ class ProfileEditorView(discord.ui.LayoutView):
                 remove_select: discord.ui.Select[ProfileEditorView] = discord.ui.Select(
                     placeholder=self._ctx.translate(_("ftl-view-profile-editor-select-remove-placeholder")),
                     options=remove_options,
+                    disabled=self._disabled,
                 )
 
                 async def on_remove_override(interaction: discord.Interaction) -> None:
                     key = remove_select.values[0]
-                    # Guard against the profile being mutated between the last rebuild and now.
-                    if key in self.profile.permission_overrides:
-                        if not await self.remove_override(key, interaction):
-                            return
+                    self.resync_profile()
+                    if not await self.remove_override(key, interaction):
+                        await self.rebuild()
+                        return
                     await self._render(interaction)
 
                 remove_select.callback = on_remove_override
@@ -799,6 +873,7 @@ class ProfileEditorView(discord.ui.LayoutView):
                             self._ctx.translate(_("ftl-view-profile-editor-btn-remove-override")),
                             discord.ButtonStyle.secondary,
                             on_remove_by_name,
+                            disabled=self._disabled,
                         ),
                     )
                 )
@@ -812,11 +887,10 @@ class ProfileEditorView(discord.ui.LayoutView):
         return interaction.user == self._ctx.author
 
     async def on_timeout(self) -> None:
-        """Replace the card with a timed-out terminal state."""
-        await self.close(
-            self._ctx.translate(_("ftl-view-profile-editor-timeout-content")),
-            color=discord.Color.yellow(),
-        )
+        """Disable all interactive elements in the card."""
+        self._disabled = True
+        self.stop()
+        await self.rebuild()
 
 
 class ProfileListView(discord.ui.LayoutView):

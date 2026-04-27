@@ -32,9 +32,9 @@ classifiers = [
 
 dependencies = [
     "discord.py==2.7.1",  # Ensure to keep in sync with [project.optional-dependencies.speed]
-    "rich~=14.3.0",
-    "pydantic~=2.12.0",
-    "pydantic-settings~=2.13.0",
+    "rich~=15.0.0",
+    "pydantic~=2.13.3",
+    "pydantic-settings~=2.14.0",
     "python-dotenv~=1.2.2",
     "packaging",  # For version parsing, should be installed by default but just in case
     "pyyaml~=6.0.3",
@@ -68,29 +68,29 @@ mongodb = [
 
 [dependency-groups]
 dev = [
-    "ruff==0.15.9",  # When updating ruff version, update it in .pre-commit-config.yaml too
-    "pyright==1.1.408",
-    "pre-commit<5,>=4.5.1",  # When updating pre-commit version, update it in the tox "lint" section too
+    "ruff==0.15.12",  # When updating ruff version, update it in .pre-commit-config.yaml too
+    "pyright==1.1.409",
+    "pre-commit<5,>=4.6.0",  # When updating pre-commit version, update it in the tox "lint" section too
     "python-dotenv>=1.2.2",  # TODO: .env isn't supported/tested yet
     # When updating pytest plugins, update it below in the pytest "required_plugins" section too
     # TODO: unit testing and tox are currently disabled
-    "tox<5,>=4.52.0",  # When updating tox version, update it below in the [tool.tox] section too
-    "pytest==9.0.2",
+    "tox<5,>=4.53.0",  # When updating tox version, update it below in the [tool.tox] section too
+    "pytest==9.0.3",
     "pytest-mock==3.15.1",
     "pytest-asyncio==1.3.0",
     "pytest-cov==7.1.0",
     "pip",  # For IDE detecting installed packages
 ]
 docs = [
-    "zensical==0.0.31",
-    "mkdocstrings[python]==1.0.3",
+    "zensical==0.0.37",
+    "mkdocstrings[python]==1.0.4",
     "griffe-pydantic==1.3.1",
 ]
 debug = [
-    "jishaku~=2.6.3",
+    "jishaku~=2.7.5",
 ]
 packaging = [
-    "pyinstaller~=6.19.0",
+    "pyinstaller~=6.20.0",
 ]
 # TODO: set up git hooks and configure pyinstaller
 # this command kind of works: uv run pyinstaller --onefile --nowindow --clean --name modmail --copy-metadata modmail.py --collect-all modmail --hidden-import=logging.config start.py
@@ -271,7 +271,7 @@ exclude_also = [  # Exclude files from coverage report, regex patterns
 ]
 
 [tool.tox]
-requires = ["tox<5,>=4.52.0"]
+requires = ["tox<5,>=4.53.0"]
 envlist = ["3.14", "lint", "type"]
 
 [tool.tox.env_run_base]
@@ -282,7 +282,7 @@ commands = [["pytest"]]
 [tool.tox.env.lint]
 description = "run linters (pre-commit)"
 skip_install = true
-deps = ["pre-commit<5,>=4.5.1"]
+deps = ["pre-commit<5,>=4.6.0"]
 commands = [["pre-commit", { replace = "posargs", default = ["run", "--all-files"], extend = true} ]]
 
 [tool.tox.env.type]
