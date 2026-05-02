@@ -1,8 +1,4 @@
-"""Custom embed proxy system supporting lazy translation of embed content.
-
-This module provides a proxy for discord.Embed that allows for lazy translation
-of strings, enabling localization of embed content based on the user's locale.
-"""
+"""Lazy-translating [`EmbedProxy`][] that defers locale resolution until send time."""
 
 from __future__ import annotations
 
@@ -15,32 +11,32 @@ from discord.app_commands import locale_str
 __all__ = ["EmbedProxy"]
 
 if TYPE_CHECKING:
-    from .. import Translator
+    from .translator import Translator
 
 type AnyStr = str | locale_str
 
 
 class EmbedProxy:
-    """A proxy for discord.Embed that allows for lazy translation of strings.
+    """Builder for [`discord.Embed`][] with lazy locale-string support.
 
-    This class mimics the interface of discord.Embed but stores locale_str objects
-    that can be translated at a later time when the embed is needed.
+    Stores `locale_str` values as-is; all translation happens inside [`to_embed`][]
+    when a locale is known, so one proxy instance can render into any supported locale.
 
     Attributes:
-        _timestamp: Timestamp for the embed.
-        author_icon_url: URL for the author's icon.
-        author_name: Name of the author.
-        author_url: URL for the author.
-        color: Color of the embed as an integer or Discord.Colour.
-        colour: Alias for color.
-        description: The description of the embed.
-        fields: List of fields as tuples of (name, value, inline).
-        footer_icon_url: URL for the footer icon.
-        footer_text: Text for the footer.
-        image_url: URL for the embed image.
-        thumbnail_url: URL for the embed thumbnail.
-        title: The title of the embed.
-        url: URL for the embed title.
+        color: Embed accent color (alias: `colour`).
+        colour: Alias for `color`.
+        title: Title text.
+        url: URL linked from the title.
+        description: Main body text.
+        footer_text: Footer text (`None` if not set).
+        footer_icon_url: Footer icon URL (`None` if not set).
+        image_url: Embed image URL (`None` if not set).
+        thumbnail_url: Thumbnail URL (`None` if not set).
+        author_name: Author display name (`None` if not set).
+        author_url: URL linked from the author name (`None` if not set).
+        author_icon_url: Author icon URL (`None` if not set).
+        fields: `(name, value, inline)` tuples in insertion order.
+        timestamp: Embed timestamp (`None` if not set).
     """
 
     __slots__ = (
@@ -70,15 +66,15 @@ class EmbedProxy:
         description: AnyStr | None = None,
         timestamp: datetime.datetime | Literal[True] | None = None,
     ) -> None:
-        """Initialize the EmbedProxy with optional parameters.
+        """Initialize the proxy with common embed fields.
 
         Args:
-            colour: The colour of the embed.
-            color: The color of the embed. Alias for colour.
-            title: The title of the embed.
-            url: The URL for the embed title.
-            description: The description of the embed.
-            timestamp: The timestamp for the embed. Set to True for current time.
+            colour: Embed accent color.
+            color: Alias for `colour`.
+            title: Title text.
+            url: URL linked from the title.
+            description: Main body text.
+            timestamp: Embed timestamp; pass `True` to use the current UTC time.
         """
         self.color = color
         self.colour = colour
@@ -100,24 +96,21 @@ class EmbedProxy:
             self._timestamp = timestamp
 
     def to_embed(self, translator: Translator, locale: discord.Locale | str) -> discord.Embed:
-        """Convert the EmbedProxy to a discord.Embed object with translated strings.
+        """Translate all stored strings and return a [`discord.Embed`][].
 
         Args:
-            translator: The translator instance to use for translation.
-            locale: The locale to translate strings into.
+            translator: [`Translator`][] instance used for FTL lookup.
+            locale: Target locale for all `locale_str` values.
 
         Returns:
-            The translated Discord embed object.
+            A fully resolved [`discord.Embed`][].
         """
 
         def translate(string: AnyStr | None) -> str | None:
-            """Translate a string using the translator.
-
-            Args:
-                string: The string to translate.
+            """Translate `string` and return the result, or `None` when `string` is `None`.
 
             Returns:
-                The translated string, or None if the input was None.
+                Translated string or `None`.
             """
             if string is None:
                 return None
@@ -154,83 +147,75 @@ class EmbedProxy:
 
     @property
     def timestamp(self) -> datetime.datetime | None:
-        """Get the timestamp of the embed.
-
-        Returns:
-            The timestamp of the embed. Or None if not set.
-        """
+        """Embed timestamp (`None` if not set)."""
         return self._timestamp
 
     @timestamp.setter
     def timestamp(self, value: datetime.datetime | Literal[True] | None) -> None:  # pyright: ignore[reportPropertyTypeMismatch]
-        """Set the timestamp of the embed.
-
-        Args:
-            value: The timestamp to set. If True, sets to current time.
-        """
+        """Set the embed timestamp; pass `True` to use the current UTC time."""
         if value is True:
             self._timestamp = datetime.datetime.now(datetime.UTC)
         else:
             self._timestamp = value
 
     def set_footer(self, *, text: AnyStr | None = None, icon_url: AnyStr | None = None) -> Self:
-        """Set the footer of the embed.
+        """Set the embed footer.
 
         Args:
-            text: The footer text.
-            icon_url: URL for the footer icon.
+            text: Footer text.
+            icon_url: Footer icon URL.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         self.footer_text = text
         self.footer_icon_url = icon_url
         return self
 
     def remove_footer(self) -> Self:
-        """Remove the footer from the embed.
+        """Clear the embed footer.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         self.footer_text = None
         self.footer_icon_url = None
         return self
 
     def set_image(self, *, url: AnyStr | None) -> Self:
-        """Set the image of the embed.
+        """Set the embed image.
 
         Args:
-            url: URL for the image.
+            url: Image URL.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         self.image_url = url
         return self
 
     def set_thumbnail(self, *, url: AnyStr | None) -> Self:
-        """Set the thumbnail of the embed.
+        """Set the embed thumbnail.
 
         Args:
-            url: URL for the thumbnail.
+            url: Thumbnail URL.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         self.thumbnail_url = url
         return self
 
     def set_author(self, *, name: AnyStr, url: AnyStr | None = None, icon_url: AnyStr | None = None) -> Self:
-        """Set the author of the embed.
+        """Set the embed author.
 
         Args:
-            name: The name of the author.
-            url: URL for the author.
-            icon_url: URL for the author's icon.
+            name: Author display name.
+            url: URL linked from the author name.
+            icon_url: Author icon URL.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         self.author_name = name
         self.author_url = url
@@ -238,10 +223,10 @@ class EmbedProxy:
         return self
 
     def remove_author(self) -> Self:
-        """Remove the author from the embed.
+        """Clear the embed author.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         self.author_name = None
         self.author_url = None
@@ -249,70 +234,70 @@ class EmbedProxy:
         return self
 
     def add_field(self, *, name: AnyStr, value: AnyStr, inline: bool = True) -> Self:
-        """Add a field to the embed.
+        """Append a field to the embed.
 
         Args:
-            name: The name of the field.
-            value: The value of the field.
-            inline: Whether the field should be inline.
+            name: Field name.
+            value: Field value.
+            inline: Whether the field is displayed inline.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         self.fields.append((name, value, inline))
         return self
 
     def insert_field_at(self, index: int, *, name: AnyStr, value: AnyStr, inline: bool = True) -> Self:
-        """Insert a field at a specific position.
+        """Insert a field at a specific index.
 
         Args:
-            index: The index to insert the field at.
-            name: The name of the field.
-            value: The value of the field.
-            inline: Whether the field should be inline.
+            index: Position to insert at.
+            name: Field name.
+            value: Field value.
+            inline: Whether the field is displayed inline.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         self.fields.insert(index, (name, value, inline))
         return self
 
     def clear_fields(self) -> Self:
-        """Remove all fields from the embed.
+        """Remove all fields.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         self.fields.clear()
         return self
 
     def remove_field(self, index: int) -> Self:
-        """Remove a field at a specific position.
+        """Remove the field at `index` (no-op if out of range).
 
         Args:
-            index: The index of the field to remove.
+            index: Position of the field to remove.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
         """
         if 0 <= index < len(self.fields):
             self.fields.pop(index)
         return self
 
     def set_field_at(self, index: int, *, name: AnyStr, value: AnyStr, inline: bool = True) -> Self:
-        """Update a field at a specific position.
+        """Replace the field at `index`.
 
         Args:
-            index: The index of the field to update.
-            name: The new name of the field.
-            value: The new value of the field.
-            inline: Whether the field should be inline.
+            index: Position of the field to replace.
+            name: New field name.
+            value: New field value.
+            inline: Whether the field is displayed inline.
 
         Returns:
-            The embed proxy instance for chaining.
+            `self` for chaining.
 
         Raises:
-            IndexError: If the index is out of range.
+            IndexError: If `index` is out of range.
         """
         if 0 <= index < len(self.fields):
             self.fields[index] = (name, value, inline)

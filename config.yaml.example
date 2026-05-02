@@ -139,11 +139,8 @@ permission:
   #   * manager
   #   * admin
   #   * owner
-  # Command names should be as appears in the code.
-  # For example, the `/status clear` command is called "status_clear_command" in the code (cogs/utility/commands/status.py).
-  # So you would use "status clear" as the command name for the override.
-  # For most cases, the command name is the same as the actual command.
-  # You can set wildcard (+) to override a command group. For example, "status+" will override all related commands (i.e. `/status clear`).
+  # The command name is the English name of the command as it appears in Discord (e.g. "status clear" for `/status clear`),
+  # You can append "+" to a group name to override all of its subcommands (e.g. "status+" covers `/status clear`).
   overrides:
     some command name: staff
     some group+: everyone

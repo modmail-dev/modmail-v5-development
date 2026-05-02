@@ -4,7 +4,7 @@ Modmail is a Discord DM-based support ticket bot. It routes user DMs into staff 
 
 ## Structure
 
-- Core runtime and Discord integration live in `modmail/core/` (bot, permissions, translator, internal helpers).
+- Core runtime and Discord integration live in `modmail/core/` — flat layout, one concern per file: bot, cog base/lazy-command machinery, context helpers, argument converters, embed builder, access-level decorators and command permission index, staff guild lifecycle, FTL translator, and a private ticket view.
 - Persistence is abstracted behind `modmail/backends/common/` (`DBBackend`, `DBClient`, shared models) with concrete implementations in `modmail/backends/mongodb/` and `modmail/backends/sql/`.
 - Configuration models and loading logic live in `modmail/config/`.
 - Discord-facing behavior is in `modmail/cogs/modmail/` (modmail flows) and `modmail/cogs/utility/` (utility commands).

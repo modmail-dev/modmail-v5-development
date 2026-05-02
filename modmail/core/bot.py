@@ -1,27 +1,24 @@
-"""Core bot implementation for the Modmail system.
-
-This module contains the main Bot class responsible for handling Discord events,
-loading cogs, and managing the bot's functionality.
-"""
+"""Main [`Bot`][] subclass with event handlers, permission checks, and message-sending utilities."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import sys
-from typing import TYPE_CHECKING, Any, NoReturn, cast
+from typing import TYPE_CHECKING, Any, ClassVar, NoReturn, cast
 
 import discord
 from discord.ext import commands
 from packaging.version import Version
 
-from .. import CONFIG, __version__, utils
+from .. import CONFIG, __version__
 from ..backends import create_db_client
 from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
 from ..errors import DatabaseError, InstanceAlreadyRunningError, LocalizedBadArgumentError, NoStaffGuildError
-from .internals import StaffGuild
-from .internals.context import Context
-from .internals.embed import EmbedProxy
+from .context import Context
+from .embed import EmbedProxy
+from .permission import PermissionCommandIndex
+from .staff_guild import StaffGuild
 from .translator import Translator, _
 
 if TYPE_CHECKING:
@@ -33,28 +30,16 @@ __all__ = ["Bot"]
 
 
 class Bot(commands.Bot):
-    """Main bot class for handling Modmail functionality.
+    """[`commands.Bot`][] subclass wiring together Modmail's database, permissions, and staff guild."""
 
-    This class extends discord.py's Bot class to provide Modmail-specific functionality
-    including database integration, command permission handling, and presence management.
+    asyncio_pending_tasks: ClassVar[set[asyncio.Task[Any]]] = set()
+    """Fire-and-forget tasks kept alive until they complete."""
 
-    Attributes:
-        translator: Translator instance for handling translations.
-        staff_guild: StaffGuild instance for managing staff server interactions.
-        version: The version of the bot.
-        database_client: Database client instance for interacting with the database.
-    """
-
-    # Set of pending asyncio tasks, used for tracking long-running operations.
-    asyncio_pending_tasks: set[asyncio.Task[Any]] = set()
+    permission_command_index: PermissionCommandIndex
+    """Locale-aware index of commands for permission override management, built at startup."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        """Initialize the Modmail bot.
-
-        Args:
-            *args: Variable length argument list for commands.Bot.
-            **kwargs: Arbitrary keyword arguments for commands.Bot.
-        """
+        """Configure intents, command prefix, presence defaults, and internal services."""
         self._exit_status = 0  # Used to set the exit code of the bot when it exits.
 
         intents = discord.Intents(
@@ -96,47 +81,35 @@ class Bot(commands.Bot):
         super().__init__(*args, **kwargs)
 
         self.translator: Translator = Translator()
+        """Handles FTL-based localization."""
         self.staff_guild: StaffGuild = StaffGuild(self)
-
-        self._bot_initialized_event = asyncio.Event()
+        """Manages the configured staff Discord server and ticket lifecycle."""
 
         self.version: str = __version__
+        """Semver string for this Modmail instance."""
         logger.debug("[bold green]Bot version: %s", self.version, extra={"markup": True, "highlighter": None})
 
         self.database_client: DBClient = create_db_client(CONFIG)
+        """Primary interface to the configured backend database."""
 
         self.add_check(self._bot_can_run_check)
         self.add_check(self._permission_check)
         self.before_invoke(self.on_before_invoke)
 
-    async def wait_until_ready(self) -> None:
-        """Wait until the bot is ready and the database is connected."""
-        await super().wait_until_ready()
-        await self._bot_initialized_event.wait()
-
-    async def get_context(self, message: discord.Message | discord.Interaction, *, cls: Any = Context) -> Context:
-        """Return a [`Context`][modmail.core.internals.context.Context] for the given message.
+    @staticmethod
+    def get_log_url(key: str) -> str:
+        """Build a log URL for the given ticket `key` using the configured `log_url` base.
 
         Args:
-            message: The message to get the context for.
-            cls: The context class to use.
+            key: Ticket key to append to the base log URL.
 
         Returns:
-            A [`Context`][modmail.core.internals.context.Context] instance.
+            Full URL string for the ticket log.
         """
-        if cls is not Context:
-            logger.warning("Custom context classes are not supported and may cause issues.")
-        return await super().get_context(message, cls=cls)
+        return f"{CONFIG.log_url}/{key}"
 
     async def setup_hook(self) -> None:
-        """Initialize bot configuration and synchronize commands.
-
-        This method is called automatically on bot login and handles:
-        - Verification of bot publicity settings.
-        - Command tree synchronization.
-        - Database settings updates.
-        - Locale configuration.
-        """
+        """Run post-login initialization: public-bot check, slash sync, and override key index setup."""
         app_info = self.application
         if app_info is None:
             app_info = await self.application_info()
@@ -225,51 +198,99 @@ class Bot(commands.Bot):
             await self.database_client.update_settings(last_ran_version=self.version)
             logger.debug("Updated last ran version to %s", self.version)
 
-        self._bot_initialized_event.set()
+        self.permission_command_index = PermissionCommandIndex.from_bot(self)
+        self._resolve_config_permission_overrides()
+        await self._apply_renamed_command_keys()
 
     async def _sync_slash_commands(self) -> None:
-        """Synchronize slash commands with Discord.
-
-        Updates the slash command configuration on Discord servers and stores
-        the sync version in the database.
-        """
+        """Sync the command tree with Discord and record the current version in the database."""
         logger.debug("Syncing slash commands (this may take a while).")
         await self.tree.sync()
         logger.debug("Slash commands synced.")
         await self.database_client.update_settings(last_slash_synced_version=self.version)
 
     async def _unsync_slash_commands(self) -> None:
-        """Remove all slash commands from Discord.
-
-        Clears all registered slash commands and updates the database to reflect
-        the un-synced state.
-        """
+        """Clear all registered slash commands from Discord and mark as un-synced in the database."""
         logger.debug("Un-syncing slash commands (this may take a while).")
         self.tree.clear_commands(guild=None)
         await self.tree.sync()
         logger.debug("Slash commands un-synced.")
         await self.database_client.update_settings(last_slash_synced_version=None)
 
-    def run(self, *args: Any, **kwargs: Any) -> NoReturn:
-        """Disabled method to prevent incorrect bot initialization.
+    def _resolve_config_permission_overrides(self) -> None:
+        """Resolve config override keys through the command index using the default locale.
 
-        Args:
-            *args: Variable length argument list.
-            **kwargs: Arbitrary keyword arguments.
+        Runs after [`permission_command_index`][] is built. Each key in
+        `CONFIG.permission.overrides` is resolved against the index so that both
+        canonical names and the default-locale localized names are accepted in the YAML.
+        Unrecognized keys are left in place with a warning logged.
+        """
+        index = self.permission_command_index(CONFIG.default_locale)
+        overrides = CONFIG.permission.overrides
+        new_overrides: dict[str, RequiredAccessLevel] = {}
+        for key, value in overrides.items():
+            resolved = index.resolve(key, allow_raw_key=True)
+            if resolved is None:
+                logger.warning("CONFIG permission override: ignoring unrecognized command %r", key)
+                new_overrides[key] = value
+            else:
+                new_overrides[resolved] = value
+        overrides.clear()
+        overrides.update(new_overrides)
+
+    async def _apply_renamed_command_keys(self) -> None:
+        """Update stored permission overrides when command callback names have changed.
+
+        Reads rename tables declared on each cog (via `renamed_command_keys`),
+        then rewrites any matching keys in every profile's `permission_overrides` dict
+        and persists the updated profiles to the database.
+        """
+        # TODO: Also rename the CONFIG.permission.overrides keys
+        renames = {
+            k: v
+            for cog in self.cogs.values()
+            for (k, v) in cast("list[tuple[str, str]]", getattr(type(cog), "renamed_command_keys", []))
+        }
+
+        if not renames:
+            return
+
+        for profile in self.database_client.profiles:
+            new_overrides: dict[str, PermissionOverrideValue] = {}
+            changed = False
+
+            for key, value in profile.permission_overrides.items():
+                base, suffix = (key.rstrip("+"), "+") if key.endswith("+") else (key, "")
+                if new_base := renames.get(base):
+                    logger.info(
+                        "Profile %d: migrating override key %r → %r",
+                        profile.profile_id,
+                        key,
+                        new_base + suffix,
+                    )
+                    new_overrides[new_base + suffix] = value
+                    changed = True
+                else:
+                    new_overrides[key] = value
+
+            if changed:
+                await self.database_client.update_profile(
+                    profile.model_copy(update={"permission_overrides": new_overrides})
+                )
+
+    def run(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Always raises; use [`run_bot`][] to start the bot.
 
         Raises:
-            NotImplementedError: Always raised to direct users to use run_bot() instead.
+            NotImplementedError: Always.
         """
         raise NotImplementedError("Use `run_bot` instead.")
 
     def run_bot(self) -> NoReturn:
-        """Start the bot and handle the main execution loop.
-
-        Initializes database connection, loads extensions, and handles various
-        startup scenarios and potential errors.
+        """Connect to the database, load extensions, start the bot, and exit with a status code.
 
         Raises:
-            SystemExit: With appropriate exit codes based on execution result.
+            SystemExit: Exit code `0` on clean shutdown, `1` on any startup or runtime error.
         """
         self._exit_status = 0
 
@@ -346,10 +367,7 @@ class Bot(commands.Bot):
         sys.exit(self._exit_status)  # Should be 0 if everything went well, 1 if there was an error.
 
     async def _not_in_guild_close(self) -> None:
-        """Close the bot if it is not in the staff guild.
-
-        This method is called when the bot is removed from the staff guild.
-        """
+        """Log a critical alert and close the bot when it is no longer in the staff guild."""
         logger.critical(
             "[bold red]The bot was removed from the staff server. "
             "Please invite the bot back to the server and then restart the bot.",
@@ -359,11 +377,7 @@ class Bot(commands.Bot):
         await self.close()
 
     async def on_ready(self) -> None:
-        """Handle bot ready event.
-
-        Called when the bot has successfully connected to Discord and is ready to
-        receive events.
-        """
+        """Validate staff guild membership and log startup info once Discord reports ready."""
         await self.wait_until_ready()
 
         other_server_names = [
@@ -371,7 +385,7 @@ class Bot(commands.Bot):
         ]
 
         # Check if the bot is in the staff server.
-        if not self.staff_guild.exists:
+        if not self.staff_guild.guild_exists:
             # TODO: Send the bot's invite link
             logger.critical(
                 "[bold red]The bot is not in the staff server (%d). "
@@ -405,38 +419,45 @@ class Bot(commands.Bot):
             )
 
     async def on_connect(self) -> None:
-        """Handle bot connect event.
-
-        Called when the bot establishes a connection to Discord. Sets up initial
-        presence configuration.
-        """
+        """Verify the staff guild is still reachable and restore presence after each reconnect."""
         logger.debug("Connected to Discord.")
         await self.wait_until_ready()
 
         # Check if the staff guild still exists,
         # in case the bot was removed from the server between connects.
-        if not self.staff_guild.exists:
+        if not self.staff_guild.guild_exists:
             await self._not_in_guild_close()
             return
 
         await self.set_bot_presence()
 
     async def on_guild_remove(self, guild: discord.Guild) -> None:
-        """Handle guild removal event.
-
-        Called when the bot is removed from a guild.
-        Exit bot if the guild is the staff server.
-        """
+        """Close the bot if removed from the configured staff guild."""
         logger.info("Removed from guild %s", guild.name)
         if guild.id == CONFIG.bot.staff_server_id:
             await self._not_in_guild_close()
             return
 
-    def _get_discord_presence_from_settings(self) -> tuple[discord.BaseActivity | None, discord.Status | None]:
-        """Generate Discord presence objects from database settings.
+    async def get_context(self, message: discord.Message | discord.Interaction, *, cls: Any = Context) -> Context:
+        """Return a [`Context`][] for the given message or interaction.
+
+        Args:
+            message: The Discord message or interaction to build context from.
+            cls: The context class to use.
 
         Returns:
-            A tuple containing the activity and status to display.
+            A [`Context`][] instance.
+        """
+        if cls is not Context:
+            logger.warning("Custom context classes are not supported and may cause issues.")
+        return await super().get_context(message, cls=cls)
+
+    def _get_discord_presence_from_settings(self) -> tuple[discord.BaseActivity | None, discord.Status | None]:
+        """Build `(activity, status)` Discord objects from the current database settings.
+
+        Returns:
+            Tuple of ([`discord.BaseActivity`][] or `None`, [`discord.Status`][] or `None`)
+            reflecting the saved settings.
         """
         dc_activity: discord.BaseActivity | None = None
         dc_status: discord.Status | None = None
@@ -473,14 +494,11 @@ class Bot(commands.Bot):
     async def set_bot_presence(
         self, *, activity: ActivityModel | None = None, status: StatusType | None = None
     ) -> None:
-        """Update the bot's Discord presence.
-
-        If either argument is provided, the database settings will be updated before
-        applying the new presence.
+        """Update Discord presence, persisting any changes to the database first.
 
         Args:
-            activity: Optional activity to set for the bot.
-            status: Optional status to set for the bot.
+            activity: New activity to display (`None` leaves the current setting unchanged).
+            status: New status to display (`None` leaves the current setting unchanged).
         """
         await self.wait_until_ready()  # Wait until the bot is ready
 
@@ -498,20 +516,20 @@ class Bot(commands.Bot):
         await self.change_presence(activity=dc_activity, status=dc_status)
 
     async def clear_bot_presence(self) -> None:
-        """Remove the bot's current presence settings.
-
-        Clears both activity and status from the database and Discord display.
-        """
+        """Clear both activity and status from the database and Discord display."""
         logger.debug("Clearing bot presence.")
         await self.database_client.update_settings(activity=None, status=None)
         await self.set_bot_presence()
 
     async def on_command_error(self, context: commands.Context[Any], exception: commands.CommandError) -> None:
-        """Handle command execution errors.
+        """Route command errors to appropriate handlers.
+
+        Unwraps `HybridCommandError`, silences `CommandNotFound`, sends a localized message
+        for bad-argument and permission errors, and re-raises unexpected errors.
 
         Args:
-            context: The context in which the command was executed.
-            exception: The error that occurred during execution.
+            context: The invocation context.
+            exception: The error raised during command execution.
         """
         # Slash/hybrid non-CommandErrors arrive wrapped in HybridCommandError; unwrap once.
         exc: commands.CommandError | discord.app_commands.AppCommandError = exception
@@ -574,14 +592,12 @@ class Bot(commands.Bot):
         await super().on_command_error(context, exception)
 
     async def on_error(self, event_method: str, *args: Any, **kwargs: Any) -> None:
-        """Handle errors that occur during event processing.
-
-        When NoStaffGuildError is raised, log a critical error and exit the bot.
+        """Close the bot on [`NoStaffGuildError`][]; delegate all other errors to the default handler.
 
         Args:
-            event_method: The name of the event method where the error occurred.
-            *args: Positional arguments passed to the event method.
-            **kwargs: Keyword arguments passed to the event method.
+            event_method: Name of the event that raised the error.
+            *args: Positional arguments passed to the event.
+            **kwargs: Keyword arguments passed to the event.
         """
         exc_info = sys.exc_info()
 
@@ -592,12 +608,10 @@ class Bot(commands.Bot):
 
     @staticmethod
     async def on_before_invoke(ctx: Context) -> None:
-        """Perform pre-command execution logging.
-
-        Logs command execution attempts with permission check results if available.
+        """Log each command invocation, including the permission-check result when available.
 
         Args:
-            ctx: The context in which the command is being executed.
+            ctx: The invocation context.
         """
         if hasattr(ctx, "perm_check_reason"):  # This gets injected by the permission check
             # noinspection PyProtectedMember
@@ -610,16 +624,64 @@ class Bot(commands.Bot):
         else:
             logger.debug("User %s is running the %s command.", ctx.author, ctx.command)
 
+    def add_command(self, command: commands.Command[Any, Any, Any]) -> None:
+        """Register `command` and warn if its callback name doesn't follow the `_command` convention.
+
+        Also walks any subcommands when `command` is a group, since only top-level
+        commands pass through here during cog injection.
+
+        Args:
+            command: The command to register.
+        """
+
+        def _check_name(name: str, qualname: str) -> None:
+            if qualname == "jishaku" or qualname.startswith("jishaku "):
+                return  # jishaku commands don't follow the naming convention, so skip the check for them
+            if not name.casefold().endswith("_command"):
+                logger.debug("Command name does not end with _command: %s (%s)", qualname, name)
+
+        _check_name(command.callback.__name__, command.qualified_name)
+        if isinstance(command, commands.Group):
+            for sub in command.walk_commands():
+                _check_name(sub.callback.__name__, sub.qualified_name)
+        super().add_command(command)
+
     @staticmethod
-    def get_command_access_level(base_command: commands.Command[Any, Any, Any]) -> RequiredAccessLevel:
-        """Determine the required access level for a command.
+    def get_canonical_command_name(command: commands.Command[Any, Any, Any]) -> str:
+        """Derive the display name from a [`discord.ext.commands.Command`][].
+
+        Strips the `_command` suffix from the callback name and replaces underscores with
+        spaces. Falls back to [`discord.ext.commands.Command.qualified_name`][] if the suffix
+        is absent.
+
+        Args:
+            command: The command to extract the name from.
+
+        Returns:
+            The canonical name of the command for permission overrides.
+        """
+        # Check if the command has an override set in the config.
+        command_name = command.callback.__name__.casefold()
+        if command_name.endswith("_command"):
+            command_name = command_name[:-8]
+            command_name = command_name.replace("_", " ").strip()
+        else:
+            command_name = command.qualified_name  # Use the full qualified name as the command name
+        return command_name
+
+    @classmethod
+    def get_command_access_level(cls, base_command: commands.Command[Any, Any, Any]) -> RequiredAccessLevel:
+        """Return the effective [`RequiredAccessLevel`][] for `base_command`.
+
+        Checks config overrides first (exact name, then wildcard `+` on parents), then
+        the `__permission__` attribute set by access-level decorators. Returns
+        [`RequiredAccessLevel.everyone`][] when nothing restricts the command.
 
         Args:
             base_command: The command to check.
 
         Returns:
-            The access level required to use the command.
-            Defaults to "everyone" if no access level is explicitly set.
+            The resolved access level.
         """
         default_access_level: RequiredAccessLevel | None = None
 
@@ -629,7 +691,7 @@ class Bot(commands.Bot):
 
         # Check if the command has an override set in the config.
         for i, command in enumerate(commands_to_check):
-            command_name = utils.get_command_name(command)
+            command_name = cls.get_canonical_command_name(command)
 
             # If the parent command has a wildcard override. e.g. "profile+" will match "profile add"
             override = CONFIG.permission.overrides.get(command_name + "+")
@@ -650,14 +712,16 @@ class Bot(commands.Bot):
         return default_access_level if default_access_level is not None else RequiredAccessLevel.everyone
 
     def get_all_user_profiles(self, user: discord.User | discord.Member) -> list[ProfileModel]:
-        """Retrieve all applicable profiles for a user.
+        """Return all profiles applicable to `user`, ordered from most to least significant.
+
+        Includes the user's personal profile and, when invoked in a guild, role profiles from
+        highest role down to `@everyone`. User profile is prepended last, giving it highest priority.
 
         Args:
-            user: The Discord user or member to get profiles for.
+            user: The Discord user or member.
 
         Returns:
-            List of profiles ordered from most to least significant,
-            including user profile and role profiles if applicable.
+            Profiles in priority order (index 0 = highest priority).
         """
         all_profiles: list[ProfileModel] = []  # All profiles to check for permission overrides
 
@@ -673,13 +737,16 @@ class Bot(commands.Bot):
         return all_profiles
 
     async def _permission_check(self, ctx: Context) -> bool:
-        """Verify if a user has permission to execute a command.
+        """Return `True` when the invoking user has permission to run the command.
+
+        Evaluates owner bypass, Discord admin bypass, config overrides, wildcard overrides,
+        and profile access levels in that order. Sets `ctx.perm_check_reason` for logging.
 
         Args:
-            ctx: The context in which the command is being executed.
+            ctx: The invocation context.
 
         Returns:
-            True if the user has permission to execute the command, False otherwise.
+            `True` if the user may run the command, `False` otherwise.
         """
         if ctx.author.bot:  # Ignore commands invoked by bots
             ctx.perm_check_reason = "fail: bot"
@@ -710,7 +777,7 @@ class Bot(commands.Bot):
         commands_to_check = [ctx.command, *ctx.command.parents]
 
         for i, command in enumerate(commands_to_check):
-            command_name = utils.get_command_name(command)
+            command_name = self.get_canonical_command_name(command)
 
             for profile in all_profiles:
                 if i == 0:  # Check for override on the exact command name
@@ -759,23 +826,15 @@ class Bot(commands.Bot):
         return False
 
     async def _bot_can_run_check(self, ctx: Context) -> bool:
-        """Verify if the bot has necessary permissions to execute a command.
+        """Always return `True`; channel-permission validation is not yet implemented.
 
         Args:
-            ctx: The context in which the command is being run.
+            ctx: The invocation context.
 
         Returns:
-            True if the bot can run the command, False otherwise.
+            `True`.
         """
-        #     Check if the bot can run the command.
-        #     Verify the bot has the following permissions:
-        #     - Send Messages
-        #     - Embed Links
-        #     - Attach Files
-        #     - TODO: Add more permissions
-        #     """
-        #     return True
-        return True  # pragma: nocover ; TODO: Implement this check
+        return True  # TODO: Implement this check
 
     # TODO: implement caching
     def translate(
@@ -784,19 +843,18 @@ class Bot(commands.Bot):
         *,
         ctx_or_locale: commands.Context[Any] | discord.Locale | str | None = None,
     ) -> str:
-        """Translate a message using the bot's Translator.
+        """Translate `string` into the locale implied by `ctx_or_locale`.
 
-        Determines the appropriate locale from the context and translates the string.
-        If `ctx_or_locale` is `None`, the default locale is used.
+        Falls back to the default locale when `ctx_or_locale` is `None` or the context
+        has no interaction. Returns `string.message` when translation fails.
 
         Args:
             string: The locale string to translate.
-            ctx_or_locale: Either a [`Context`][] to derive the locale from the interaction,
-                a [`discord.Locale`][] or locale string to use directly,
-                or `None` to use the default locale.
+            ctx_or_locale: A [`Context`][] (locale taken from its interaction), a
+                [`discord.Locale`][] or BCP-47 string, or `None` for the default locale.
 
         Returns:
-            The translated string or the original message if translation fails.
+            The translated string.
         """
         locale: discord.Locale | str = CONFIG.default_locale
 
@@ -821,24 +879,21 @@ class Bot(commands.Bot):
         original_message: discord.Message | None = None,
         **kwargs: Any,
     ) -> discord.Message:
-        """Send a message with automatic embedding and locale string translation.
+        """Send (or edit) a message, translating locale strings and auto-embedding plain text.
 
-        Handles translation of locale strings, automatic embedding, and
-        proper channel-based sending.
+        When `auto_embed` is `True` and no `embed`/`embeds` kwarg is provided, wraps `content`
+        in an [`EmbedProxy`][]. When `original_message` is given, edits it instead of sending
+        a new message. Locale is derived from the interaction when `channel` is a [`Context`][].
 
         Args:
-            content: The message content to send.
-            channel: The channel or context to send to.
-            auto_embed: Whether to automatically convert the content to an embed.
-            original_message: If set, edits this message instead of sending a new one.
-            **kwargs: Additional keyword arguments passed to the underlying send or edit.
-
-        Other Parameters:
-            ephemeral: If the message should only be visible to the user who started the interaction.
-                Only valid when `channel` is a [commands.Context][].
+            content: Text or locale string to send.
+            channel: Destination channel or [`Context`][].
+            auto_embed: Wrap plain `content` in an embed automatically.
+            original_message: Edit this message instead of sending a new one.
+            **kwargs: Forwarded to `send` or `edit` (e.g. `embed`, `embeds`, `ephemeral`).
 
         Returns:
-            The sent Discord message object.
+            The sent or edited [`discord.Message`][].
         """
         locale: discord.Locale | str = CONFIG.default_locale
 
@@ -879,15 +934,3 @@ class Bot(commands.Bot):
             kwargs.pop("reference", None)
             return await original_message.edit(content=content, **kwargs)
         return await channel.send(content, **kwargs)
-
-    @staticmethod
-    def get_log_url(key: str) -> str:
-        """Get a formatted log URL for the ticket.
-
-        Args:
-            key: The key of the ticket.
-
-        Returns:
-            The formatted log URL.
-        """
-        return f"{CONFIG.log_url}/{key}"

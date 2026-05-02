@@ -1,8 +1,4 @@
-"""TicketView class for managing ticket interactions.
-
-This class handles the creation and management of tickets, including sending
-messages to the ticket channel and processing incoming messages.
-"""
+"""[`TicketView`][] — send/receive bridge between a ticket channel and the recipients' DMs."""
 
 from __future__ import annotations
 
@@ -15,12 +11,12 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
-from ... import CONFIG
-from ...backends.common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
-from ...enum import TicketMessageType
-from ...errors import BadPermissionsError, NoStaffGuildError, NoTicketChannelError
-from ..translator import _
+from .. import CONFIG
+from ..backends.common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
+from ..enum import TicketMessageType
+from ..errors import BadPermissionsError, NoStaffGuildError, NoTicketChannelError
 from .embed import EmbedProxy
+from .translator import _
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -28,50 +24,42 @@ if TYPE_CHECKING:
     from .context import Context
     from .staff_guild import StaffGuild
 
-__all__ = ["TicketView"]
-
 logger = logging.getLogger(__name__)
 
 
 class TicketView:
-    """TicketView class for managing ticket interactions.
+    """Runtime handle for an open ticket.
 
-    This class handles the creation and management of tickets, including sending
-    messages to the ticket channel and processing incoming messages.
-
-    Attributes:
-        staff_guild: The StaffGuild instance associated with the ticket.
-        model: The TicketModel instance representing the ticket.
-        recipients: A list of recipients associated with the ticket.
+    Provides helpers to fetch the ticket channel, format embeds, and relay messages
+    between the staff channel and each recipient's DMs.
     """
 
     def __init__(
         self, staff_guild: StaffGuild, ticket_model: TicketModel, recipients: list[discord.User | discord.Member]
     ) -> None:
-        """Initialize the TicketView.
+        """Attach the staff guild, ticket model, and recipient list.
 
         Args:
-            staff_guild: The StaffGuild instance associated with the ticket.
-            ticket_model: The TicketModel instance representing the ticket.
-            recipients: A list of recipients associated with the ticket.
+            staff_guild: The staff guild that owns this ticket.
+            ticket_model: Database model representing the ticket.
+            recipients: Discord users who are part of this ticket.
         """
         self.bot = staff_guild.bot
+        """The [`Bot`][] instance."""
         self.staff_guild = staff_guild
+        """The staff guild that owns this ticket."""
         self.model = ticket_model
+        """Database model for the ticket."""
         self.recipients = recipients
+        """Discord users who are part of this ticket."""
 
     async def get_channel(self) -> discord.TextChannel | discord.Thread:
-        """Get the channel or thread associated with the ticket.
-
-        If the thread is archived, it will be auto-unarchived.
-
-        Returns:
-            The channel or thread associated with the ticket, or None if the channel does not exist.
+        """Return the ticket channel or thread.
 
         Raises:
-            NoStaffGuildError: If the staff guild is not set.
-            NoTicketChannelError: If the channel or thread is not found in the staff guild.
-            BadPermissionsError: If the bot does not have the required permissions to access the channel.
+            NoStaffGuildError: If the staff guild is unavailable.
+            NoTicketChannelError: If the channel is missing or the wrong type.
+            BadPermissionsError: If the bot lacks the minimum required channel permissions.
         """
         try:
             channel = self.staff_guild.guild.get_channel_or_thread(self.model.channel_id)
@@ -82,50 +70,25 @@ class TicketView:
             try:
                 channel = await self.staff_guild.guild.fetch_channel(self.model.channel_id)
             except (discord.NotFound, discord.HTTPException) as e:
+                # TODO: close ticket on not found
                 raise NoTicketChannelError(f"Ticket channel {self.model.channel_id} not found.") from e
-            if isinstance(channel, discord.TextChannel) or (
-                isinstance(channel, discord.Thread) and not channel.archived
-            ):
-                logger.warning(
-                    "Channel or thread %d not found in cache, fetched from API. (THIS SHOULD NOT HAPPEN)",
-                    channel.id,
-                )
 
         if not isinstance(channel, discord.TextChannel | discord.Thread):
+            # TODO: close ticket
             raise NoTicketChannelError("Ticket channel is not a text channel or thread.")
-
-        if isinstance(channel, discord.Thread) and channel.archived:
-            logger.info("Thread %d is archived, unarchiving.", channel.id)
-            await channel.edit(archived=False)
 
         perms = channel.permissions_for(channel.guild.me)
         if perms & self.staff_guild.MIN_PERMISSIONS != self.staff_guild.MIN_PERMISSIONS:
             raise BadPermissionsError("Bot does not have the required permissions to access the channel.")
         return channel
 
-    # def dm_channel(self) -> discord.DMChannel | None:
-    #     """Get the DM channel associated with the ticket.
-    #
-    #     Returns:
-    #         The DM channel associated with the ticket, or None if the DM channel does not exist.
-    #     """
-    #     try:
-    #         return self.staff_guild.bot(self.model.created_by.user_id).dm_channel
-    #     except NoStaffGuildError:
-    #         logger.debug("Staff guild not set, cannot get DM channel.")
-    #         raise
-
     @property
     def log_url(self) -> str:
-        """Get the log URL for the ticket.
-
-        Returns:
-            The log URL for the ticket.
-        """
+        """Log URL for this ticket."""
         return self.bot.get_log_url(self.model.key)
 
     async def send_initial_staff_message(self) -> None:
-        """Send the initial message to the ticket chanel."""
+        """Send the opening info embed(s) to the ticket channel, one per recipient."""
         channel = await self.get_channel()
         embed_proxies: list[tuple[Any, EmbedProxy]] = []  # list of tuples (sort-key, embed)
 
@@ -209,16 +172,15 @@ class TicketView:
         original_message: discord.Message | tuple[Context, str],
         message_type: TicketMessageType,
     ) -> EmbedProxy:
-        """Format the embed for the given message that is sent to the ticket channel.
-
-        If the message is invoked within a command, the context and the message are passed as a tuple.
+        """Build an [`EmbedProxy`][] for the staff ticket channel.
 
         Args:
-            original_message: The original message to format.
-            message_type: The type of the message (e.g., TicketMessageType.dm).
+            original_message: A raw [`discord.Message`][] (for DMs) or a `(ctx, content)` tuple
+                (for command-originated replies, where `ctx.message.content` may be empty).
+            message_type: Controls embed color and footer.
 
         Returns:
-            The formatted embed proxy.
+            An [`EmbedProxy`][] ready to render and send.
         """
         # TODO: format close embed: TicketMessageType = close, sclose
 
@@ -252,16 +214,14 @@ class TicketView:
         original_message: discord.Message | tuple[Context, str],
         message_type: TicketMessageType,
     ) -> EmbedProxy:
-        """Format the ticket embed for the given message that is sent to the DM channel.
-
-        If the message is invoked within a command, the context and the message are passed as a tuple.
+        """Build an [`EmbedProxy`][] for the recipient's DM channel.
 
         Args:
-            original_message: The original message to format.
-            message_type: The type of the message (e.g., TicketMessageType.dm).
+            original_message: A raw [`discord.Message`][] or a `(ctx, content)` tuple.
+            message_type: Controls embed color.
 
         Returns:
-            The formatted embed proxy.
+            An [`EmbedProxy`][] ready to render and send.
         """
         # TODO: format close embed: TicketMessageType = close
 
@@ -287,13 +247,13 @@ class TicketView:
         return embed
 
     async def process_dm_message(self, message: discord.Message) -> list[discord.User | discord.Member]:
-        """Process a DM message and send it to the ticket channel.
+        """Relay an incoming DM to the ticket channel and to all other recipients.
 
         Args:
-            message: The DM message to process.
+            message: The DM message received from a recipient.
 
         Returns:
-            A list of recipients to whom the DM message failed to send.
+            Recipients whose DM delivery failed (empty list on full success).
         """
         logger.debug("Processing DM message from %s: %s", message.author, message.content)
         channel = await self.get_channel()
@@ -365,19 +325,19 @@ class TicketView:
     async def process_reply_message(
         self, ctx: Context, message: str, message_type: TicketMessageType = TicketMessageType.reply
     ) -> list[discord.User | discord.Member]:
-        """Process a reply, close, or note message and send it to the DM channel if applicable.
+        """Relay a staff reply, close, or note to the ticket channel and recipients' DMs when applicable.
 
-        This method uses message as the content of the reply message.
-        Although ctx.message.content may be empty, ctx.message is still used to get the author and
-        created_at attributes, which should always be valid.
+        `message` is the actual content; `ctx.message.content` is not used because it may be empty
+        (e.g., when content was passed via a modal). `ctx.author` and `ctx.message.created_at` are
+        still valid and used for embed metadata.
 
         Args:
-            ctx: The command context containing information about the invocation.
-            message: The message to send as a reply.
-            message_type: The type of the message (e.g., reply, close, etc.).
+            ctx: The command context for author and timestamp metadata.
+            message: Text to send.
+            message_type: Controls which channels receive the message and embed styling.
 
         Returns:
-            A list of recipients to whom the reply message failed to send.
+            Recipients whose DM delivery failed (empty list on full success).
         """
         logger.debug("Processing %s message in ticket %s: %s", message_type, self.model.key, message)
         channel = await self.get_channel()

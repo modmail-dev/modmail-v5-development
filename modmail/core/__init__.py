@@ -9,12 +9,16 @@ from __future__ import annotations
 
 try:  # Check if modmail is initialized
     from .. import CONFIG
-
-    del CONFIG
-except ImportError as e:  # pragma: no cover
+except RuntimeError as e:  # pragma: no cover
     raise RuntimeError("Did you forget to first run modmail.init()?") from e
+else:
+    del CONFIG
 
 from .bot import *
-from .internals import *
+from .cog import *
+from .context import *
+from .converters import *
+from .embed import *
 from .permission import *
+from .staff_guild import *
 from .translator import *

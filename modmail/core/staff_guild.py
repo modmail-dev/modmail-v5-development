@@ -1,8 +1,4 @@
-"""Staff guild management for the Modmail bot.
-
-Provides [`StaffGuild`][], which represents the staff Discord server and owns
-all ticket lifecycle operations, channel setup, and access control.
-"""
+"""[`StaffGuild`][] — ticket lifecycle, channel setup, and access control for the staff guild."""
 
 from __future__ import annotations
 
@@ -11,22 +7,22 @@ import contextlib
 import datetime
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import discord
 
-from ... import CONFIG
-from ...backends.common import TicketModel, TicketUserModel
-from ...enum import AccessLevel, ProfileType, TicketStatus
-from ...errors import BadPermissionsError, NoModmailCategoryError, NoStaffGuildError
-from ..translator import _
+from .. import CONFIG
+from ..backends.common import TicketModel, TicketUserModel
+from ..enum import AccessLevel, ProfileType, TicketStatus
+from ..errors import BadPermissionsError, NoModmailCategoryError, NoStaffGuildError
+from ._ticket_view import TicketView
 from .embed import EmbedProxy
-from .ticket_view import TicketView
+from .translator import _
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Iterable
+    from collections.abc import Iterable
 
-    from ..bot import Bot
+    from .bot import Bot
 
 __all__ = ["StaffGuild"]
 
@@ -40,39 +36,39 @@ class StaffGuild:
     """Manages the staff Discord server where Modmail tickets are handled."""
 
     def __init__(self, bot: Bot) -> None:
-        """Initialize the [`StaffGuild`][] wrapper.
+        """Attach the bot and read the staff guild ID from config.
 
         Args:
             bot: The [`Bot`][] instance that owns this staff guild.
         """
         self.bot = bot
-        self.guild_id = CONFIG.bot.staff_server_id
+        """The [`Bot`][] instance that owns this staff guild."""
 
     def __str__(self) -> str:
         """Return the guild's name."""
-        return self.guild.name if self.exists else "<Invalid Guild>"
+        return self.guild.name if self.guild_exists else "<Invalid Guild>"
 
     def __repr__(self) -> str:
-        """Return a string representation of the StaffGuild instance."""
+        """Return `StaffGuild(guild_id=...)` for debugging."""
         return f"StaffGuild(guild_id={self.guild_id})"
+
+    @property
+    def guild_id(self) -> int:
+        """The Discord ID of the configured staff server."""
+        return CONFIG.bot.staff_server_id
 
     @property
     def MIN_PERMISSIONS(self) -> discord.Permissions:  # noqa: N802
         """Minimum guild-level permissions required for the bot to function.
 
         Warning:
-            When changing these, also update the localization key
-            `ftl-cmd-setup-not-enough-guild-permissions`.
+            When changing these, also update the `ftl-cmd-setup-not-enough-guild-permissions`
+            localization key.
 
         Note:
-            The view-audit-log permission is strongly recommended — it lets Modmail
-            detect the closer when a ticket channel is deleted manually — but is not
-            enforced.
-
-        Returns:
-            A [`discord.Permissions`][] object with all required flags set.
+            View Audit Log is strongly recommended — it lets Modmail detect the closer when a
+            ticket channel is deleted manually — but is not enforced here.
         """
-        # Using getter here to prevent accidental changes to the permissions.
         return discord.Permissions(
             read_messages=True,
             read_message_history=True,
@@ -96,11 +92,7 @@ class StaffGuild:
 
         Identical to [`MIN_PERMISSIONS`][] except `manage_roles` is omitted
         (Discord does not allow that flag on channel-level overwrites).
-
-        Returns:
-            A [`discord.PermissionOverwrite`][] with all applicable flags set.
         """
-        # Using getter here to prevent accidental changes to the permissions.
         return discord.PermissionOverwrite(
             read_messages=True,
             read_message_history=True,
@@ -118,7 +110,7 @@ class StaffGuild:
         )
 
     @property
-    def exists(self) -> bool:
+    def guild_exists(self) -> bool:
         """`True` if the bot is currently a member of the configured staff guild."""
         try:
             return bool(self.guild)
@@ -146,7 +138,7 @@ class StaffGuild:
             NoModmailCategoryError: If no channel ID is saved or the channel no longer exists.
             BadPermissionsError: If the bot lacks [`MIN_PERMISSIONS`][] on the channel.
         """
-        if not self.exists:  # Check if the guild exists
+        if not self.guild_exists:  # Check if the guild exists
             raise NoStaffGuildError(f"Staff guild with ID {self.guild_id} not found.")
 
         category_or_forum_id = self.bot.database_client.settings.main_category_or_forum_id
@@ -173,10 +165,9 @@ class StaffGuild:
         """Return the configured log channel, unarchiving it if needed.
 
         Returns:
-            discord.TextChannel | discord.Thread: The log channel or thread.
-            None: If not configured, the channel is missing, or the bot lacks the required permissions.
+            The log channel/thread, or `None` if not configured, missing, or the bot lacks permissions.
         """
-        if not self.exists:
+        if not self.guild_exists:
             return None
 
         channel_id = self.bot.database_client.settings.log_channel_id
@@ -188,25 +179,20 @@ class StaffGuild:
             # Try to fetch the channel via API (if the thread was auto-archived, it won't be in cache)
             try:
                 channel = await self.guild.fetch_channel(channel_id)
-            except discord.NotFound, discord.HTTPException:
-                logger.warning("Modmail log channel (ID: %d) was not found.", channel_id)
+            except discord.HTTPException as e:
+                if isinstance(e, discord.NotFound):
+                    logger.warning("Modmail log channel (ID: %d) was not found.", channel_id)
+                    # TODO: unset the channel ID
+                else:
+                    logger.error(
+                        "Modmail log channel (ID: %d) could not be fetched due to an HTTP error: %s", channel_id, e
+                    )
                 return None
-            if isinstance(channel, discord.TextChannel) or (
-                isinstance(channel, discord.Thread) and not channel.archived
-            ):
-                logger.warning(
-                    "Modmail log channel (ID: %d) was not found in cache, fetched via API. "
-                    "(THIS SHOULD NOT HAPPEN)",
-                    channel_id,
-                )
 
         if not isinstance(channel, discord.TextChannel | discord.Thread):
             logger.warning("Modmail log channel (ID: %d) is not a text channel or thread.", channel_id)
+            # TODO: unset the channel ID
             return None
-
-        if isinstance(channel, discord.Thread) and channel.archived:
-            logger.info("Modmail log channel (ID: %d) was archived, unarchiving it.", channel_id)
-            await channel.edit(archived=False)
 
         perms = channel.permissions_for(channel.guild.me)
         if perms & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
@@ -218,10 +204,9 @@ class StaffGuild:
         """Return the configured storage channel.
 
         Returns:
-            discord.TextChannel: The storage channel.
-            None: If not configured, the channel is missing, or the bot lacks the required permissions.
+            The storage channel, or `None` if not configured, missing, or the bot lacks permissions.
         """
-        if not self.exists:
+        if not self.guild_exists:
             return None
 
         channel_id = self.bot.database_client.settings.storage_channel_id
@@ -232,17 +217,21 @@ class StaffGuild:
         if channel is None:
             try:
                 channel = await self.guild.fetch_channel(channel_id)
-            except discord.NotFound, discord.HTTPException:
-                logger.warning("Modmail storage channel (ID: %d) was not found.", channel_id)
+            except discord.HTTPException as e:
+                if isinstance(e, discord.NotFound):
+                    logger.warning("Modmail storage channel (ID: %d) was not found.", channel_id)
+                    # TODO: unset the channel ID
+                else:
+                    logger.error(
+                        "Modmail storage channel (ID: %d) could not be fetched due to an HTTP error: %s",
+                        channel_id,
+                        e,
+                    )
                 return None
-            logger.warning(
-                "Modmail storage channel (ID: %d) was not found in cache, fetched via API. "
-                "(THIS SHOULD NOT HAPPEN)",
-                channel_id,
-            )
 
         if not isinstance(channel, discord.TextChannel):
             logger.warning("Modmail storage channel (ID: %d) is not a text channel.", channel_id)
+            # TODO: unset the channel ID
             return None
 
         perms = channel.permissions_for(channel.guild.me)
@@ -251,23 +240,15 @@ class StaffGuild:
             return None
         return channel
 
-    def is_configured(self) -> bool:
-        """Check whether the guild exists and a Modmail category or forum is properly configured.
-
-        Returns:
-            `True` if everything is in order, `False` otherwise.
-        """
+    def is_setup(self) -> bool:
+        """Return `True` when the guild exists and a Modmail category or forum is reachable."""
         try:
-            return self.exists and bool(self.category_or_forum)
+            return self.guild_exists and bool(self.category_or_forum)
         except NoStaffGuildError, NoModmailCategoryError, BadPermissionsError:
             return False
 
     def _get_bot_role_or_member(self) -> discord.Role | discord.Member:
-        """Return the bot's integration role, falling back to its guild [`discord.Member`][].
-
-        Returns:
-            The bot's managed integration role if available, otherwise its guild member.
-        """
+        """Return the bot's integration role, or its guild [`discord.Member`][] if no role exists."""
         try:
             role = discord.utils.get(self.guild.roles, tags__bot_id=self.guild.me.id)
             if role is not None:
@@ -276,7 +257,7 @@ class StaffGuild:
             pass
         return self.guild.me
 
-    def _build_channel_overwrites(
+    def _build_category_overwrites(
         self,
     ) -> dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]:
         """Build permission overwrites for a new Modmail category or forum.
@@ -288,23 +269,28 @@ class StaffGuild:
             Permission overwrites mapping for use in channel or forum creation.
         """
         overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
-            self.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            self.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
             self._get_bot_role_or_member(): self.MIN_PERMISSIONS_OVERWRITE,
         }
 
         for profile in self.bot.database_client.profiles:
             if profile.access_level is not None and profile.access_level >= AccessLevel.staff:
                 if profile.profile_type == ProfileType.role:
-                    if self.guild.get_role(profile.profile_id) is None:
+                    if (role := self.guild.get_role(profile.profile_id)) is None:
                         logger.info(
                             "Skipping profile %s with missing role %s for Modmail channel permissions",
                             profile.profile_id,
                             profile.profile_id,
                         )
                         continue
-                logger.info("Granting %s access to Modmail channel", profile.profile_id)
-                overwrites[discord.Object(profile.profile_id)] = discord.PermissionOverwrite(read_messages=True)
-
+                    logger.info("Granting role %s access to Modmail channel", profile.profile_id)
+                    overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                else:
+                    logger.info("Granting user %s access to Modmail channel", profile.profile_id)
+                    overwrites[discord.Object(profile.profile_id)] = discord.PermissionOverwrite(
+                        read_messages=True,
+                        send_messages=True,
+                    )
         return overwrites
 
     async def setup(
@@ -350,6 +336,9 @@ class StaffGuild:
                 raise NoModmailCategoryError(
                     f"Existing channel {existing_channel_id} not found or is the wrong type."
                 )
+            if resolved.permissions_for(resolved.guild.me) & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
+                raise BadPermissionsError("Bot lacks the minimum channel permissions required to run setup.")
+
             category_or_forum = resolved
             await category_or_forum.set_permissions(
                 self._get_bot_role_or_member(),
@@ -358,7 +347,7 @@ class StaffGuild:
             )
             # TODO: alert the user they need to grant staff access manually to the existing channel
         else:
-            overwrites = self._build_channel_overwrites()
+            overwrites = self._build_category_overwrites()
             channel_name = self.bot.translate(_("ftl-msg-setup-category-or-forum-name"))
             create_reason = self.bot.translate(_("ftl-msg-setup-category-or-forum-create-reason"))
             if setup_type == "category":
@@ -381,6 +370,11 @@ class StaffGuild:
         log_reason = self.bot.translate(_("ftl-msg-setup-log-channel-create-reason"))
         storage_reason = self.bot.translate(_("ftl-msg-setup-storage-channel-create-reason"))
 
+        storage_overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
+            self.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
+            self._get_bot_role_or_member(): discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        }
+
         if isinstance(category_or_forum, discord.CategoryChannel):
             log_channel, storage_channel = await asyncio.gather(
                 category_or_forum.create_text_channel(
@@ -391,6 +385,7 @@ class StaffGuild:
                 category_or_forum.create_text_channel(
                     name=self.bot.translate(_("ftl-msg-setup-storage-channel-name")),
                     topic=self.bot.translate(_("ftl-msg-setup-storage-channel-topic")),
+                    overwrites=storage_overwrites,
                     reason=storage_reason,
                 ),
             )
@@ -417,6 +412,7 @@ class StaffGuild:
                     name=self.bot.translate(_("ftl-msg-setup-storage-channel-name")),
                     topic=self.bot.translate(_("ftl-msg-setup-storage-channel-topic")),
                     reason=storage_reason,
+                    overwrites=storage_overwrites,
                 ),
             )
             log_channel = log_thread_msg.thread
@@ -434,10 +430,6 @@ class StaffGuild:
                     raise
             await storage_channel.edit(position=1)
 
-        await storage_channel.set_permissions(
-            self._get_bot_role_or_member(), read_messages=True, send_messages=True
-        )
-        await storage_channel.set_permissions(self.guild.default_role, read_messages=False, send_messages=False)
         await self.bot.database_client.update_settings(
             main_category_or_forum_id=category_or_forum.id,
             log_channel_id=log_channel.id,
@@ -460,14 +452,18 @@ class StaffGuild:
         Args:
             profile_id: Discord ID of the user or role to grant access to.
             profile_type: Whether `profile_id` refers to a user or a role.
+
+        Raises:
+            discord.HTTPException: If the permission overwrite update fails due to an API error.
         """
-        if not self.is_configured():
+        if not self.is_setup():
             return
 
         if profile_id == CONFIG.bot.bot_id:
             logger.debug("Not granting access to the bot itself")
             return
 
+        user_or_role: discord.Member | discord.Role
         if profile_type == ProfileType.user:
             try:
                 user_or_role = await self.guild.fetch_member(profile_id)
@@ -475,81 +471,58 @@ class StaffGuild:
                 logger.info("Not granting access to %s, user not in guild", profile_id)
                 return  # User not found, do nothing
         else:
-            user_or_role = self.guild.get_role(profile_id)
-            if user_or_role is None:  # Role not found, do nothing
+            if (role := self.guild.get_role(profile_id)) is None:  # Role not found, do nothing
                 logger.info("Not granting access to %s, role not in guild", profile_id)
                 return
+            user_or_role = role
 
         logger.info("Granting %s access to the Modmail category", user_or_role)
         overwrite = self.category_or_forum.overwrites_for(user_or_role)
-        overwrite.read_messages = True  # Grant access to the category
-
-        reason = self.bot.translate(_("ftl-msg-grant-access-reason", user_or_role=str(user_or_role)))
-        coros: list[Awaitable[Any]] = [
-            self.category_or_forum.set_permissions(user_or_role, overwrite=overwrite, reason=reason)
-        ]
-
-        storage_channel = await self.get_storage_channel()
-        if storage_channel is not None:
-            # Storage channel permissions are set separately since it lives outside the category/forum
-            overwrite = storage_channel.overwrites_for(user_or_role)
+        if overwrite.is_empty():
+            # Grant access to the category/forum
             overwrite.read_messages = True
-            coros += [storage_channel.set_permissions(user_or_role, overwrite=overwrite, reason=reason)]
+            overwrite.send_messages = True
+            reason = self.bot.translate(_("ftl-msg-grant-access-reason", user_or_role=user_or_role.mention))
+            await self.category_or_forum.set_permissions(user_or_role, overwrite=overwrite, reason=reason)
+        else:
+            logger.info("Not granting access to %s, already has an overwrite in the channel", user_or_role)
 
-        await asyncio.gather(*coros, return_exceptions=True)
-
-    async def revoke_access(self, profile_id: int, profile_type: ProfileType) -> None:
+    async def revoke_access(self, profile_id: int) -> None:
         """Revoke read access to the Modmail category or forum for a profile.
 
         Args:
             profile_id: Discord ID of the user or role to revoke access from.
-            profile_type: Whether `profile_id` refers to a user or a role.
+
+        Raises:
+            discord.HTTPException: If the permission overwrite update fails due to an API error.
         """
-        if not self.is_configured():
+        if not self.is_setup():
             return
 
         if profile_id == CONFIG.bot.bot_id:
             logger.debug("Not revoking access from the bot itself")
             return
 
-        if profile_type == ProfileType.user:
-            try:
-                user_or_role = await self.guild.fetch_member(profile_id)
-            except discord.NotFound:
-                logger.info("Not revoking access from %s, user not in guild", profile_id)
-                return  # User not found, do nothing
-        else:
-            user_or_role = self.guild.get_role(profile_id)
-            if user_or_role is None:  # Role not found, do nothing
-                logger.info("Not revoking access from %s, role not in guild", profile_id)
+        # Using .edit() instead of .set_permissions() in case the profile_id isn't in the server
+        all_overwrites = self.category_or_forum.overwrites
+        for user_or_role, overwrite in all_overwrites.items():
+            if user_or_role.id == profile_id:
+                # Check if default overwrite set by Modmail
+                if overwrite == discord.PermissionOverwrite(read_messages=True, send_messages=True):
+                    logger.info("Revoking %s access to the Modmail category", user_or_role)
+                    all_overwrites.pop(user_or_role)
+                    break
+                logger.info("Not revoking access to %s for category, overwrites were modified", user_or_role)
                 return
-
-        coros: list[Awaitable[Any]] = []
-        reason = self.bot.translate(_("ftl-msg-revoke-access-reason", user_or_role=str(user_or_role)))
-
-        overwrite = self.category_or_forum.overwrites_for(user_or_role)
-        if overwrite == discord.PermissionOverwrite(read_messages=True):  # default overwrite
-            logger.info("Revoking %s access to the Modmail category", user_or_role)
-            coros += [self.category_or_forum.set_permissions(user_or_role, overwrite=None, reason=reason)]
         else:
-            logger.info("Not revoking access to %s for category, overwrites were modified", user_or_role)
+            logger.info("Not revoking access to %s for category, overwrites were not found", profile_id)
+            return
 
-        storage_channel = await self.get_storage_channel()
-        if storage_channel is not None:
-            overwrite = storage_channel.overwrites_for(user_or_role)
-            if overwrite.read_messages:
-                overwrite.read_messages = None
-                logger.info("Revoking %s access to the Modmail storage channel", user_or_role)
-                if overwrite.is_empty():
-                    coros += [storage_channel.set_permissions(user_or_role, overwrite=None, reason=reason)]
-                else:
-                    coros += [storage_channel.set_permissions(user_or_role, overwrite=overwrite, reason=reason)]
-
-        if coros:
-            await asyncio.gather(*coros, return_exceptions=True)
+        reason = self.bot.translate(_("ftl-msg-revoke-access-reason", user_or_role=str(user_or_role)))
+        await self.category_or_forum.edit(overwrites=all_overwrites, reason=reason)
 
     async def get_ticket(
-        self, /, user_or_channel: discord.User | discord.Member | discord.TextChannel | discord.Thread
+        self, user_or_channel: discord.User | discord.Member | discord.TextChannel | discord.Thread, /
     ) -> TicketView | None:
         """Return the open ticket associated with a user or ticket channel.
 
@@ -573,24 +546,24 @@ class StaffGuild:
         if channel is None:
             try:
                 channel = await self.guild.fetch_channel(ticket_model.channel_id)
-            except discord.NotFound, discord.HTTPException:
-                # Ticket channel does not exist, close the ticket
-                logger.warning(
-                    "Ticket channel %s does not exist, closing ticket %s",
-                    ticket_model.channel_id,
-                    ticket_model.key,
-                )
-                await self.close_ticket(ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion)
+            except discord.HTTPException as e:
+                if isinstance(e, discord.NotFound):
+                    # Ticket channel does not exist, close the ticket
+                    logger.warning(
+                        "Ticket channel %s does not exist, closing ticket %s",
+                        ticket_model.channel_id,
+                        ticket_model.key,
+                    )
+                    await self.close_ticket(
+                        ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion
+                    )
+                else:
+                    logger.exception(
+                        "Something went wrong fetching ticket channel %s for ticket %s",
+                        ticket_model.channel_id,
+                        ticket_model.key,
+                    )
                 return None
-
-            if isinstance(channel, discord.TextChannel) or (
-                isinstance(channel, discord.Thread) and not channel.archived
-            ):
-                logger.warning(
-                    "Ticket channel or thread %s was not found in cache, fetched via API. "
-                    "(THIS SHOULD NOT HAPPEN)",
-                    ticket_model.channel_id,
-                )
 
         if not isinstance(channel, discord.TextChannel | discord.Thread):
             logger.warning(
@@ -601,13 +574,16 @@ class StaffGuild:
             await self.close_ticket(ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion)
             return None
 
-        if isinstance(channel, discord.Thread) and channel.archived:
-            # TODO: if possible: un-archive if archived due to inactivity,
-            # otherwise close the ticket if manual
-            # There's many places in the code that unarchives the thread, when implementing the TO/DO
-            # need to change those as well.
-            logger.info("Ticket channel %s is an archived thread, unarchiving it.", ticket_model.channel_id)
-            await channel.edit(archived=False)
+        if channel.permissions_for(channel.guild.me) & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
+            # TODO: probably handle this differently, maybe alert staff that the channel is inaccessible
+            #  and needs permissions fixed rather than silently closing the ticket
+            logger.warning(
+                "Insufficient permissions to access ticket channel %s for ticket %s, closing ticket.",
+                channel.id,
+                ticket_model.key,
+            )
+            await self.close_ticket(ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion)
+            return None
 
         recipients: list[discord.User | discord.Member] = []
         for recipient in ticket_model.recipients:
@@ -615,27 +591,27 @@ class StaffGuild:
                 # Using .fetch_user since members are not cached
                 user = await self.bot.fetch_user(recipient.user_id)  # TODO: Implement some caching
             except discord.NotFound:  # TODO: Handle this better (show to user)
-                logger.info("User %s not found in guild", recipient.user_id)
+                logger.info("User %s account deleted", recipient.user_id)
                 continue
             except discord.HTTPException:
                 logger.warning("Failed to fetch user %s", recipient.user_id)
                 continue
             recipients.append(user)
-
+        # TODO: handle no recipients
         return TicketView(self, ticket_model, recipients)
 
     async def _format_log_channel_message_embed(
         self, ticket: TicketModel, *, title: str, description: str
     ) -> discord.Embed:
-        """Build a log-channel embed for the given ticket.
+        """Build a colored, timestamped log-channel embed for `ticket`.
 
         Args:
-            ticket: The [`TicketModel`][] whose status and timestamps are reflected in the embed.
-            title: Embed title (typically the recipient usernames).
-            description: Embed description (typically the ticket key and summary).
+            ticket: The ticket whose status and timestamps the embed reflects.
+            title: Embed title — typically the recipient usernames.
+            description: Embed description — typically the ticket key and summary.
 
         Returns:
-            A [`discord.Embed`][] colored and timestamped to reflect the ticket's current state.
+            A [`discord.Embed`][] ready to post or edit in the log channel.
         """
         embed = EmbedProxy(title=title, description=description)
         # TODO: configable colors
@@ -662,12 +638,12 @@ class StaffGuild:
         """Post an opening entry to the log channel for a newly created ticket.
 
         Args:
-            ticket: The [`TicketModel`][] to log.
+            ticket: The ticket to log.
             recipients: The users the ticket was opened for.
-            starter_message: The message that triggered ticket creation (`None` if not available).
+            starter_message: The message that triggered ticket creation (`None` if unavailable).
 
         Returns:
-            The Discord message ID of the log entry (`None` if no log channel is configured).
+            The message ID of the log entry, or `None` if no log channel is configured.
         """
         log_channel = await self.get_log_channel()
         if log_channel is None:
@@ -714,13 +690,13 @@ class StaffGuild:
 
         try:
             log_channel_message = await log_channel.fetch_message(ticket.log_channel_message_id)
-        except discord.NotFound:
-            logger.info(
-                "Log channel message %d not found in log channel, won't update.", ticket.log_channel_message_id
-            )
-            return
         except discord.HTTPException as e:
-            logger.error("Failed to fetch log channel message %d: %s", ticket.log_channel_message_id, e)
+            if isinstance(e, discord.NotFound):
+                logger.info(
+                    "Log channel message %d not found in log channel, won't update.", ticket.log_channel_message_id
+                )
+            else:
+                logger.error("Failed to fetch log channel message %d: %s", ticket.log_channel_message_id, e)
             return
 
         if not log_channel_message.embeds:
@@ -736,13 +712,10 @@ class StaffGuild:
 
     @staticmethod
     def _make_channel_name(*users: discord.User | discord.Member) -> str:
-        """Build a channel name from one or more user display names.
+        """Return a hyphen-joined channel name derived from the recipients' usernames.
 
         Args:
             *users: The ticket recipients.
-
-        Returns:
-            A hyphen-joined string of the users' display names.
         """
         # TODO: Add more options for channel names
         return "-".join([str(user.name) for user in users])
@@ -758,7 +731,7 @@ class StaffGuild:
         Args:
             *recipients: The users the ticket is being opened for.
             created_by: The user who initiated the ticket.
-            starter_message: The DM that triggered ticket creation (`None` if not available).
+            starter_message: The message that triggered ticket creation (`None` if not available).
 
         Returns:
             A [`TicketView`][] representing the newly created ticket.
@@ -767,7 +740,7 @@ class StaffGuild:
             NoStaffGuildError: If the staff guild is not configured.
             ValueError: If no recipients are provided.
         """
-        if not self.is_configured():
+        if not self.is_setup():
             raise NoStaffGuildError("Staff guild is not configured")
 
         if not recipients:
@@ -776,6 +749,7 @@ class StaffGuild:
         reason = self.bot.translate(
             _("ftl-msg-new-ticket-reason", users=", ".join(str(user) for user in recipients))
         )
+        # TODO: error handle http reqs
         if isinstance(self.category_or_forum, discord.CategoryChannel):
             channel = await self.category_or_forum.create_text_channel(
                 name=self._make_channel_name(*recipients), reason=reason
@@ -834,13 +808,13 @@ class StaffGuild:
                 await channel.send(self.bot.translate(_("ftl-msg-create-ticket-failed")))
             except discord.HTTPException:
                 logger.exception("Failed to send error message to channel %s", channel.id)
-            raise
+            raise  # TODO: reraise a custom modmail error
         return view
 
     async def _delete_after_ticket_closed(
         self, ticket: TicketModel, *, closer: discord.User | discord.Member | None
     ) -> None:
-        """Delete or archive the ticket channel after the ticket is marked closed.
+        """Delete or lock the ticket channel after the ticket is marked closed.
 
         Args:
             ticket: The [`TicketModel`][] whose channel should be cleaned up.
@@ -848,7 +822,7 @@ class StaffGuild:
         """
         channel = self.guild.get_channel_or_thread(ticket.channel_id)
         if channel is None:
-            with contextlib.suppress(discord.NotFound, discord.HTTPException):
+            with contextlib.suppress(discord.HTTPException):
                 channel = await self.guild.fetch_channel(ticket.channel_id)
 
         if channel is None:
@@ -857,13 +831,12 @@ class StaffGuild:
         if not isinstance(channel, discord.TextChannel | discord.Thread):
             return
 
-        if isinstance(channel, discord.Thread) and channel.archived:
+        if isinstance(channel, discord.Thread) and channel.locked:
             return
 
-        if (
-            not channel.permissions_for(channel.guild.me).read_messages
-            or not channel.permissions_for(channel.guild.me).manage_channels
-            or not channel.permissions_for(channel.guild.me).manage_threads
+        perms = channel.permissions_for(channel.guild.me)
+        if (isinstance(channel, discord.TextChannel) and not perms.manage_channels) or (
+            isinstance(channel, discord.Thread) and not perms.manage_threads
         ):
             logger.info(
                 "%s is closed, skipping thread close operation due to lacking Discord permissions.", ticket.key
@@ -876,8 +849,8 @@ class StaffGuild:
             close_reason = self.bot.translate(_("ftl-msg-ticket-closed-reason", user=closer.name))
 
         try:
+            # TODO: config archive or delete on close
             if isinstance(channel, discord.Thread):
-                # TODO: config archive or delete on close
                 await channel.edit(archived=True, locked=True, reason=close_reason)
             else:
                 await channel.delete(reason=close_reason)

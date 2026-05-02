@@ -1,6 +1,8 @@
-"""Provides translation services using FluentLocalization for Modmail interfaces.
+"""Fluent-based translation services for Modmail.
 
-Loads locale files from the modmail/locales directory based on configuration settings.
+[`Translator`][] wraps `FluentLocalization` and resolves [`locale_str`][] objects at
+render time. The module-level [`_`][] function marks a string for translation and
+pre-renders it in the default locale.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from fluent.runtime import FluentLocalization, FluentResourceLoader
 
 from .. import CONFIG
 
-__all__ = ["Translator", "_"]
+__all__ = ["Translator", "_", "all_l10n"]
 
 logger = logging.getLogger(__name__)
 
@@ -28,30 +30,33 @@ FluentTypes = str | int | float | Decimal | datetime | date | None
 
 
 class HasLocaleStr(Protocol):  # pragma: no cover
-    def __locale_str__(self) -> locale_str:
-        """Protocol for objects that can be converted to locale_str.
+    """Protocol for objects that expose a `__locale_str__()` method."""
 
-        Returns:
-            A locale_str representation of the object.
-        """
+    def __locale_str__(self) -> locale_str:
+        """Return the locale string for this object."""
         ...
 
 
-# locales files are located in ../locales/{locale}/main.ftl
-locale_loader = FluentResourceLoader(str(Path(__file__).absolute().parent.parent / "locales" / "{locale}"))
+def _build_l10n() -> dict[str, FluentLocalization]:
+    """Build a [`FluentLocalization`][] instance for each allowed locale, with English as fallback.
 
-all_l10n: dict[str, FluentLocalization] = {}
-for allowed_locale in CONFIG.allowed_locales:
-    # Load the FluentLocalization for each locale, use en as fallback
-    # if the locale is missing translations
-    if allowed_locale != "en":
-        all_l10n[allowed_locale] = FluentLocalization([allowed_locale, "en"], ["main.ftl"], locale_loader)
-    else:
-        all_l10n[allowed_locale] = FluentLocalization([allowed_locale], ["main.ftl"], locale_loader)
+    Returns:
+        Mapping of locale name to its [`FluentLocalization`][].
+    """
+    # locales files are located in ../locales/{locale}/main.ftl
+    locale_loader = FluentResourceLoader(str(Path(__file__).absolute().parent.parent / "locales" / "{locale}"))
+    result: dict[str, FluentLocalization] = {}
+    for locale in CONFIG.allowed_locales:
+        fallbacks = [locale, "en"] if locale != "en" else [locale]
+        result[locale] = FluentLocalization(fallbacks, ["main.ftl"], locale_loader)
+    return result
+
+
+all_l10n: dict[str, FluentLocalization] = _build_l10n()
 
 
 class Translator(app_commands.Translator):
-    """Custom translator for Modmail using FluentLocalization."""
+    """Implements [`app_commands.Translator`][] using `FluentLocalization`."""
 
     def translate_sync(
         self,
@@ -59,15 +64,19 @@ class Translator(app_commands.Translator):
         locale: discord.Locale | str,
         context: app_commands.TranslationContextTypes | None = None,
     ) -> str | None:
-        """Translate a message using FluentLocalization.
+        """Translate `string` to `locale` synchronously.
+
+        When `locale` matches the default locale, returns the pre-rendered `string.message`
+        immediately. For other locales the appropriate FTL bundle is selected and all kwargs
+        are recursively resolved before calling `format_value`.
 
         Args:
-            string: The string to translate.
-            locale: The locale to translate to, could be a discord.Locale object or a locale string.
-            context: The context in which the translation is used (ignored in this implementation).
+            string: The locale string to translate (must have `"_string"` in `extras`).
+            locale: Target locale — a [`discord.Locale`][] or BCP-47 string.
+            context: Translation context (unused).
 
         Returns:
-            The translated string or None if translation isn't available.
+            Translated string, or `None` when `string` is not a Modmail FTL key.
         """
         if "_string" not in string.extras:
             return None  # Not Modmail's string
@@ -81,7 +90,7 @@ class Translator(app_commands.Translator):
             if "-" in locale_name:
                 # If the locale is in the form of xx-YY (e.g., en-US),
                 # check if the base locale (xx) is supported
-                locale_name = locale_name.split("-", maxsplit=1)[0]
+                locale_name = locale_name.partition("-")[0]
                 if locale_name in all_l10n:
                     l10n = all_l10n[locale_name]
 
@@ -120,33 +129,33 @@ class Translator(app_commands.Translator):
         Required by the [`app_commands.Translator`][] abstract interface.
 
         Args:
-            string: The string to translate.
-            locale: The locale to translate to, could be a discord.Locale object or a locale string.
-            context: The context in which the translation is used (ignored in this implementation).
+            string: The locale string to translate.
+            locale: Target locale.
+            context: Translation context (unused).
 
         Returns:
-            The translated string or None if translation isn't available.
+            Translated string, or `None` when not found.
         """
         return self.translate_sync(string, locale, context)
 
 
 def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> locale_str:
-    """Translate string to default locale and prepare for multi-locale support.
+    """Mark `string` for translation and pre-render it in the default locale.
 
-    This function handles the initial translation to the default locale and stores
-    the original string in extras for later translation to other locales.
+    Returns a [`locale_str`][] whose `.message` holds the default-locale rendering.
+    The raw FTL key and all kwargs are stored in `.extras` for later re-rendering
+    into other locales by [`Translator.translate_sync`][].
 
     Args:
-        string: The raw message key/string to be translated.
-        **kwargs: Optional parameters for string formatting. Can be basic types or objects
-            that implement __locale_str__.
+        string: FTL message ID.
+        **kwargs: FTL variables. Accepts [`FluentTypes`][], objects implementing
+            `__locale_str__()`, or nested [`locale_str`][] instances.
 
     Returns:
-        A locale_str object containing the translated string for default locale and
-        metadata for other locales.
+        A [`locale_str`][] ready for use in embeds, messages, or slash command labels.
 
-    Warnings:
-        Warning: If an unsupported type is provided for translation.
+    Warns:
+        UserWarning: If a kwarg value is not a supported Fluent type.
     """
     # extras for the default translation
     temp_kwargs: dict[str, FluentTypes] = {}

@@ -1,27 +1,26 @@
-"""Custom implementation of lazy hybrid command decorator for Modmail's cogs.
-
-This module provides a lazy loading approach for hybrid commands that allows injecting the cog name
-into the __qualname__ of callback functions so discord.py thinks the command belongs to the cog.
-"""
+"""[`Cog`][] base class, [`create_cog`][] factory, and lazy hybrid command machinery."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ... import CONFIG
-from ...errors import NotInTicketError, StaffGuildNotConfiguredError
+from .. import CONFIG
+from ..errors import NotInTicketError, StaffGuildNotConfiguredError
 
 if TYPE_CHECKING:
+    from .bot import Bot
     from .context import Context
 
 __all__ = [
+    "Cog",
     "LazyHybridCommand",
     "LazyHybridGroup",
+    "create_cog",
     "in_modmail_ticket",
     "lazy_hybrid_command",
     "lazy_hybrid_group",
@@ -37,26 +36,31 @@ type HcHg = commands.HybridCommand[Any, Any, Any] | commands.HybridGroup[Any, An
 
 
 class LazyHybridCommand[T: Co]:
-    """A class representing a lazy hybrid command.
+    """Deferred wrapper around a hybrid command callback.
 
-    This allows the injection of the cog name into the __qualname__ of the callback function.
-    Commands are created lazily, meaning they are only instantiated when the cog is loaded.
+    Stores the callback and its decorators without creating a command object, so the cog
+    name can be injected into `__qualname__` at load time via [`get_commands`][].
 
     Attributes:
-        base_func: Function used to create the command (commands.hybrid_command).
-        callback: The original function that will become the command callback.
-        wrappers: List of decorators to apply to the command.
+        base_func: Constructor used to build the command; defaults to `commands.hybrid_command`,
+            overridden to the parent group's `.command` or `.group` method by
+            [`LazyHybridGroup.get_commands`][].
+        callback: The original async function passed to the decorator.
+        args: Positional arguments forwarded to the command constructor.
+        kwargs: Keyword arguments forwarded to the command constructor.
+        wrappers: Deferred decorators (e.g. `app_commands.describe`) applied inside
+            [`get_commands`][].
     """
 
     __slots__ = ("args", "base_func", "callback", "kwargs", "wrappers")
 
     def __init__(self, func: T, args: Any, kwargs: Any) -> None:
-        """Initialize a lazy hybrid command.
+        """Store the callback and its constructor arguments for deferred command creation.
 
         Args:
-            func: The function to transform into a command.
-            args: Positional arguments for the command constructor.
-            kwargs: Keyword arguments for the command constructor.
+            func: The async function that becomes the command callback.
+            args: Positional arguments forwarded to `commands.hybrid_command`.
+            kwargs: Keyword arguments forwarded to `commands.hybrid_command`.
         """
         self.base_func: Callable[..., Callable[[T], HcHg]] = commands.hybrid_command
         self.callback = func
@@ -82,24 +86,17 @@ class LazyHybridCommand[T: Co]:
 
     @property
     def _callback_name(self) -> str:
-        """Get the name of the command.
-
-        Returns:
-            The name of the command (function name).
-        """
+        """The callback's function name, used as the command name."""
         return self.callback.__name__
 
     def get_commands(self, cog_name: str) -> dict[str, HcHg]:
-        """Create the command with the cog name injected into the callback function.
-
-        This method updates the __qualname__ of the callback function to include the cog name,
-        applies all registered wrappers, and creates the actual command object.
+        """Inject `cog_name` into `__qualname__`, apply wrappers, and return the command dict.
 
         Args:
-            cog_name: The name of the containing cog.
+            cog_name: Name of the cog that will own this command.
 
         Returns:
-            A mapping of function names to command objects.
+            Mapping of callback name to the constructed [`commands.HybridCommand`][].
         """
         # Set the __qualname__ of the function to include the cog name
         if not self.callback.__qualname__.startswith(f"{cog_name}."):
@@ -117,43 +114,34 @@ class LazyHybridCommand[T: Co]:
 
 
 class LazyHybridGroup[T: Co](LazyHybridCommand[T]):
-    """A class representing a lazy hybrid group command.
-
-    Extends LazyHybridCommand to provide group command functionality.
-    Group commands can have child commands and subgroups.
-
-    Attributes:
-        children: List of child commands and subgroups.
-        base_func: Function used to create the command (commands.hybrid_group).
-        callback: The original function that will become the command callback.
-        wrappers: List of decorators to apply to the command.
-    """
+    """[`LazyHybridCommand`][] that owns child commands and subgroups."""
 
     __slots__ = ("children",)
 
     def __init__(self, func: T, args: Any, kwargs: Any) -> None:
-        """Initialize a lazy hybrid group.
+        """Store the callback and constructor arguments; initialize `children` to empty.
 
         Args:
-            func: The function to transform into a group command.
-            args: Positional arguments for the group command constructor.
-            kwargs: Keyword arguments for the group command constructor.
+            func: The async function that becomes the group callback.
+            args: Positional arguments forwarded to `commands.hybrid_group`.
+            kwargs: Keyword arguments forwarded to `commands.hybrid_group`.
         """
         super().__init__(func, args, kwargs)
         self.base_func: Callable[..., Callable[[T], HcHg]] = commands.hybrid_group
         self.children: list[LazyHybridCommand[Any]] = []
+        """Child commands and subgroups registered under this group."""
 
     def get_commands(self, cog_name: str) -> dict[str, HcHg]:
-        """Create the group command and all its children.
+        """Build this group then recursively build all children.
 
         Args:
-            cog_name: The name of the containing cog.
+            cog_name: Name of the cog that will own this group.
 
         Returns:
-            A mapping of function names to command objects.
+            Mapping of callback name to command object for this group and all descendants.
 
         Raises:
-            TypeError: If a child is not a LazyHybridGroup or LazyHybridCommand.
+            TypeError: If a child is not a [`LazyHybridCommand`][] or [`LazyHybridGroup`][].
         """
         # Get the hybrid group of the func
         command_mapping = super().get_commands(cog_name)
@@ -174,14 +162,10 @@ class LazyHybridGroup[T: Co](LazyHybridCommand[T]):
         return command_mapping
 
     def command[U: Co](self, *args: Any, **kwargs: Any) -> Callable[[U], LazyHybridCommand[U]]:
-        """Create a hybrid child command for this group.
-
-        Args:
-            *args: Positional arguments to pass to the command constructor.
-            **kwargs: Keyword arguments to pass to the command constructor.
+        """Decorator to add a child command to this group.
 
         Returns:
-            A decorator that transforms a function into a child command.
+            A decorator that wraps the function in a [`LazyHybridCommand`][] and registers it.
         """
 
         def decorator(func: U) -> LazyHybridCommand[U]:
@@ -192,14 +176,10 @@ class LazyHybridGroup[T: Co](LazyHybridCommand[T]):
         return decorator
 
     def group[U: Co](self, *args: Any, **kwargs: Any) -> Callable[[U], LazyHybridGroup[U]]:
-        """Create a hybrid child group for this group.
-
-        Args:
-            *args: Positional arguments to pass to the group constructor.
-            **kwargs: Keyword arguments to pass to the group constructor.
+        """Decorator to add a child subgroup to this group.
 
         Returns:
-            A decorator that transforms a function into a child group.
+            A decorator that wraps the function in a [`LazyHybridGroup`][] and registers it.
         """
 
         def decorator(func: U) -> LazyHybridGroup[U]:
@@ -211,17 +191,9 @@ class LazyHybridGroup[T: Co](LazyHybridCommand[T]):
 
 
 def lazy_hybrid_command[T: Co](*args: Any, **kwargs: Any) -> Callable[[T], LazyHybridCommand[T]]:
-    """Create a lazy hybrid command decorator.
+    """Return a decorator that wraps a function in a [`LazyHybridCommand`][].
 
-    This stores the arguments for hybrid_command but doesn't create the actual command yet,
-    allowing for cog name injection later.
-
-    Args:
-        *args: Positional arguments to pass to commands.hybrid_command.
-        **kwargs: Keyword arguments to pass to commands.hybrid_command.
-
-    Returns:
-        A decorator that transforms a function into a lazy hybrid command.
+    Arguments are forwarded verbatim to `commands.hybrid_command` when the cog loads.
     """
 
     def decorator(func: T) -> LazyHybridCommand[T]:
@@ -231,17 +203,9 @@ def lazy_hybrid_command[T: Co](*args: Any, **kwargs: Any) -> Callable[[T], LazyH
 
 
 def lazy_hybrid_group[T: Co](*args: Any, **kwargs: Any) -> Callable[[T], LazyHybridGroup[T]]:
-    """Create a lazy hybrid group decorator.
+    """Return a decorator that wraps a function in a [`LazyHybridGroup`][].
 
-    This stores the arguments for hybrid_group but doesn't create the actual group yet,
-    allowing for cog name injection later.
-
-    Args:
-        *args: Positional arguments to pass to commands.hybrid_group.
-        **kwargs: Keyword arguments to pass to commands.hybrid_group.
-
-    Returns:
-        A decorator that transforms a function into a lazy hybrid group.
+    Arguments are forwarded verbatim to `commands.hybrid_group` when the cog loads.
     """
 
     def decorator(func: T) -> LazyHybridGroup[T]:
@@ -251,23 +215,25 @@ def lazy_hybrid_group[T: Co](*args: Any, **kwargs: Any) -> Callable[[T], LazyHyb
 
 
 def wrap[T](dpy_func: Any, *args: Any, **kwargs: Any) -> Callable[[T], T]:
-    """Wrap a function with a discord.py command decorator.
+    """Attach a discord.py decorator to a [`LazyHybridCommand`][] or plain function.
 
-    This allows applying discord.py decorators to lazy hybrid commands.
+    Defers application until the cog loads, so decorators that inspect `__qualname__`
+    see the correct name.
 
     Args:
-        dpy_func: The discord.py decorator function to apply.
-        *args: Positional arguments to pass to the decorator.
-        **kwargs: Keyword arguments to pass to the decorator.
+        dpy_func: The discord.py decorator factory (e.g. `app_commands.describe`).
+        *args: Positional arguments forwarded to `dpy_func`.
+        **kwargs: Keyword arguments forwarded to `dpy_func`.
 
     Returns:
-        A decorator that applies the discord.py decorator to a function.
+        A decorator that stores `dpy_func(*args, **kwargs)` for deferred application.
 
     Example:
+        ```python
         @wrap(commands.has_permissions, manage_messages=True)
         @lazy_hybrid_command()
-        async def example(ctx):
-            ...
+        async def example(ctx): ...
+        ```
     """
 
     def decorator(func: T) -> T:
@@ -285,29 +251,23 @@ def wrap[T](dpy_func: Any, *args: Any, **kwargs: Any) -> Callable[[T], T]:
 
 
 def in_modmail_ticket() -> Any:
-    """Check if the command is being invoked in a Modmail ticket.
+    """Restrict a command to channels that are currently-open Modmail ticket channels.
 
-    This decorator also applies the guild_only decorator to ensure the command is only
-    available in servers.
+    Applies `guild_only` and raises [`NotInTicketError`][] when the invoking channel is
+    not an open ticket, or [`StaffGuildNotConfiguredError`][] when Modmail is not configured.
 
     Returns:
-        A check function that returns True if the command is in a Modmail ticket.
+        A compound decorator that registers the channel check.
     """
 
     async def predicate(ctx: Context) -> bool:
-        """Check if the command is being invoked in a Modmail ticket.
-
-        Args:
-            ctx: The command context.
-
-        Returns:
-            True if the command is in a Modmail ticket, False otherwise.
+        """Return `True` when the command is invoked inside an open Modmail ticket channel.
 
         Raises:
-            NotInTicketError: If the command is not in a Modmail ticket.
             StaffGuildNotConfiguredError: If Modmail is not configured.
+            NotInTicketError: If the channel is not an open ticket.
         """
-        if not ctx.bot.staff_guild.is_configured():
+        if not ctx.bot.staff_guild.is_setup():
             raise StaffGuildNotConfiguredError("Modmail is not configured.")
 
         if ctx.guild is None or ctx.guild.id != ctx.bot.staff_guild.guild_id:
@@ -319,3 +279,61 @@ def in_modmail_ticket() -> Any:
         return True
 
     return wrap(commands.guild_only)(wrap(lambda: commands.check(predicate)))
+
+
+class Cog(commands.Cog, group_auto_locale_strings=False):
+    """Base class for all Modmail cogs."""
+
+    renamed_command_keys: ClassVar[list[tuple[str, str]]] = []
+    """Old-to-new override key pairs for renamed callbacks. Add an entry when renaming a callback;
+    remove it after 2-3 version bumps once all profiles have been migrated."""
+
+    def __init__(self, bot: Bot) -> None:
+        """Attach the bot instance.
+
+        Args:
+            bot: The [`Bot`][] instance this cog is attached to.
+        """
+        self.bot = bot
+        """The [`Bot`][] instance this cog is attached to."""
+
+    # TODO: Add a before invoke hook (here or in bot) that checks if using ctx.send()
+    # and warns to use cog.send().
+
+
+def create_cog(
+    name: str,
+    *,
+    all_commands: list[LazyHybridCommand[Any]] | None = None,
+    other_methods: list[Callable[..., Any]] | None = None,
+    renamed_command_keys: list[tuple[str, str]] | None = None,
+) -> type[Cog]:
+    """Dynamically build a [`Cog`][] subclass with the given commands and methods.
+
+    Args:
+        name: Name for the new cog class.
+        all_commands: [`LazyHybridCommand`][] instances to finalize and attach.
+        other_methods: Additional callables attached as cog methods.
+        renamed_command_keys: Old-to-new callback name pairs applied at startup
+            to rewrite any stale permission override keys stored in profiles.
+
+    Returns:
+        A new [`Cog`][] subclass ready for `bot.add_cog()`.
+    """
+    methods: dict[
+        str,
+        commands.HybridCommand[Any, Any, Any] | commands.HybridGroup[Any, Any, Any] | Callable[..., Any],
+    ] = {}
+
+    if all_commands:
+        for command in all_commands:
+            methods.update(command.get_commands(name))
+
+    if other_methods:
+        for method in other_methods:
+            methods[method.__name__] = method
+
+    cls = type(name, (Cog,), methods, group_auto_locale_strings=False)
+    if renamed_command_keys:
+        cls.renamed_command_keys = renamed_command_keys
+    return cls

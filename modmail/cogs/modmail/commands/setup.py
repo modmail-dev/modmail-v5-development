@@ -565,7 +565,7 @@ async def do_setup(ctx: Context) -> None:
         logger.debug("Bot does not have enough permissions to run setup in %s", ctx.guild)
         return
 
-    wizard = SetupWizardView(ctx=ctx, show_reconfigure_warning=ctx.bot.staff_guild.is_configured())
+    wizard = SetupWizardView(ctx=ctx, show_reconfigure_warning=ctx.bot.staff_guild.is_setup())
     await wizard.build()
 
     wizard.message = await ctx.reply(view=wizard)

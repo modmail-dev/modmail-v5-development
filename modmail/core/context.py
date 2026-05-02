@@ -1,45 +1,185 @@
-"""Component v2 views for Modmail prompts and interactions."""
+"""[`Context`][] — a [`commands.Context`][] subclass with Modmail-specific helpers and attributes."""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord.app_commands import locale_str
+from discord.ext import commands
 
-from ..translator import _
+from .translator import _
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from typing import Any
 
-    from .context import Context
+    from .bot import Bot
 
-__all__ = ["PromptChoicesView", "PromptView"]
+__all__ = ["Context"]
 
 logger = logging.getLogger(__name__)
 
+type AnyStr = str | locale_str
+
+
+class Context(commands.Context[Any]):
+    """Command context with Modmail-specific attributes."""
+
+    if TYPE_CHECKING:
+        bot: Bot
+
+    perm_check_reason: str
+    """Outcome of the permission check for this invocation (absent if the check has not yet run)."""
+
+    async def send_message(
+        self,
+        content: AnyStr | None = None,
+        *,
+        auto_embed: bool = True,
+        original_message: discord.Message | None = None,
+        **kwargs: Any,
+    ) -> discord.Message:
+        """Send a message to this context's channel; delegates to [`Bot.send_message`][].
+
+        Args:
+            content: Text or locale string to send.
+            auto_embed: Wrap plain `content` in an embed automatically.
+            original_message: Edit this message instead of sending a new one.
+            **kwargs: Forwarded to [`Bot.send_message`][].
+
+        Returns:
+            The sent [`discord.Message`][].
+        """
+        return await self.bot.send_message(
+            content, channel=self, auto_embed=auto_embed, original_message=original_message, **kwargs
+        )
+
+    async def reply(
+        self,
+        content: AnyStr | None = None,
+        *,
+        auto_embed: bool = True,
+        **kwargs: Any,
+    ) -> discord.Message:
+        """Reply to the invoking message, or send normally for slash commands.
+
+        Args:
+            content: Text or locale string to send.
+            auto_embed: Wrap plain `content` in an embed automatically.
+            **kwargs: Forwarded to [`Bot.send_message`][].
+
+        Returns:
+            The sent [`discord.Message`][].
+        """
+        if self.interaction is None:
+            kwargs.setdefault("reference", self.message)
+        kwargs["original_message"] = None
+        return await self.bot.send_message(content, channel=self, auto_embed=auto_embed, **kwargs)
+
+    async def prompt(
+        self,
+        content: AnyStr | None,
+        *,
+        reply: bool = True,
+        wait_for: float | int = 120.0,
+        **kwargs: Any,
+    ) -> tuple[discord.Message, discord.Message | None]:
+        """Send a [`PromptView`][] card and wait for the user to type a reply.
+
+        Waits until the user sends a message in the same channel or clicks cancel.
+
+        Args:
+            content: Prompt text shown inside the card.
+            reply: Send as a reply to the invoking message (`True`) or as a standalone message.
+            wait_for: Seconds before the prompt times out.
+            **kwargs: Forwarded to the underlying send call.
+
+        Returns:
+            `(prompt_message, user_reply)` — the second item is `None` if canceled or timed out.
+
+        Raises:
+            asyncio.CancelledError: If the wait is interrupted externally (not by the cancel button).
+        """
+        wait_for = float(wait_for)
+
+        view = PromptView(ctx=self, content=content or "", timeout=wait_for)
+
+        if reply:
+            prompt_message = await self.reply(auto_embed=False, view=view, **kwargs)
+        else:
+            prompt_message = await self.send_message(auto_embed=False, view=view, **kwargs)
+        view.message = prompt_message
+
+        timed_out = await view.wait()
+        if timed_out:
+            await self.reply(_("ftl-msg-prompt-timeout"), ephemeral=True)
+
+        return prompt_message, view.result
+
+    async def prompt_choices(
+        self,
+        content: AnyStr | None,
+        choices: list[AnyStr],
+        *,
+        reply: bool = True,
+        wait_for: float | int = 120.0,
+        **kwargs: Any,
+    ) -> tuple[discord.Message, int | None]:
+        """Send a [`PromptChoicesView`][] card and wait for the user to pick a choice.
+
+        Renders the prompt text and one button per choice entry, plus a cancel button.
+
+        Args:
+            content: Prompt text displayed inside the card.
+            choices: Labels for each selectable button.
+            reply: Send as a reply to the invoking message (`True`) or as a standalone message.
+            wait_for: Seconds before the prompt times out.
+            **kwargs: Forwarded to the underlying send call.
+
+        Returns:
+            `(prompt_message, selected_index)` — the second item is `None` if canceled or timed out.
+        """
+        wait_for = float(wait_for)
+
+        view = PromptChoicesView(ctx=self, content=content or "", choices=choices, timeout=wait_for)
+
+        if reply:
+            prompt_message = await self.reply(auto_embed=False, view=view, **kwargs)
+        else:
+            prompt_message = await self.send_message(auto_embed=False, view=view, **kwargs)
+        view.message = prompt_message
+
+        timed_out = await view.wait()
+        if timed_out:
+            await self.reply(_("ftl-msg-prompt-timeout"), ephemeral=True)
+
+        return prompt_message, view.result
+
+    def translate(
+        self,
+        string: locale_str,
+        *,
+        locale: discord.Locale | str | None = None,
+    ) -> str:
+        """Translate `string` into the interaction's locale, or `locale` if given.
+
+        Returns:
+            Translated string, or `string.message` if translation fails.
+        """
+        return self.bot.translate(string, ctx_or_locale=locale if locale is not None else self)
+
+
+# ── Prompt views (private — used only by Context.prompt / prompt_choices) ─────
+
 
 class PromptView(discord.ui.LayoutView):
-    """Component v2 layout view for a text-input prompt.
+    """Component v2 card that waits for the user to type a reply.
 
-    Renders the prompt text and a cancel button as a card.
-
-    Warning:
-        Set `message` after sending, before `wait()`. Without it, buttons
-        won't be disabled on timeout.
-
-    Examples:
-        ```python
-        view = PromptView(ctx=ctx, content="What is your name?", timeout=120.0)
-        message = await channel.send(view=view)
-        view.message = message
-        timed_out = await view.wait()
-        reply = view.result  # None if canceled or timed out
-        ```
+    Renders a text prompt and a cancel button. The caller must set `message` after
+    sending, otherwise buttons won't be disabled on timeout.
     """
 
     def __init__(
@@ -49,11 +189,11 @@ class PromptView(discord.ui.LayoutView):
         content: str | locale_str,
         timeout: float,
     ) -> None:
-        """Build the card layout with the prompt text and cancel button.
+        """Build the card layout.
 
         Args:
-            ctx: The command context used for translation, author, and channel.
-            content: Prompt text shown inside the card (supports Discord Markdown).
+            ctx: Used for translation, author check, and channel filtering.
+            content: Prompt text shown inside the card.
             timeout: Seconds before the view stops accepting interactions.
         """
         super().__init__(timeout=timeout)
@@ -103,13 +243,10 @@ class PromptView(discord.ui.LayoutView):
         self.stop()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Allow only the invoking user to interact with this view.
+        """Return `True` only when the interaction comes from the invoking user.
 
         Args:
             interaction: The incoming interaction.
-
-        Returns:
-            bool: `True` if the interaction is from the expected user.
         """
         return interaction.user == self._user
 
@@ -117,7 +254,7 @@ class PromptView(discord.ui.LayoutView):
         """Register the message listener and wait for a reply, cancel, or timeout.
 
         Returns:
-            bool: `True` if the prompt timed out, `False` otherwise.
+            `True` if the prompt timed out, `False` otherwise.
 
         Raises:
             asyncio.CancelledError: If an external cancellation interrupts the wait
@@ -164,23 +301,10 @@ class PromptView(discord.ui.LayoutView):
 
 
 class PromptChoicesView(discord.ui.LayoutView):
-    """Component v2 layout view presenting labeled choices as buttons inside a styled card.
+    """Component v2 card presenting labeled choices as buttons.
 
-    The prompt text, a visual separator, and choice buttons are rendered together in a
-    single `Container`.
-
-    Warning:
-        Set `message` after sending, before `wait()`. Without it, buttons
-        won't be disabled on timeout.
-
-    Examples:
-        ```python
-        view = PromptChoicesView(ctx=ctx, content="Pick one:", choices=["A", "B", "C"], timeout=120.0)
-        message = await channel.send(view=view)
-        view.message = message
-        timed_out = await view.wait()
-        index = view.result  # None if canceled or timed out
-        ```
+    Renders the prompt text, a separator, and one button per choice. The caller must
+    set `message` after sending, otherwise buttons won't be disabled on timeout.
     """
 
     def __init__(
@@ -191,12 +315,12 @@ class PromptChoicesView(discord.ui.LayoutView):
         choices: list[str | locale_str],
         timeout: float,
     ) -> None:
-        """Build the card layout with the prompt text and choice buttons.
+        """Build the card layout.
 
         Args:
-            ctx: The command context used for translation and author checks.
-            content: Prompt text shown inside the card (supports Discord Markdown).
-            choices: Ordered list of button labels for each selectable option.
+            ctx: Used for translation and author check.
+            content: Prompt text shown inside the card.
+            choices: Ordered list of button labels.
             timeout: Seconds before the view stops accepting interactions.
         """
         super().__init__(timeout=timeout)
@@ -242,14 +366,7 @@ class PromptChoicesView(discord.ui.LayoutView):
             btn.disabled = True
 
     def _make_choice_callback(self, index: int) -> Callable[..., Any]:
-        """Return an async callback that records `index` as the result.
-
-        Args:
-            index: The choice index this callback represents.
-
-        Returns:
-            Callable: An async callable suitable for [`Button.callback`][discord.ui.Button.callback].
-        """
+        """Return an async callback that records `index` as the result and stops the view."""
 
         async def callback(interaction: discord.Interaction) -> None:
             self.result = index
@@ -267,21 +384,18 @@ class PromptChoicesView(discord.ui.LayoutView):
         self.stop()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Allow only the invoking user to interact with this view.
+        """Return `True` only when the interaction comes from the invoking user.
 
         Args:
             interaction: The incoming interaction.
-
-        Returns:
-            bool: `True` if the interaction is from the expected user.
         """
         return interaction.user == self._user
 
     async def wait(self) -> bool:
-        """Wait for a choice, cancel interaction, or timeout.
+        """Wait for a choice, cancel, or timeout.
 
         Returns:
-            bool: `True` if the prompt timed out, `False` otherwise.
+            `True` if timed out, `False` otherwise.
         """
         if self.message is None:
             logger.debug("%s.wait() called without message set; timeout cleanup skipped", type(self).__name__)

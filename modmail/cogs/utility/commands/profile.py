@@ -173,50 +173,67 @@ class ProfileAddOverrideModal(discord.ui.Modal):
         Args:
             interaction: The submission interaction from Discord.
         """
-        command_name = utils.sanitize_user_command_name(self.command_name.value)
-        command_name_no_wildcard = command_name.split("+")[0].strip()
+        locale = str(interaction.locale) if interaction.locale else CONFIG.default_locale
+        index = self._ctx.bot.permission_command_index(locale)
 
-        for bot_command in self._ctx.bot.walk_commands():
-            bot_command_name = utils.get_command_name(bot_command)
-            if bot_command_name == command_name_no_wildcard:
-                if "+" in command_name and not isinstance(bot_command, commands.Group):
-                    command_name = command_name_no_wildcard
-                if self._ctx.bot.get_command_access_level(bot_command) == RequiredAccessLevel.owner:
-                    if not await self._ctx.bot.is_owner(self._ctx.author):
-                        await interaction.response.send_message(
-                            self._ctx.translate(_("ftl-cmd-profile-override-owner-command", command=command_name)),
-                            ephemeral=True,
-                        )
-                        return
-                break
-        else:
+        canonical = index.resolve(self.command_name.value)
+        if canonical is None:
             await interaction.response.send_message(
-                self._ctx.translate(_("ftl-cmd-profile-override-command-not-found", command=command_name)),
+                self._ctx.translate(
+                    _(
+                        "ftl-cmd-profile-override-command-not-found",
+                        command=self.command_name.value,
+                    )
+                ),
                 ephemeral=True,
             )
             return
 
+        base = canonical.removesuffix("+")
+
+        for bot_command in self._ctx.bot.walk_commands():
+            if self._ctx.bot.get_canonical_command_name(bot_command) == base:
+                if canonical != base and not isinstance(bot_command, commands.Group):
+                    canonical = base  # wildcards only apply to groups
+
+                if self._ctx.bot.get_command_access_level(bot_command) == RequiredAccessLevel.owner:
+                    # Only actual owner allowed to override owner-only commands
+                    if not await self._ctx.bot.is_owner(self._ctx.author):
+                        await interaction.response.send_message(
+                            self._ctx.translate(
+                                _(
+                                    "ftl-cmd-profile-override-owner-command",
+                                    command=self.command_name.value,
+                                )
+                            ),
+                            ephemeral=True,
+                        )
+                        return
+                break
+
+        display = index.label(canonical)
+
         changed = self._editor_view.resync_profile()
-        if self.profile.permission_overrides.get(command_name) == self._override_value:
+        if self.profile.permission_overrides.get(canonical) == self._override_value:
             if changed:
                 await self._editor_view.rebuild()
             await interaction.response.send_message(
                 self._ctx.translate(
-                    _("ftl-modal-profile-add-override-already-allow", command=command_name)
+                    _("ftl-modal-profile-add-override-already-allow", command=display)
                     if self._override_value == PermissionOverrideValue.allow
-                    else _("ftl-modal-profile-add-override-already-deny", command=command_name)
+                    else _("ftl-modal-profile-add-override-already-deny", command=display)
                 ),
                 ephemeral=True,
             )
             return
 
         overrides = self.profile.permission_overrides.copy()
-        overrides[command_name] = self._override_value
+        overrides[canonical] = self._override_value
         new_profile = self.profile.model_copy(update={"permission_overrides": overrides})
         try:
             await self._ctx.bot.database_client.update_profile(new_profile)
         except DatabaseOperationError as e:
-            logger.error("Failed to set override %r on profile %d: %s", command_name, new_profile.profile_id, e)
+            logger.error("Failed to set override %r on profile %d: %s", canonical, new_profile.profile_id, e)
             if changed:
                 await self._editor_view.rebuild()
             await interaction.response.send_message(
@@ -227,7 +244,7 @@ class ProfileAddOverrideModal(discord.ui.Modal):
         logger.debug(
             "Set %s override for command %r on profile %d.",
             self._override_value.value,
-            command_name,
+            canonical,
             new_profile.profile_id,
         )
         self._editor_view.profile = new_profile
@@ -235,9 +252,9 @@ class ProfileAddOverrideModal(discord.ui.Modal):
 
         await interaction.response.send_message(
             self._ctx.translate(
-                _("ftl-view-profile-editor-override-allow-success", command=command_name)
+                _("ftl-view-profile-editor-override-allow-success", command=display)
                 if self._override_value == PermissionOverrideValue.allow
-                else _("ftl-view-profile-editor-override-deny-success", command=command_name)
+                else _("ftl-view-profile-editor-override-deny-success", command=display)
             ),
             ephemeral=True,
         )
@@ -280,26 +297,43 @@ class ProfileRemoveOverrideModal(discord.ui.Modal):
         Args:
             interaction: The submission interaction from Discord.
         """
-        name = utils.sanitize_user_command_name(self.override_name.value)
+        locale = str(interaction.locale) if interaction.locale else CONFIG.default_locale
+        index = self._ctx.bot.permission_command_index(locale)
+        sanitized = index.sanitize(self.override_name.value)
+
+        resolved = index.resolve(self.override_name.value, allow_raw_key=True)
 
         changed = self._editor_view.resync_profile()
-        if name not in self.profile.permission_overrides:
+
+        # Remove resolved if exists, otherwise remove sanitized input if it's an orphaned key
+        key_to_remove = (
+            resolved
+            if resolved is not None and resolved in self.profile.permission_overrides
+            else sanitized
+            if sanitized in self.profile.permission_overrides
+            else None
+        )
+
+        if key_to_remove is None:
             if changed:
                 await self._editor_view.rebuild()
             await interaction.response.send_message(
-                self._ctx.translate(_("ftl-modal-profile-remove-override-not-found", command=name)),
+                self._ctx.translate(
+                    _("ftl-modal-profile-remove-override-not-found", command=self.override_name.value)
+                ),
                 ephemeral=True,
             )
             return
 
-        if not await self._editor_view.remove_override(name, interaction):
+        if not await self._editor_view.remove_override(key_to_remove, interaction):
             if changed:
                 await self._editor_view.rebuild()
             return
 
         await self._editor_view.rebuild()
+        display = index.label(key_to_remove)
         await interaction.response.send_message(
-            self._ctx.translate(_("ftl-modal-profile-remove-override-success", command=name)),
+            self._ctx.translate(_("ftl-modal-profile-remove-override-success", command=display)),
             ephemeral=True,
         )
 
@@ -383,7 +417,7 @@ class ConfirmDeleteView(discord.ui.LayoutView):
         access_sync_failed = False
         if self.profile.access_level is not None and self.profile.access_level != AccessLevel.everyone:
             try:
-                await self._ctx.bot.staff_guild.revoke_access(self.profile.profile_id, self.profile.profile_type)
+                await self._ctx.bot.staff_guild.revoke_access(self.profile.profile_id)
             except Exception as e:
                 logger.error("Failed to revoke Discord access for profile %d: %s", self.profile.profile_id, e)
                 access_sync_failed = True
@@ -732,9 +766,7 @@ class ProfileEditorView(discord.ui.LayoutView):
             access_sync_failed = False
             try:
                 if previously_had_access and not now_has_access:
-                    await self._ctx.bot.staff_guild.revoke_access(
-                        self.profile.profile_id, self.profile.profile_type
-                    )
+                    await self._ctx.bot.staff_guild.revoke_access(self.profile.profile_id)
                 elif not previously_had_access and now_has_access:
                     await self._ctx.bot.staff_guild.grant_access(
                         self.profile.profile_id, self.profile.profile_type
@@ -793,6 +825,14 @@ class ProfileEditorView(discord.ui.LayoutView):
         Returns:
             A list of Component v2 items for the overrides section of the editor card.
         """
+        locale = str(self._ctx.interaction.locale) if self._ctx.interaction else CONFIG.default_locale
+        index = self._ctx.bot.permission_command_index(locale)
+
+        def _label(k: str) -> str:
+            if k.removesuffix("+") not in index.keys:
+                return "⚠️ " + k
+            return index.label(k)
+
         # ── Header: override count ──
 
         overrides_header = self._ctx.translate(
@@ -830,9 +870,9 @@ class ProfileEditorView(discord.ui.LayoutView):
         if self.profile.permission_overrides:
             lines = [
                 self._ctx.translate(
-                    _("ftl-view-profile-editor-override-line-allow", command=k)
+                    _("ftl-view-profile-editor-override-line-allow", command=_label(k))
                     if v == PermissionOverrideValue.allow
-                    else _("ftl-view-profile-editor-override-line-deny", command=k)
+                    else _("ftl-view-profile-editor-override-line-deny", command=_label(k))
                 )
                 for k, v in self.profile.permission_overrides.items()
             ]
@@ -843,7 +883,7 @@ class ProfileEditorView(discord.ui.LayoutView):
 
                 remove_options = [
                     discord.SelectOption(
-                        label=k,
+                        label=_label(k)[:100],
                         value=k,
                         description=self._ctx.translate(
                             _("ftl-view-profile-editor-override-value-allow")
@@ -1054,7 +1094,7 @@ async def profile_delete_command(
     access_sync_failed = False
     if profile.access_level is not None and profile.access_level != AccessLevel.everyone:
         try:
-            await ctx.bot.staff_guild.revoke_access(profile.profile_id, profile.profile_type)
+            await ctx.bot.staff_guild.revoke_access(profile.profile_id)
         except Exception as e:
             logger.error("Failed to revoke Discord access for profile %d: %s", profile.profile_id, e)
             access_sync_failed = True

@@ -47,7 +47,7 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
     success_emoji = "✅"
     error_emoji = "❌"
 
-    if not staff_guild.is_configured():
+    if not staff_guild.is_setup():
         prefix = await cog.bot.get_prefix(message)
         if isinstance(prefix, str):
             prefix = [prefix]

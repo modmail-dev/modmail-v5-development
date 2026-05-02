@@ -12,19 +12,29 @@ import logging as _logging
 import sys
 from importlib.metadata import version
 from textwrap import dedent
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
-from .config import Config, load_config
+if TYPE_CHECKING:
+    from .config import Config
 
-__all__ = ["__version__", "init", "run_bot"]
+    CONFIG: Config
+
+__all__ = ["CONFIG", "__version__", "init", "run_bot"]
 
 __version__ = version("modmail.py")
 
 logger = _logging.getLogger(__name__)
 
+_state: dict[str, Config] = {}
 
-# Global variable to store the loaded configuration.
-CONFIG: Config
+
+def __getattr__(name: str) -> object:
+    if name == "CONFIG":
+        try:
+            return _state["config"]
+        except KeyError:
+            raise RuntimeError("modmail.CONFIG is not available — call modmail.init() first") from None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def init(config_file_path: str = "config.yaml", *, configure_logging: bool = True) -> None:
@@ -34,20 +44,20 @@ def init(config_file_path: str = "config.yaml", *, configure_logging: bool = Tru
         config_file_path: Path to the configuration file. Defaults to "config.yaml".
         configure_logging: Whether to configure logging when logging is enabled in the configs.
     """
-    global CONFIG  # noqa: PLW0603
-    # noinspection PyPep8Naming
-    CONFIG_ = load_config(config_file_path)  # noqa: N806
-    if CONFIG_ is None:
+    from .config import load_config
+
+    config = load_config(config_file_path)
+    if config is None:
         logger.critical("Failed to load config. Exiting.")
         sys.exit(1)
-    CONFIG = CONFIG_  # pyright: ignore [reportConstantRedefinition]
+    _state["config"] = config
 
-    if configure_logging and CONFIG.logging.enabled:
+    if configure_logging and config.logging.enabled:
         from .logging import setup_logging
 
         setup_logging()
 
-    logger.debug("Loaded config: %s", CONFIG.model_dump_json())
+    logger.debug("Loaded config: %s", config.model_dump_json(indent=2))
 
 
 def run_bot() -> NoReturn:
@@ -59,7 +69,7 @@ def run_bot() -> NoReturn:
 
     This function does not return as it runs the bot until termination.
     """
-    if "CONFIG" not in globals():
+    if "config" not in _state:
         logger.warning("init() was not called. Calling init() with the default args.")
         init()
 
@@ -75,9 +85,10 @@ def run_bot() -> NoReturn:
     )
     current_time_text = datetime.datetime.now(tz=datetime.UTC).astimezone().strftime("%B %d, %Y %H:%M:%S %Z")
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    allowed_locale = CONFIG.allowed_locales
+    config = _state["config"]
+    allowed_locale = config.allowed_locales
     enabled_locales = ", ".join(
-        [CONFIG.default_locale] + [locale for locale in allowed_locale if locale != CONFIG.default_locale]
+        [config.default_locale] + [locale for locale in allowed_locale if locale != config.default_locale]
     )
 
     modmail_text_lines: list[str] = []
@@ -88,7 +99,7 @@ def run_bot() -> NoReturn:
     modmail_text_lines += [
         (
             f"Version: {__version__} | Python: {python_version} | "
-            f"Language{'s' if len(CONFIG.allowed_locales) != 1 else ''}: {enabled_locales}"
+            f"Language{'s' if len(config.allowed_locales) != 1 else ''}: {enabled_locales}"
         )
     ]
     modmail_text_lines += [""]

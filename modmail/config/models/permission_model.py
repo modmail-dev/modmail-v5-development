@@ -10,7 +10,6 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
-from modmail import utils
 from modmail.enum import RequiredAccessLevel
 
 __all__ = ["PermissionConfig"]
@@ -57,7 +56,7 @@ class PermissionConfig(BaseModel):
 
         new_v: dict[str, RequiredAccessLevel] = {}
         for key, value in v.items():
-            key = utils.sanitize_user_command_name(key)
+            key = key.casefold().strip()
             if isinstance(value, str):
                 try:
                     new_v[key] = RequiredAccessLevel[value.casefold()]
