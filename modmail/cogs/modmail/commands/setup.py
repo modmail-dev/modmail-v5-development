@@ -193,7 +193,7 @@ class SetupWizardView(discord.ui.LayoutView):
         Returns:
             The configured cancel button.
         """
-        label = self._ctx.translate(_("ftl-view-prompt-cancel-label"))
+        label = self._ctx.t("ftl-view-prompt-cancel-label")
 
         async def callback(interaction: discord.Interaction) -> None:
             self._step = _WizardStep.CANCELED
@@ -216,10 +216,10 @@ class SetupWizardView(discord.ui.LayoutView):
             case _WizardStep.CANCELED | _WizardStep.TIMEOUT:
                 return discord.ui.Container(
                     discord.ui.TextDisplay(
-                        self._ctx.translate(
-                            _("ftl-wizard-setup-canceled-content")
+                        self._ctx.t(
+                            "ftl-wizard-setup-canceled-content"
                             if self._step == _WizardStep.CANCELED
-                            else _("ftl-wizard-setup-timeout-content")
+                            else "ftl-wizard-setup-timeout-content"
                         )
                     ),
                     accent_color=discord.Color.red(),
@@ -232,11 +232,11 @@ class SetupWizardView(discord.ui.LayoutView):
                     await self._render(interaction)
 
                 return discord.ui.Container(
-                    discord.ui.TextDisplay(self._ctx.translate(_("ftl-wizard-setup-reconfigure-content"))),
+                    discord.ui.TextDisplay(self._ctx.t("ftl-wizard-setup-reconfigure-content")),
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
                     discord.ui.ActionRow(
                         self._btn(
-                            self._ctx.translate(_("ftl-wizard-setup-reconfigure-btn-continue")),
+                            self._ctx.t("ftl-wizard-setup-reconfigure-btn-continue"),
                             discord.ButtonStyle.primary,
                             on_continue,
                         ),
@@ -257,10 +257,10 @@ class SetupWizardView(discord.ui.LayoutView):
                     self._step = _WizardStep.STEP_2
                     await self._render(interaction)
 
-                category_label = self._ctx.translate(_("ftl-wizard-setup-type-btn-category"))
-                forum_label = self._ctx.translate(_("ftl-wizard-setup-type-btn-forum"))
+                category_label = self._ctx.t("ftl-wizard-setup-type-btn-category")
+                forum_label = self._ctx.t("ftl-wizard-setup-type-btn-forum")
                 return discord.ui.Container(
-                    discord.ui.TextDisplay(self._ctx.translate(_("ftl-wizard-setup-type-content"))),
+                    discord.ui.TextDisplay(self._ctx.t("ftl-wizard-setup-type-content")),
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
                     discord.ui.ActionRow(
                         self._btn(category_label, discord.ButtonStyle.primary, on_category),
@@ -290,19 +290,19 @@ class SetupWizardView(discord.ui.LayoutView):
                     self._step = _WizardStep.STEP_1
                     await self._render(interaction)
 
-                create_label = self._ctx.translate(_("ftl-wizard-setup-new-or-existing-btn-create"))
-                existing_label = self._ctx.translate(
-                    _("ftl-wizard-setup-new-or-existing-btn-existing-category")
+                create_label = self._ctx.t("ftl-wizard-setup-new-or-existing-btn-create")
+                existing_label = self._ctx.t(
+                    "ftl-wizard-setup-new-or-existing-btn-existing-category"
                     if is_category
-                    else _("ftl-wizard-setup-new-or-existing-btn-existing-forum")
+                    else "ftl-wizard-setup-new-or-existing-btn-existing-forum"
                 )
-                back_label = self._ctx.translate(_("ftl-wizard-setup-btn-back"))
+                back_label = self._ctx.t("ftl-wizard-setup-btn-back")
                 return discord.ui.Container(
                     discord.ui.TextDisplay(
-                        self._ctx.translate(
-                            _("ftl-wizard-setup-new-or-existing-content-category")
+                        self._ctx.t(
+                            "ftl-wizard-setup-new-or-existing-content-category"
                             if is_category
-                            else _("ftl-wizard-setup-new-or-existing-content-forum")
+                            else "ftl-wizard-setup-new-or-existing-content-forum"
                         )
                     ),
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
@@ -320,10 +320,10 @@ class SetupWizardView(discord.ui.LayoutView):
 
                 select: discord.ui.ChannelSelect[SetupWizardView] = discord.ui.ChannelSelect(
                     channel_types=[discord.ChannelType.category if is_category else discord.ChannelType.forum],
-                    placeholder=self._ctx.translate(
-                        _("ftl-wizard-setup-select-existing-placeholder-category")
+                    placeholder=self._ctx.t(
+                        "ftl-wizard-setup-select-existing-placeholder-category"
                         if is_category
-                        else _("ftl-wizard-setup-select-existing-placeholder-forum")
+                        else "ftl-wizard-setup-select-existing-placeholder-forum"
                     ),
                     min_values=1,
                     max_values=1,
@@ -338,15 +338,15 @@ class SetupWizardView(discord.ui.LayoutView):
 
                     expected_type = discord.CategoryChannel if is_category else discord.ForumChannel
                     if not isinstance(real_channel, expected_type):
-                        wrong_type_msg = self._ctx.translate(
-                            _("ftl-wizard-setup-select-existing-wrong-type-category")
+                        wrong_type_msg = self._ctx.t(
+                            "ftl-wizard-setup-select-existing-wrong-type-category"
                             if is_category
-                            else _("ftl-wizard-setup-select-existing-wrong-type-forum")
+                            else "ftl-wizard-setup-select-existing-wrong-type-forum"
                         )
                         await interaction.response.send_message(wrong_type_msg, ephemeral=True)
                         return
 
-                    no_perms_msg = self._ctx.translate(_("ftl-wizard-setup-select-existing-no-perms"))
+                    no_perms_msg = self._ctx.t("ftl-wizard-setup-select-existing-no-perms")
                     min_perms = self._ctx.bot.staff_guild.MIN_PERMISSIONS
                     if real_channel.permissions_for(interaction.guild.me) & min_perms != min_perms:
                         await interaction.response.send_message(no_perms_msg, ephemeral=True)
@@ -365,13 +365,13 @@ class SetupWizardView(discord.ui.LayoutView):
                     self._step = _WizardStep.STEP_2
                     await self._render(interaction)
 
-                back_label = self._ctx.translate(_("ftl-wizard-setup-btn-back"))
+                back_label = self._ctx.t("ftl-wizard-setup-btn-back")
                 return discord.ui.Container(
                     discord.ui.TextDisplay(
-                        self._ctx.translate(
-                            _("ftl-wizard-setup-select-existing-content-category")
+                        self._ctx.t(
+                            "ftl-wizard-setup-select-existing-content-category"
                             if is_category
-                            else _("ftl-wizard-setup-select-existing-content-forum")
+                            else "ftl-wizard-setup-select-existing-content-forum"
                         )
                     ),
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
@@ -399,26 +399,21 @@ class SetupWizardView(discord.ui.LayoutView):
                     await self._render(interaction)
 
                 if use_existing:
-                    content = self._ctx.translate(
-                        _(
-                            "ftl-wizard-setup-confirm-content-existing-category",
-                            name=self._channel_name or "",
-                        )
+                    content = self._ctx.t(
+                        "ftl-wizard-setup-confirm-content-existing-category"
                         if is_category
-                        else _(
-                            "ftl-wizard-setup-confirm-content-existing-forum",
-                            name=self._channel_name or "",
-                        )
+                        else "ftl-wizard-setup-confirm-content-existing-forum",
+                        name=self._channel_name or "",
                     )
                 else:
-                    content = self._ctx.translate(
-                        _("ftl-wizard-setup-confirm-content-new-category")
+                    content = self._ctx.t(
+                        "ftl-wizard-setup-confirm-content-new-category"
                         if is_category
-                        else _("ftl-wizard-setup-confirm-content-new-forum")
+                        else "ftl-wizard-setup-confirm-content-new-forum"
                     )
 
-                confirm_label = self._ctx.translate(_("ftl-wizard-setup-confirm-btn"))
-                back_label = self._ctx.translate(_("ftl-wizard-setup-btn-back"))
+                confirm_label = self._ctx.t("ftl-wizard-setup-confirm-btn")
+                back_label = self._ctx.t("ftl-wizard-setup-btn-back")
                 return discord.ui.Container(
                     discord.ui.TextDisplay(content),
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
@@ -432,7 +427,7 @@ class SetupWizardView(discord.ui.LayoutView):
 
             case _:  # WORKING
                 return discord.ui.Container(
-                    discord.ui.TextDisplay(self._ctx.translate(_("ftl-wizard-setup-working-content"))),
+                    discord.ui.TextDisplay(self._ctx.t("ftl-wizard-setup-working-content")),
                     accent_color=discord.Color.orange(),
                 )
 
@@ -450,22 +445,18 @@ class SetupWizardView(discord.ui.LayoutView):
             storage_channel: The created storage channel.
         """
         if self._setup_type == "category":
-            content = self._ctx.translate(
-                _(
-                    "ftl-wizard-setup-success-content-category",
-                    category=category_or_forum.name,
-                    log_channel=log_channel.mention,
-                    storage_channel=storage_channel.mention,
-                ),
+            content = self._ctx.t(
+                "ftl-wizard-setup-success-content-category",
+                category=category_or_forum.name,
+                log_channel=log_channel.mention,
+                storage_channel=storage_channel.mention,
             )
         else:
-            content = self._ctx.translate(
-                _(
-                    "ftl-wizard-setup-success-content-forum",
-                    forum=category_or_forum.mention,
-                    log_channel=log_channel.mention,
-                    storage_channel=storage_channel.mention,
-                ),
+            content = self._ctx.t(
+                "ftl-wizard-setup-success-content-forum",
+                forum=category_or_forum.mention,
+                log_channel=log_channel.mention,
+                storage_channel=storage_channel.mention,
             )
 
         self.clear_items()
@@ -582,7 +573,7 @@ async def do_setup(ctx: Context) -> None:
         )
     except NoModmailCategoryError:
         logger.error("Selected channel %s no longer exists in %s", wizard.channel_id, ctx.guild)
-        await wizard.show_error(ctx.translate(_("ftl-wizard-setup-error-channel-gone")))
+        await wizard.show_error(ctx.t("ftl-wizard-setup-error-channel-gone"))
         return
 
     await wizard.show_success(category_or_forum, log_channel, storage_channel)

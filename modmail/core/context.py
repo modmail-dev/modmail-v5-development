@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, overload
 
 import discord
 from discord.app_commands import locale_str
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from .bot import Bot
+    from .translator import FluentTypes, HasLocaleStr
 
 __all__ = ["Context"]
 
@@ -158,21 +159,43 @@ class Context(commands.Context[Any]):
 
         return prompt_message, view.result
 
-    def translate(
+    @overload
+    def t(
         self,
-        string: locale_str,
-        *,
+        string: str,
+        /,
+        locale: discord.Locale | str | None = ...,
+        **kwargs: FluentTypes | HasLocaleStr | locale_str,
+    ) -> str: ...
+
+    @overload
+    def t(self, string: locale_str, /, locale: discord.Locale | str | None = ...) -> str: ...
+    def t(
+        self,
+        string: str | locale_str,
+        /,
         locale: discord.Locale | str | None = None,
+        **kwargs: FluentTypes | HasLocaleStr | locale_str,
     ) -> str:
         """Translate `string` into the interaction's locale, or `locale` if given.
 
+        Accepts either a bare FTL message ID (`str`) or a pre-built [`locale_str`][].
+        When a key string is passed, `kwargs` are forwarded to the FTL bundle.
+        When a [`locale_str`][] is passed, `kwargs` are not accepted.
+
+        Args:
+            string: FTL message ID or a [`locale_str`][] produced by [`_`][].
+            locale: Override locale. Defaults to the interaction locale.
+            **kwargs: FTL variables (only used when `string` is a bare key).
+
         Returns:
-            Translated string, or `string.message` if translation fails.
+            Translated string in the resolved locale.
         """
+        if isinstance(string, str):
+            if not string.startswith("ftl-"):  # ftl: ignore
+                logger.debug("Context.t called with a non-locale string: %r", string)
+            string = _(string, **kwargs)
         return self.bot.translate(string, ctx_or_locale=locale if locale is not None else self)
-
-
-# ── Prompt views (private — used only by Context.prompt / prompt_choices) ─────
 
 
 class PromptView(discord.ui.LayoutView):
@@ -210,10 +233,10 @@ class PromptView(discord.ui.LayoutView):
         self._wait_task: asyncio.Task[discord.Message] | None = None
 
         if isinstance(content, locale_str):
-            content = ctx.translate(content)
+            content = ctx.t(content)
 
         cancel_btn: discord.ui.Button[PromptView] = discord.ui.Button(
-            label=ctx.translate(_("ftl-view-prompt-cancel-label")),
+            label=ctx.t("ftl-view-prompt-cancel-label"),
             style=discord.ButtonStyle.danger,
         )
         cancel_btn.callback = self._on_cancel
@@ -332,12 +355,12 @@ class PromptChoicesView(discord.ui.LayoutView):
         self._buttons: list[discord.ui.Button[PromptChoicesView]] = []
 
         if isinstance(content, locale_str):
-            content = ctx.translate(content)
+            content = ctx.t(content)
 
         action_row: discord.ui.ActionRow[PromptChoicesView] = discord.ui.ActionRow()
         for i, label in enumerate(choices):
             if isinstance(label, locale_str):
-                label = ctx.translate(label)
+                label = ctx.t(label)
             btn: discord.ui.Button[PromptChoicesView] = discord.ui.Button(
                 label=label, style=discord.ButtonStyle.primary
             )
@@ -346,7 +369,7 @@ class PromptChoicesView(discord.ui.LayoutView):
             self._buttons.append(btn)
 
         cancel: discord.ui.Button[PromptChoicesView] = discord.ui.Button(
-            label=ctx.translate(_("ftl-view-prompt-cancel-label")), style=discord.ButtonStyle.danger
+            label=ctx.t("ftl-view-prompt-cancel-label"), style=discord.ButtonStyle.danger
         )
         cancel.callback = self._on_cancel
         action_row.add_item(cancel)

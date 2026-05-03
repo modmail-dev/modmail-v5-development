@@ -42,18 +42,18 @@ class ProfileCustomizeModal(discord.ui.Modal):
             editor_view: The parent [`ProfileEditorView`][] that owns the shared profile state.
             timeout: Seconds before the modal stops accepting input.
         """
-        super().__init__(title=ctx.translate(_("ftl-modal-profile-customize-title")), timeout=timeout)
+        super().__init__(title=ctx.t("ftl-modal-profile-customize-title"), timeout=timeout)
         self._ctx = ctx
         self._editor_view = editor_view
 
         self.color: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
-            label=ctx.translate(_("ftl-modal-profile-customize-color")),
-            placeholder=ctx.translate(_("ftl-modal-profile-customize-color-placeholder")),
+            label=ctx.t("ftl-modal-profile-customize-color"),
+            placeholder=ctx.t("ftl-modal-profile-customize-color-placeholder"),
             default=utils.int_to_color_hex(self.profile.color) if self.profile.color is not None else None,
             required=False,
         )
         self.tag: discord.ui.TextInput[ProfileCustomizeModal] = discord.ui.TextInput(
-            label=ctx.translate(_("ftl-modal-profile-customize-tag")),
+            label=ctx.t("ftl-modal-profile-customize-tag"),
             default=self.profile.tag if self.profile.tag is not None else None,
             required=False,
             max_length=128,
@@ -81,7 +81,7 @@ class ProfileCustomizeModal(discord.ui.Modal):
             and re.match(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$", self.color.value) is None
         ):
             await interaction.response.send_message(
-                self._ctx.translate(_("ftl-modal-profile-customize-color-invalid")),
+                self._ctx.t("ftl-modal-profile-customize-color-invalid"),
                 ephemeral=True,
             )
             return
@@ -106,7 +106,7 @@ class ProfileCustomizeModal(discord.ui.Modal):
                 if changed:
                     await self._editor_view.rebuild()
                 await interaction.response.send_message(
-                    self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                    self._ctx.t("ftl-view-profile-editor-update-failed"),
                     ephemeral=True,
                 )
                 return
@@ -115,7 +115,7 @@ class ProfileCustomizeModal(discord.ui.Modal):
 
         await self._editor_view.rebuild()
         await interaction.response.send_message(
-            self._ctx.translate(_("ftl-modal-profile-customize-success", profile=self.profile.mention)),
+            self._ctx.t("ftl-modal-profile-customize-success", profile=self.profile.mention),
             ephemeral=True,
         )
 
@@ -140,10 +140,10 @@ class ProfileAddOverrideModal(discord.ui.Modal):
             timeout: Seconds before the modal stops accepting input.
         """
         super().__init__(
-            title=ctx.translate(
-                _("ftl-modal-profile-add-override-allow-title")
+            title=ctx.t(
+                "ftl-modal-profile-add-override-allow-title"
                 if override_value == PermissionOverrideValue.allow
-                else _("ftl-modal-profile-add-override-deny-title")
+                else "ftl-modal-profile-add-override-deny-title"
             ),
             timeout=timeout,
         )
@@ -152,8 +152,8 @@ class ProfileAddOverrideModal(discord.ui.Modal):
         self._override_value = override_value
 
         self.command_name: discord.ui.TextInput[ProfileAddOverrideModal] = discord.ui.TextInput(
-            label=ctx.translate(_("ftl-modal-profile-add-override-command-label")),
-            placeholder=ctx.translate(_("ftl-modal-profile-add-override-command-placeholder")),
+            label=ctx.t("ftl-modal-profile-add-override-command-label"),
+            placeholder=ctx.t("ftl-modal-profile-add-override-command-placeholder"),
             required=True,
         )
         self.add_item(self.command_name)
@@ -179,12 +179,7 @@ class ProfileAddOverrideModal(discord.ui.Modal):
         canonical = index.resolve(self.command_name.value)
         if canonical is None:
             await interaction.response.send_message(
-                self._ctx.translate(
-                    _(
-                        "ftl-cmd-profile-override-command-not-found",
-                        command=self.command_name.value,
-                    )
-                ),
+                self._ctx.t("ftl-cmd-profile-override-command-not-found", command=self.command_name.value),
                 ephemeral=True,
             )
             return
@@ -200,12 +195,7 @@ class ProfileAddOverrideModal(discord.ui.Modal):
                     # Only actual owner allowed to override owner-only commands
                     if not await self._ctx.bot.is_owner(self._ctx.author):
                         await interaction.response.send_message(
-                            self._ctx.translate(
-                                _(
-                                    "ftl-cmd-profile-override-owner-command",
-                                    command=self.command_name.value,
-                                )
-                            ),
+                            self._ctx.t("ftl-cmd-profile-override-owner-command", command=self.command_name.value),
                             ephemeral=True,
                         )
                         return
@@ -218,10 +208,11 @@ class ProfileAddOverrideModal(discord.ui.Modal):
             if changed:
                 await self._editor_view.rebuild()
             await interaction.response.send_message(
-                self._ctx.translate(
-                    _("ftl-modal-profile-add-override-already-allow", command=display)
+                self._ctx.t(
+                    "ftl-modal-profile-add-override-already-allow"
                     if self._override_value == PermissionOverrideValue.allow
-                    else _("ftl-modal-profile-add-override-already-deny", command=display)
+                    else "ftl-modal-profile-add-override-already-deny",
+                    command=display,
                 ),
                 ephemeral=True,
             )
@@ -237,7 +228,7 @@ class ProfileAddOverrideModal(discord.ui.Modal):
             if changed:
                 await self._editor_view.rebuild()
             await interaction.response.send_message(
-                self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                self._ctx.t("ftl-view-profile-editor-update-failed"),
                 ephemeral=True,
             )
             return
@@ -251,10 +242,11 @@ class ProfileAddOverrideModal(discord.ui.Modal):
         await self._editor_view.rebuild()
 
         await interaction.response.send_message(
-            self._ctx.translate(
-                _("ftl-view-profile-editor-override-allow-success", command=display)
+            self._ctx.t(
+                "ftl-view-profile-editor-override-allow-success"
                 if self._override_value == PermissionOverrideValue.allow
-                else _("ftl-view-profile-editor-override-deny-success", command=display)
+                else "ftl-view-profile-editor-override-deny-success",
+                command=display,
             ),
             ephemeral=True,
         )
@@ -271,13 +263,13 @@ class ProfileRemoveOverrideModal(discord.ui.Modal):
             editor_view: The parent [`ProfileEditorView`][] that owns the shared profile state.
             timeout: Seconds before the modal stops accepting input.
         """
-        super().__init__(title=ctx.translate(_("ftl-modal-profile-remove-override-title")), timeout=timeout)
+        super().__init__(title=ctx.t("ftl-modal-profile-remove-override-title"), timeout=timeout)
         self._ctx = ctx
         self._editor_view = editor_view
 
         self.override_name: discord.ui.TextInput[ProfileRemoveOverrideModal] = discord.ui.TextInput(
-            label=ctx.translate(_("ftl-modal-profile-remove-override-name-label")),
-            placeholder=ctx.translate(_("ftl-modal-profile-remove-override-name-placeholder")),
+            label=ctx.t("ftl-modal-profile-remove-override-name-label"),
+            placeholder=ctx.t("ftl-modal-profile-remove-override-name-placeholder"),
             required=True,
         )
         self.add_item(self.override_name)
@@ -318,9 +310,7 @@ class ProfileRemoveOverrideModal(discord.ui.Modal):
             if changed:
                 await self._editor_view.rebuild()
             await interaction.response.send_message(
-                self._ctx.translate(
-                    _("ftl-modal-profile-remove-override-not-found", command=self.override_name.value)
-                ),
+                self._ctx.t("ftl-modal-profile-remove-override-not-found", command=self.override_name.value),
                 ephemeral=True,
             )
             return
@@ -333,7 +323,7 @@ class ProfileRemoveOverrideModal(discord.ui.Modal):
         await self._editor_view.rebuild()
         display = index.label(key_to_remove)
         await interaction.response.send_message(
-            self._ctx.translate(_("ftl-modal-profile-remove-override-success", command=display)),
+            self._ctx.t("ftl-modal-profile-remove-override-success", command=display),
             ephemeral=True,
         )
 
@@ -363,13 +353,13 @@ class ConfirmDeleteView(discord.ui.LayoutView):
         self._interaction = interaction
 
         confirm_btn: discord.ui.Button[ConfirmDeleteView] = discord.ui.Button(
-            label=ctx.translate(_("ftl-view-profile-editor-delete-btn-confirm")),
+            label=ctx.t("ftl-view-profile-editor-delete-btn-confirm"),
             style=discord.ButtonStyle.danger,
         )
         confirm_btn.callback = self._on_confirm
 
         cancel_btn: discord.ui.Button[ConfirmDeleteView] = discord.ui.Button(
-            label=ctx.translate(_("ftl-view-prompt-cancel-label")),
+            label=ctx.t("ftl-view-prompt-cancel-label"),
             style=discord.ButtonStyle.secondary,
         )
         cancel_btn.callback = self._on_cancel
@@ -380,7 +370,7 @@ class ConfirmDeleteView(discord.ui.LayoutView):
 
         self.add_item(
             discord.ui.Container(
-                discord.ui.TextDisplay(ctx.translate(_("ftl-view-profile-editor-delete-confirm"))),
+                discord.ui.TextDisplay(ctx.t("ftl-view-profile-editor-delete-confirm")),
                 discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
                 action_row,
             )
@@ -406,7 +396,7 @@ class ConfirmDeleteView(discord.ui.LayoutView):
         except DatabaseOperationError as e:
             logger.error("Failed to delete profile %d: %s", self.profile.profile_id, e)
             await interaction.response.send_message(
-                self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                self._ctx.t("ftl-view-profile-editor-update-failed"),
                 ephemeral=True,
             )
             return
@@ -422,11 +412,9 @@ class ConfirmDeleteView(discord.ui.LayoutView):
                 logger.error("Failed to revoke Discord access for profile %d: %s", self.profile.profile_id, e)
                 access_sync_failed = True
 
-        close_message = self._ctx.translate(
-            _("ftl-view-profile-editor-deleted-content", profile=self.profile.mention)
-        )
+        close_message = self._ctx.t("ftl-view-profile-editor-deleted-content", profile=self.profile.mention)
         if access_sync_failed:
-            close_message += "\n" + self._ctx.translate(_("ftl-view-profile-editor-access-sync-failed"))
+            close_message += "\n" + self._ctx.t("ftl-view-profile-editor-access-sync-failed")
 
         await self._editor_view.close(close_message, color=discord.Color.blurple())
 
@@ -525,7 +513,7 @@ class ProfileEditorView(discord.ui.LayoutView):
         except DatabaseOperationError as e:
             logger.error("Failed to remove override %r from profile %d: %s", key, new_profile.profile_id, e)
             await interaction.response.send_message(
-                self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                self._ctx.t("ftl-view-profile-editor-update-failed"),
                 ephemeral=True,
             )
             return False
@@ -641,14 +629,12 @@ class ProfileEditorView(discord.ui.LayoutView):
 
         # ── Header: mention + type label + delete button ──
 
-        header_text = self._ctx.translate(
-            _(
-                "ftl-view-profile-editor-header",
-                profile=self.profile.mention,
-                type=_("ftl-view-profile-editor-type-user")
-                if self.profile.profile_type == ProfileType.user
-                else _("ftl-view-profile-editor-type-role"),
-            )
+        header_text = self._ctx.t(
+            "ftl-view-profile-editor-header",
+            profile=self.profile.mention,
+            type=_("ftl-view-profile-editor-type-user")
+            if self.profile.profile_type == ProfileType.user
+            else _("ftl-view-profile-editor-type-role"),
         )
 
         async def on_delete(interaction: discord.Interaction) -> None:
@@ -659,9 +645,7 @@ class ProfileEditorView(discord.ui.LayoutView):
                 # The profile doesn't exist in the first place
                 await interaction.response.defer()
                 await self.close(
-                    self._ctx.translate(
-                        _("ftl-view-profile-editor-deleted-content", profile=self.profile.mention)
-                    ),
+                    self._ctx.t("ftl-view-profile-editor-deleted-content", profile=self.profile.mention),
                     color=discord.Color.blurple(),
                 )
                 return
@@ -672,50 +656,48 @@ class ProfileEditorView(discord.ui.LayoutView):
 
         # ── Summary: current level, tag, color ──
 
-        summary_text = self._ctx.translate(
-            _(
-                "ftl-view-profile-editor-summary",
-                level=self.profile.access_level
-                if self.profile.access_level is not None
-                else _("ftl-view-profile-editor-level-none"),
-                tag=self.profile.tag if self.profile.tag is not None else _("ftl-view-profile-editor-not-set"),
-                color=utils.int_to_color_hex(self.profile.color)
-                if self.profile.color is not None
-                else _("ftl-view-profile-editor-not-set"),
-            )
+        summary_text = self._ctx.t(
+            "ftl-view-profile-editor-summary",
+            level=self.profile.access_level
+            if self.profile.access_level is not None
+            else _("ftl-view-profile-editor-level-none"),
+            tag=self.profile.tag if self.profile.tag is not None else _("ftl-view-profile-editor-not-set"),
+            color=utils.int_to_color_hex(self.profile.color)
+            if self.profile.color is not None
+            else _("ftl-view-profile-editor-not-set"),
         )
 
         # ── Access level select ──
 
         level_options = [
             discord.SelectOption(
-                label=self._ctx.translate(_("ftl-view-profile-editor-level-none")),
+                label=self._ctx.t("ftl-view-profile-editor-level-none"),
                 value=self._LEVEL_NONE,
                 default=self.profile.access_level is None,
             ),
             discord.SelectOption(
-                label=self._ctx.translate(_("ftl-access-level-everyone")),
+                label=self._ctx.t("ftl-access-level-everyone"),
                 value=AccessLevel.everyone.name,
                 default=self.profile.access_level == AccessLevel.everyone,
             ),
             discord.SelectOption(
-                label=self._ctx.translate(_("ftl-access-level-staff")),
+                label=self._ctx.t("ftl-access-level-staff"),
                 value=AccessLevel.staff.name,
                 default=self.profile.access_level == AccessLevel.staff,
             ),
             discord.SelectOption(
-                label=self._ctx.translate(_("ftl-access-level-manager")),
+                label=self._ctx.t("ftl-access-level-manager"),
                 value=AccessLevel.manager.name,
                 default=self.profile.access_level == AccessLevel.manager,
             ),
             discord.SelectOption(
-                label=self._ctx.translate(_("ftl-access-level-admin")),
+                label=self._ctx.t("ftl-access-level-admin"),
                 value=AccessLevel.admin.name,
                 default=self.profile.access_level == AccessLevel.admin,
             ),
         ]
         level_select: discord.ui.Select[ProfileEditorView] = discord.ui.Select(
-            placeholder=self._ctx.translate(_("ftl-view-profile-editor-select-level-placeholder")),
+            placeholder=self._ctx.t("ftl-view-profile-editor-select-level-placeholder"),
             options=level_options,
             disabled=self._disabled,
         )
@@ -746,12 +728,12 @@ class ProfileEditorView(discord.ui.LayoutView):
                 if changed:
                     await self._render(interaction)
                     await interaction.followup.send(
-                        self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                        self._ctx.t("ftl-view-profile-editor-update-failed"),
                         ephemeral=True,
                     )
                 else:
                     await interaction.response.send_message(
-                        self._ctx.translate(_("ftl-view-profile-editor-update-failed")),
+                        self._ctx.t("ftl-view-profile-editor-update-failed"),
                         ephemeral=True,
                     )
                 return
@@ -778,7 +760,7 @@ class ProfileEditorView(discord.ui.LayoutView):
             await self._render(interaction)
             if access_sync_failed:
                 await interaction.followup.send(
-                    self._ctx.translate(_("ftl-view-profile-editor-access-sync-failed")),
+                    self._ctx.t("ftl-view-profile-editor-access-sync-failed"),
                     ephemeral=True,
                 )
 
@@ -795,7 +777,7 @@ class ProfileEditorView(discord.ui.LayoutView):
             discord.ui.Section(
                 discord.ui.TextDisplay(header_text),
                 accessory=self._btn(
-                    self._ctx.translate(_("ftl-view-profile-editor-btn-delete")),
+                    self._ctx.t("ftl-view-profile-editor-btn-delete"),
                     discord.ButtonStyle.danger,
                     on_delete,
                     disabled=self._disabled,
@@ -807,7 +789,7 @@ class ProfileEditorView(discord.ui.LayoutView):
             discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
             discord.ui.ActionRow(
                 self._btn(
-                    self._ctx.translate(_("ftl-view-profile-editor-btn-customize")),
+                    self._ctx.t("ftl-view-profile-editor-btn-customize"),
                     discord.ButtonStyle.primary,
                     on_customize,
                     disabled=self._disabled,
@@ -835,8 +817,8 @@ class ProfileEditorView(discord.ui.LayoutView):
 
         # ── Header: override count ──
 
-        overrides_header = self._ctx.translate(
-            _("ftl-view-profile-editor-overrides-header", count=len(self.profile.permission_overrides))
+        overrides_header = self._ctx.t(
+            "ftl-view-profile-editor-overrides-header", count=len(self.profile.permission_overrides)
         )
         result: list[discord.ui.Item[ProfileEditorView]] = [discord.ui.TextDisplay(overrides_header)]
 
@@ -853,13 +835,13 @@ class ProfileEditorView(discord.ui.LayoutView):
             )
 
         add_allow_btn = self._btn(
-            self._ctx.translate(_("ftl-view-profile-editor-btn-add-allow")),
+            self._ctx.t("ftl-view-profile-editor-btn-add-allow"),
             discord.ButtonStyle.success,
             on_add_allow,
             disabled=self._disabled,
         )
         add_deny_btn = self._btn(
-            self._ctx.translate(_("ftl-view-profile-editor-btn-add-deny")),
+            self._ctx.t("ftl-view-profile-editor-btn-add-deny"),
             discord.ButtonStyle.danger,
             on_add_deny,
             disabled=self._disabled,
@@ -869,10 +851,11 @@ class ProfileEditorView(discord.ui.LayoutView):
 
         if self.profile.permission_overrides:
             lines = [
-                self._ctx.translate(
-                    _("ftl-view-profile-editor-override-line-allow", command=_label(k))
+                self._ctx.t(
+                    "ftl-view-profile-editor-override-line-allow"
                     if v == PermissionOverrideValue.allow
-                    else _("ftl-view-profile-editor-override-line-deny", command=_label(k))
+                    else "ftl-view-profile-editor-override-line-deny",
+                    command=_label(k),
                 )
                 for k, v in self.profile.permission_overrides.items()
             ]
@@ -885,16 +868,16 @@ class ProfileEditorView(discord.ui.LayoutView):
                     discord.SelectOption(
                         label=_label(k)[:100],
                         value=k,
-                        description=self._ctx.translate(
-                            _("ftl-view-profile-editor-override-value-allow")
+                        description=self._ctx.t(
+                            "ftl-view-profile-editor-override-value-allow"
                             if v == PermissionOverrideValue.allow
-                            else _("ftl-view-profile-editor-override-value-deny")
+                            else "ftl-view-profile-editor-override-value-deny"
                         ),
                     )
                     for k, v in self.profile.permission_overrides.items()
                 ]
                 remove_select: discord.ui.Select[ProfileEditorView] = discord.ui.Select(
-                    placeholder=self._ctx.translate(_("ftl-view-profile-editor-select-remove-placeholder")),
+                    placeholder=self._ctx.t("ftl-view-profile-editor-select-remove-placeholder"),
                     options=remove_options,
                     disabled=self._disabled,
                 )
@@ -922,7 +905,7 @@ class ProfileEditorView(discord.ui.LayoutView):
                         add_allow_btn,
                         add_deny_btn,
                         self._btn(
-                            self._ctx.translate(_("ftl-view-profile-editor-btn-remove-override")),
+                            self._ctx.t("ftl-view-profile-editor-btn-remove-override"),
                             discord.ButtonStyle.secondary,
                             on_remove_by_name,
                             disabled=self._disabled,
@@ -958,21 +941,19 @@ class ProfileListView(discord.ui.LayoutView):
         super().__init__(timeout=1.0)  # non-interactive
 
         lines = [
-            ctx.translate(
-                _(
-                    "ftl-cmd-profile-list-row",
-                    mention=profile.mention,
-                    level=profile.access_level
-                    if profile.access_level is not None
-                    else _("ftl-cmd-profile-list-no-level"),
-                    overrides=_("ftl-cmd-profile-list-overrides", count=len(profile.permission_overrides)),
-                )
+            ctx.t(
+                "ftl-cmd-profile-list-row",
+                mention=profile.mention,
+                level=profile.access_level
+                if profile.access_level is not None
+                else _("ftl-cmd-profile-list-no-level"),
+                overrides=_("ftl-cmd-profile-list-overrides", count=len(profile.permission_overrides)),
             )
             for profile in profiles
         ]
 
-        title = ctx.translate(_("ftl-cmd-profile-list-title", count=len(profiles)))
-        tip = ctx.translate(_("ftl-cmd-profile-list-tip"))
+        title = ctx.t("ftl-cmd-profile-list-title", count=len(profiles))
+        tip = ctx.t("ftl-cmd-profile-list-tip")
         content = f"{title}\n\n" + "\n".join(lines)
 
         children: list[discord.ui.Item[ProfileListView]] = [

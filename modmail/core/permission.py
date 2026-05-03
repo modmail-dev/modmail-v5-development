@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, cast
 
@@ -12,7 +11,7 @@ from discord.ext import commands
 from .. import CONFIG
 from ..enum import RequiredAccessLevel
 from .cog import LazyHybridCommand
-from .translator import all_l10n
+from .translator import supported_locales
 
 if TYPE_CHECKING:
     from .bot import Bot
@@ -27,8 +26,6 @@ __all__ = [
     "owner_only",
     "staff_only",
 ]
-
-logger = logging.getLogger(__name__)
 
 
 def _locale_candidates(locale: str) -> list[str]:
@@ -230,7 +227,7 @@ class PermissionCommandIndex:
         for cmd in bot.walk_commands():
             canonical = bot.get_canonical_command_name(cmd)
             locale_map: dict[str, str] = {}
-            for loc in all_l10n:
+            for loc in supported_locales():
                 localized = _qualified_name(cmd, loc)
                 locale_map[loc] = localized
                 # setdefault so the first registered command wins on name collisions

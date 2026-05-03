@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import weakref
 from functools import partial
 from typing import TYPE_CHECKING, Any
@@ -19,8 +18,6 @@ __all__ = [
     "is_bot",
     "strtobool",
 ]
-
-logger = logging.getLogger(__name__)
 
 
 def strtobool(val: str) -> bool:

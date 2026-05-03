@@ -56,10 +56,8 @@ async def status_command(cog: Utility, ctx: Context, *, status: Str | None = Non
         current_activity = cog.bot.database_client.settings.activity
 
         if current_status is not None and current_activity is not None:
-            current_status_message = ctx.translate(_("ftl-msg-status-current-status", status=current_status))
-            current_activity_message = ctx.translate(
-                _("ftl-msg-status-current-activity", activity=current_activity)
-            )
+            current_status_message = ctx.t("ftl-msg-status-current-status", status=current_status)
+            current_activity_message = ctx.t("ftl-msg-status-current-activity", activity=current_activity)
 
             await ctx.reply(f"{current_status_message}\n{current_activity_message}", ephemeral=True)
         elif current_status is not None:
@@ -71,12 +69,12 @@ async def status_command(cog: Utility, ctx: Context, *, status: Str | None = Non
         return
 
     status_name_mapping: dict[str, StatusType] = {
-        (ctx.translate(_("ftl-model-status-online-name"))).casefold(): StatusType.online,
-        (ctx.translate(_("ftl-model-status-idle-name"))).casefold(): StatusType.idle,
-        (ctx.translate(_("ftl-model-status-dnd-name"))).casefold(): StatusType.dnd,
-        (ctx.translate(_("ftl-model-status-dnd-full-name"))).casefold(): StatusType.dnd,
-        (ctx.translate(_("ftl-model-status-offline-name"))).casefold(): StatusType.offline,
-        (ctx.translate(_("ftl-model-status-invisible-name"))).casefold(): StatusType.offline,
+        (ctx.t("ftl-model-status-online-name")).casefold(): StatusType.online,
+        (ctx.t("ftl-model-status-idle-name")).casefold(): StatusType.idle,
+        (ctx.t("ftl-model-status-dnd-name")).casefold(): StatusType.dnd,
+        (ctx.t("ftl-model-status-dnd-full-name")).casefold(): StatusType.dnd,
+        (ctx.t("ftl-model-status-offline-name")).casefold(): StatusType.offline,
+        (ctx.t("ftl-model-status-invisible-name")).casefold(): StatusType.offline,
     }
 
     if status.casefold() in status_name_mapping:
@@ -87,11 +85,11 @@ async def status_command(cog: Utility, ctx: Context, *, status: Str | None = Non
         return
 
     activity_name_mapping: dict[str, ActivityType] = {
-        (ctx.translate(_("ftl-model-activity-playing-name"))).casefold() + " ": ActivityType.playing,
-        (ctx.translate(_("ftl-model-activity-streaming-name"))).casefold() + " ": ActivityType.streaming,
-        (ctx.translate(_("ftl-model-activity-listening-name"))).casefold() + " ": ActivityType.listening,
-        (ctx.translate(_("ftl-model-activity-watching-name"))).casefold() + " ": ActivityType.watching,
-        (ctx.translate(_("ftl-model-activity-competing-name"))).casefold() + " ": ActivityType.competing,
+        (ctx.t("ftl-model-activity-playing-name")).casefold() + " ": ActivityType.playing,
+        (ctx.t("ftl-model-activity-streaming-name")).casefold() + " ": ActivityType.streaming,
+        (ctx.t("ftl-model-activity-listening-name")).casefold() + " ": ActivityType.listening,
+        (ctx.t("ftl-model-activity-watching-name")).casefold() + " ": ActivityType.watching,
+        (ctx.t("ftl-model-activity-competing-name")).casefold() + " ": ActivityType.competing,
     }
 
     for activity_name, activity_type in activity_name_mapping.items():

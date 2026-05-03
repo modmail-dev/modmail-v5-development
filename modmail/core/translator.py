@@ -7,7 +7,6 @@ pre-renders it in the default locale.
 
 from __future__ import annotations
 
-import logging
 import warnings
 from datetime import date, datetime
 from decimal import Decimal
@@ -21,9 +20,7 @@ from fluent.runtime import FluentLocalization, FluentResourceLoader
 
 from .. import CONFIG
 
-__all__ = ["Translator", "_", "all_l10n"]
-
-logger = logging.getLogger(__name__)
+__all__ = ["Translator", "_", "supported_locales"]
 
 # Fluent supported types (see: fluent.runtime.utils.native_to_fluent)
 FluentTypes = str | int | float | Decimal | datetime | date | None
@@ -52,13 +49,22 @@ def _build_l10n() -> dict[str, FluentLocalization]:
     return result
 
 
-all_l10n: dict[str, FluentLocalization] = _build_l10n()
+_all_l10n: dict[str, FluentLocalization] = _build_l10n()
+
+
+def supported_locales() -> frozenset[str]:
+    """Return the set of locale codes currently loaded (mirrors CONFIG.allowed_locales).
+
+    Returns:
+        Frozenset of BCP-47 locale strings for which FTL bundles are available.
+    """
+    return frozenset(_all_l10n)
 
 
 class Translator(app_commands.Translator):
     """Implements [`app_commands.Translator`][] using `FluentLocalization`."""
 
-    def translate_sync(
+    def _translate(
         self,
         string: locale_str,
         locale: discord.Locale | str,
@@ -81,20 +87,20 @@ class Translator(app_commands.Translator):
         if "_string" not in string.extras:
             return None  # Not Modmail's string
 
-        l10n = all_l10n[CONFIG.default_locale]
+        l10n = _all_l10n[CONFIG.default_locale]
 
         locale_name = locale.value if isinstance(locale, discord.Locale) else locale
-        if locale_name in all_l10n:
-            l10n = all_l10n[locale_name]
+        if locale_name in _all_l10n:
+            l10n = _all_l10n[locale_name]
         else:
             if "-" in locale_name:
                 # If the locale is in the form of xx-YY (e.g., en-US),
                 # check if the base locale (xx) is supported
                 locale_name = locale_name.partition("-")[0]
-                if locale_name in all_l10n:
-                    l10n = all_l10n[locale_name]
+                if locale_name in _all_l10n:
+                    l10n = _all_l10n[locale_name]
 
-        if l10n.locales == all_l10n[CONFIG.default_locale].locales:
+        if l10n.locales == _all_l10n[CONFIG.default_locale].locales:
             return string.message  # Already translated by _()
 
         # Real message stored in .extras['_string']
@@ -105,17 +111,36 @@ class Translator(app_commands.Translator):
             if key == "_string":
                 continue
             if hasattr(value, "__locale_str__"):
-                # If the value is a locale_str, translate it (recursive call)
-                string.extras[key] = self.translate_sync(value.__locale_str__(), locale, context)
+                string.extras[key] = self._translate(value.__locale_str__(), locale, context)
             elif isinstance(value, locale_str):
-                # TODO: check if this works
-                string.extras[key] = self.translate_sync(value, locale, context)
+                string.extras[key] = self._translate(value, locale, context)
             elif isinstance(value, FluentTypes):
                 string.extras[key] = value
             else:
                 string.extras[key] = str(value)
 
         return l10n.format_value(message, string.extras)
+
+    def translate_sync(
+        self,
+        string: locale_str,
+        locale: discord.Locale | str,
+        context: app_commands.TranslationContextTypes | None = None,
+    ) -> str | None:
+        """Translate `string` to `locale` synchronously.
+
+        Public wrapper around [`_translate`][]. Use this from other modules; prefer
+        [`Context.t`][] in command handlers.
+
+        Args:
+            string: The locale string to translate.
+            locale: Target locale.
+            context: Translation context (unused).
+
+        Returns:
+            Translated string, or `None` when not found.
+        """
+        return self._translate(string, locale, context)
 
     async def translate(
         self,
@@ -125,7 +150,6 @@ class Translator(app_commands.Translator):
     ) -> str | None:
         """Translate a message using FluentLocalization.
 
-        Forwards to [`translate_sync`][modmail.core.translator.Translator.translate_sync].
         Required by the [`app_commands.Translator`][] abstract interface.
 
         Args:
@@ -136,7 +160,7 @@ class Translator(app_commands.Translator):
         Returns:
             Translated string, or `None` when not found.
         """
-        return self.translate_sync(string, locale, context)
+        return self._translate(string, locale, context)
 
 
 def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> locale_str:
@@ -144,7 +168,7 @@ def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> loca
 
     Returns a [`locale_str`][] whose `.message` holds the default-locale rendering.
     The raw FTL key and all kwargs are stored in `.extras` for later re-rendering
-    into other locales by [`Translator.translate_sync`][].
+    into other locales by [`Translator`][].
 
     Args:
         string: FTL message ID.
@@ -172,6 +196,6 @@ def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> loca
             warnings.warn(f"Unsupported type for translation: {value} ({type(value)})", stacklevel=2)
             temp_kwargs[key] = str(value)  # Convert to string
 
-    default_translated_string = all_l10n[CONFIG.default_locale].format_value(string, temp_kwargs)
+    default_translated_string = _all_l10n[CONFIG.default_locale].format_value(string, temp_kwargs)
     kwargs["_string"] = string
     return locale_str(default_translated_string, **kwargs)
