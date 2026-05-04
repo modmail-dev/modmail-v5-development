@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 from typing import TYPE_CHECKING, Any, overload
 
@@ -12,6 +11,7 @@ from discord.app_commands import locale_str
 from discord.ext import commands
 
 from .translator import _
+from .ui import BaseLayoutView
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -198,7 +198,7 @@ class Context(commands.Context[Any]):
         return self.bot.translate(string, ctx_or_locale=locale if locale is not None else self)
 
 
-class PromptView(discord.ui.LayoutView):
+class PromptView(BaseLayoutView):
     """Component v2 card that waits for the user to type a reply.
 
     Renders a text prompt and a cancel button. The caller must set `message` after
@@ -219,17 +219,13 @@ class PromptView(discord.ui.LayoutView):
             content: Prompt text shown inside the card.
             timeout: Seconds before the view stops accepting interactions.
         """
-        super().__init__(timeout=timeout)
+        super().__init__(ctx, timeout=timeout)
         self.result: discord.Message | None = None
         """The user's typed reply (`None` if canceled or timed out)."""
-        self.message: discord.Message | None = None
-        """The sent prompt message (set by the caller after sending, used for cleanup on timeout)."""
         self.canceled = False
         """`True` if the user clicked the cancel button (as opposed to a timeout or external
         cancellation)."""
-        self._bot = ctx.bot
         self._channel_id = ctx.channel.id
-        self._user = ctx.author
         self._wait_task: asyncio.Task[discord.Message] | None = None
 
         if isinstance(content, locale_str):
@@ -257,27 +253,18 @@ class PromptView(discord.ui.LayoutView):
 
     async def _on_cancel(self, interaction: discord.Interaction) -> None:
         """Cancel the wait task, delete the prompt message, and stop the view."""
+        self.stop()
+        self.defer(interaction)
         self.canceled = True
         if self._wait_task is not None:
             self._wait_task.cancel()
-        await interaction.response.defer()
-        if interaction.message:
-            await interaction.message.delete()
-        self.stop()
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Return `True` only when the interaction comes from the invoking user.
-
-        Args:
-            interaction: The incoming interaction.
-        """
-        return interaction.user == self._user
+        self._delete_message(interaction)
 
     async def wait(self) -> bool:
         """Register the message listener and wait for a reply, cancel, or timeout.
 
         Returns:
-            `True` if the prompt timed out, `False` otherwise.
+            `True` if the prompt timed out or the user canceled, `False` if a reply was received.
 
         Raises:
             asyncio.CancelledError: If an external cancellation interrupts the wait
@@ -287,43 +274,36 @@ class PromptView(discord.ui.LayoutView):
             logger.debug("%s.wait() called without message set; timeout cleanup skipped", type(self).__name__)
 
         def check(m: discord.Message) -> bool:
-            return m.author.id == self._user.id and m.channel.id == self._channel_id
+            return m.author.id == self._ctx.author.id and m.channel.id == self._channel_id
 
         wait_task: asyncio.Task[discord.Message] = asyncio.create_task(
             self._bot.wait_for("message", check=check, timeout=self.timeout)
         )
         self._wait_task = wait_task
 
-        timed_out = False
         try:
             self.result = await wait_task
         except TimeoutError:
-            timed_out = True
+            return True
         except asyncio.CancelledError:
             if not self.canceled:
                 raise
+            return False
         finally:
             wait_task.cancel()
             self.stop()
 
-        # On cancel, _on_cancel already deleted the message; on timeout, on_timeout
-        # handles the edit. On success, disable buttons here.
-        if not self.canceled and not timed_out and self.message is not None:
-            self._disable_buttons()
-            with contextlib.suppress(discord.HTTPException):
-                await self.message.edit(view=self)
-
-        return timed_out
+        self._disable_buttons()
+        self._update_message()
+        return False
 
     async def on_timeout(self) -> None:
         """Disable all buttons when the view times out."""
-        if self.message is not None:
-            self._disable_buttons()
-            with contextlib.suppress(discord.HTTPException):
-                await self.message.edit(view=self)
+        self._disable_buttons()
+        self._update_message()
 
 
-class PromptChoicesView(discord.ui.LayoutView):
+class PromptChoicesView(BaseLayoutView):
     """Component v2 card presenting labeled choices as buttons.
 
     Renders the prompt text, a separator, and one button per choice. The caller must
@@ -346,12 +326,9 @@ class PromptChoicesView(discord.ui.LayoutView):
             choices: Ordered list of button labels.
             timeout: Seconds before the view stops accepting interactions.
         """
-        super().__init__(timeout=timeout)
+        super().__init__(ctx, timeout=timeout)
         self.result: int | None = None
         """Index of the chosen option, or `None` if canceled or timed out."""
-        self.message: discord.Message | None = None
-        """The prompt message (set by the caller after sending, used for cleanup on timeout)."""
-        self._user = ctx.author
         self._buttons: list[discord.ui.Button[PromptChoicesView]] = []
 
         if isinstance(content, locale_str):
@@ -391,28 +368,19 @@ class PromptChoicesView(discord.ui.LayoutView):
     def _make_choice_callback(self, index: int) -> Callable[..., Any]:
         """Return an async callback that records `index` as the result and stops the view."""
 
-        async def callback(interaction: discord.Interaction) -> None:
+        async def callback(interaction: discord.Interaction) -> None:  # noqa: RUF029
             self.result = index
-            self._disable_buttons()
-            await interaction.response.edit_message(view=self)
             self.stop()
+            self._disable_buttons()
+            self._update_message(interaction)
 
         return callback
 
     async def _on_cancel(self, interaction: discord.Interaction) -> None:
         """Delete the prompt message and stop the view."""
-        await interaction.response.defer()
-        if interaction.message:
-            await interaction.message.delete()
         self.stop()
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Return `True` only when the interaction comes from the invoking user.
-
-        Args:
-            interaction: The incoming interaction.
-        """
-        return interaction.user == self._user
+        self.defer(interaction)
+        self._delete_message(interaction)
 
     async def wait(self) -> bool:
         """Wait for a choice, cancel, or timeout.
@@ -426,7 +394,5 @@ class PromptChoicesView(discord.ui.LayoutView):
 
     async def on_timeout(self) -> None:
         """Disable all buttons when the view times out."""
-        if self.message is not None:
-            self._disable_buttons()
-            with contextlib.suppress(discord.HTTPException):
-                await self.message.edit(view=self)
+        self._disable_buttons()
+        self._update_message()

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import enum
 import logging
 from typing import TYPE_CHECKING, Any, Literal
 
 import discord
 
-from modmail.core import Context, _, lazy_hybrid_command, owner_only
+from modmail.core import BaseLayoutView, Context, _, lazy_hybrid_command, owner_only
 from modmail.errors import NoModmailCategoryError
 
 if TYPE_CHECKING:
@@ -49,23 +48,23 @@ class _WizardStep(enum.IntEnum):
     """Non-interactive card shown while setup API calls are in progress."""
 
 
-class SetupWizardView(discord.ui.LayoutView):
+class SetupWizardView(BaseLayoutView):
     """Multi-step in-place setup wizard rendered as a single updating card.
 
     Renders all interaction steps inside one Discord message that edits in
     place on every button or select interaction. Each step is a fresh
     [`discord.ui.Container`][] produced by a builder method. State advances by
-    modifying `_step` and calling `_render()`.
+    modifying `_step` and calling [`_render`][].
 
     Warning:
-        Call `await wizard.build()` before sending the initial message, and
-        set `message` after sending, before `await wizard.wait()`. Without
-        `message`, buttons won't be disabled on timeout.
+        Call `wizard.build()` before sending the initial message, and set
+        `message` after sending, before `await wizard.wait()`. Without `message`,
+        timeout and error cards cannot be pushed.
 
     Examples:
         ```python
         wizard = SetupWizardView(ctx=ctx, show_reconfigure_warning=False, timeout=300.0)
-        await wizard.build()
+        wizard.build()
         msg = await ctx.reply(view=wizard)
         wizard.message = msg
         timed_out = await wizard.wait()
@@ -74,8 +73,8 @@ class SetupWizardView(discord.ui.LayoutView):
 
     def __init__(
         self,
-        *,
         ctx: Context,
+        *,
         show_reconfigure_warning: bool,
         timeout: float = 300.0,
     ) -> None:
@@ -86,13 +85,7 @@ class SetupWizardView(discord.ui.LayoutView):
             show_reconfigure_warning: Whether to show the already-configured warning before step 1.
             timeout: Seconds before the wizard stops accepting interactions.
         """
-        super().__init__(timeout=timeout)
-        self._ctx = ctx
-        self._user = ctx.author
-
-        self.message: discord.Message | None = None
-        """The sent wizard message (set by the caller after sending)."""
-
+        super().__init__(ctx, timeout=timeout)
         self._step: _WizardStep = _WizardStep.STEP_0 if show_reconfigure_warning else _WizardStep.STEP_1
         self._completed: bool = False
         self._setup_type: Literal["category", "forum"] | None = None
@@ -148,15 +141,15 @@ class SetupWizardView(discord.ui.LayoutView):
             raise RuntimeError("channel_id accessed before wizard completed")
         return self._channel_id
 
-    async def build(self) -> None:
+    def build(self) -> None:
         """Clear the view's items and add the container for the current step.
 
         Must be called before sending the initial message.
         """
         self.clear_items()
-        self.add_item(await self._build_container())
+        self.add_item(self._build_container())
 
-    async def _render(self, interaction: discord.Interaction) -> None:
+    def _render(self, interaction: discord.Interaction) -> None:
         """Re-render the current step and edit the triggering message in-place.
 
         Raises:
@@ -164,15 +157,11 @@ class SetupWizardView(discord.ui.LayoutView):
         """
         if self._completed:
             raise RuntimeError("_render called after wizard completed")
-        await self.build()
-        await interaction.response.edit_message(view=self)
+        self.build()
+        self._update_message(interaction)
 
-    def _btn(
-        self,
-        label: str,
-        style: discord.ButtonStyle,
-        callback: Any,
-    ) -> discord.ui.Button[SetupWizardView]:
+    @staticmethod
+    def _btn(label: str, style: discord.ButtonStyle, callback: Any) -> discord.ui.Button[SetupWizardView]:
         """Create a button and bind its callback.
 
         Args:
@@ -195,18 +184,14 @@ class SetupWizardView(discord.ui.LayoutView):
         """
         label = self._ctx.t("ftl-view-prompt-cancel-label")
 
-        async def callback(interaction: discord.Interaction) -> None:
+        async def callback(interaction: discord.Interaction) -> None:  # noqa: RUF029
             self._step = _WizardStep.CANCELED
-            await self._render(interaction)
             self.stop()
+            self._render(interaction)
 
         return self._btn(label, discord.ButtonStyle.danger, callback)
 
-    # ------------------------------------------------------------------
-    # Step builder
-    # ------------------------------------------------------------------
-
-    async def _build_container(self) -> discord.ui.Container[SetupWizardView]:
+    def _build_container(self) -> discord.ui.Container[SetupWizardView]:
         """Build and return the container for the current step.
 
         Returns:
@@ -227,9 +212,9 @@ class SetupWizardView(discord.ui.LayoutView):
 
             case _WizardStep.STEP_0:
 
-                async def on_continue(interaction: discord.Interaction) -> None:
+                async def on_continue(interaction: discord.Interaction) -> None:  # noqa: RUF029
                     self._step = _WizardStep.STEP_1
-                    await self._render(interaction)
+                    self._render(interaction)
 
                 return discord.ui.Container(
                     discord.ui.TextDisplay(self._ctx.t("ftl-wizard-setup-reconfigure-content")),
@@ -247,15 +232,15 @@ class SetupWizardView(discord.ui.LayoutView):
 
             case _WizardStep.STEP_1:
 
-                async def on_category(interaction: discord.Interaction) -> None:
+                async def on_category(interaction: discord.Interaction) -> None:  # noqa: RUF029
                     self._setup_type = "category"
                     self._step = _WizardStep.STEP_2
-                    await self._render(interaction)
+                    self._render(interaction)
 
-                async def on_forum(interaction: discord.Interaction) -> None:
+                async def on_forum(interaction: discord.Interaction) -> None:  # noqa: RUF029
                     self._setup_type = "forum"
                     self._step = _WizardStep.STEP_2
-                    await self._render(interaction)
+                    self._render(interaction)
 
                 category_label = self._ctx.t("ftl-wizard-setup-type-btn-category")
                 forum_label = self._ctx.t("ftl-wizard-setup-type-btn-forum")
@@ -273,22 +258,22 @@ class SetupWizardView(discord.ui.LayoutView):
             case _WizardStep.STEP_2:
                 is_category = self._setup_type == "category"
 
-                async def on_create_new(interaction: discord.Interaction) -> None:
+                async def on_create_new(interaction: discord.Interaction) -> None:  # noqa: RUF029
                     self._channel_id = None
                     self._channel_name = None
                     self._step = _WizardStep.STEP_4
-                    await self._render(interaction)
+                    self._render(interaction)
 
-                async def on_use_existing(interaction: discord.Interaction) -> None:
+                async def on_use_existing(interaction: discord.Interaction) -> None:  # noqa: RUF029
                     self._step = _WizardStep.STEP_3
-                    await self._render(interaction)
+                    self._render(interaction)
 
-                async def on_back_step_2(interaction: discord.Interaction) -> None:
+                async def on_back_step_2(interaction: discord.Interaction) -> None:  # noqa: RUF029
                     self._setup_type = None
                     self._channel_id = None
                     self._channel_name = None
                     self._step = _WizardStep.STEP_1
-                    await self._render(interaction)
+                    self._render(interaction)
 
                 create_label = self._ctx.t("ftl-wizard-setup-new-or-existing-btn-create")
                 existing_label = self._ctx.t(
@@ -338,32 +323,31 @@ class SetupWizardView(discord.ui.LayoutView):
 
                     expected_type = discord.CategoryChannel if is_category else discord.ForumChannel
                     if not isinstance(real_channel, expected_type):
-                        wrong_type_msg = self._ctx.t(
-                            "ftl-wizard-setup-select-existing-wrong-type-category"
+                        await self.send(
+                            interaction,
+                            _("ftl-wizard-setup-select-existing-wrong-type-category")
                             if is_category
-                            else "ftl-wizard-setup-select-existing-wrong-type-forum"
+                            else _("ftl-wizard-setup-select-existing-wrong-type-forum"),
                         )
-                        await interaction.response.send_message(wrong_type_msg, ephemeral=True)
                         return
 
-                    no_perms_msg = self._ctx.t("ftl-wizard-setup-select-existing-no-perms")
                     min_perms = self._ctx.bot.staff_guild.MIN_PERMISSIONS
                     if real_channel.permissions_for(interaction.guild.me) & min_perms != min_perms:
-                        await interaction.response.send_message(no_perms_msg, ephemeral=True)
+                        await self.send(interaction, _("ftl-wizard-setup-select-existing-no-perms"))
                         return
 
                     self._channel_id = real_channel.id
                     self._channel_name = real_channel.name
                     self._step = _WizardStep.STEP_4
-                    await self._render(interaction)
+                    self._render(interaction)
 
                 select.callback = on_channel_select
 
-                async def on_back_step_3(interaction: discord.Interaction) -> None:
+                async def on_back_step_3(interaction: discord.Interaction) -> None:  # noqa: RUF029
                     self._channel_id = None
                     self._channel_name = None
                     self._step = _WizardStep.STEP_2
-                    await self._render(interaction)
+                    self._render(interaction)
 
                 back_label = self._ctx.t("ftl-wizard-setup-btn-back")
                 return discord.ui.Container(
@@ -388,15 +372,15 @@ class SetupWizardView(discord.ui.LayoutView):
                 use_existing = self._channel_id is not None
 
                 async def on_confirm(interaction: discord.Interaction) -> None:
-                    self._completed = True
                     self._step = _WizardStep.WORKING
-                    await self.build()
-                    await interaction.response.edit_message(view=self)
-                    self.stop()
+                    self._completed = True
+                    self.build()
+                    await self._update_message(interaction)  # Ensure WORKING card is shown before proceeding
+                    self.stop()  # Stops the .wait(), proceed the setup in do_setup() below
 
-                async def on_back_step_4(interaction: discord.Interaction) -> None:
+                async def on_back_step_4(interaction: discord.Interaction) -> None:  # noqa: RUF029
                     self._step = _WizardStep.STEP_3 if self._channel_id is not None else _WizardStep.STEP_2
-                    await self._render(interaction)
+                    self._render(interaction)
 
                 if use_existing:
                     content = self._ctx.t(
@@ -431,7 +415,7 @@ class SetupWizardView(discord.ui.LayoutView):
                     accent_color=discord.Color.orange(),
                 )
 
-    async def show_success(
+    def show_success(
         self,
         category_or_forum: discord.CategoryChannel | discord.ForumChannel,
         log_channel: discord.TextChannel | discord.Thread,
@@ -466,11 +450,9 @@ class SetupWizardView(discord.ui.LayoutView):
                 accent_color=discord.Color.green(),
             )
         )
-        if self.message is not None:
-            with contextlib.suppress(discord.HTTPException):
-                await self.message.edit(view=self)
+        self._update_message()
 
-    async def show_error(self, text: str) -> None:
+    def show_error(self, text: str) -> None:
         """Edit the message to a generic error card.
 
         Args:
@@ -483,28 +465,13 @@ class SetupWizardView(discord.ui.LayoutView):
                 accent_color=discord.Color.red(),
             )
         )
-        if self.message is not None:
-            with contextlib.suppress(discord.HTTPException):
-                await self.message.edit(view=self)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Allow only the invoking user to interact with this view.
-
-        Args:
-            interaction: The incoming interaction.
-
-        Returns:
-            bool: `True` if the interaction is from the expected user.
-        """
-        return interaction.user == self._user
+        self._update_message()
 
     async def on_timeout(self) -> None:
         """Render the timeout card and edit the message."""
         self._step = _WizardStep.TIMEOUT
-        await self.build()
-        if self.message is not None:
-            with contextlib.suppress(discord.HTTPException):
-                await self.message.edit(view=self)
+        self.build()
+        self._update_message()
 
 
 @owner_only
@@ -556,8 +523,8 @@ async def do_setup(ctx: Context) -> None:
         logger.debug("Bot does not have enough permissions to run setup in %s", ctx.guild)
         return
 
-    wizard = SetupWizardView(ctx=ctx, show_reconfigure_warning=ctx.bot.staff_guild.is_setup())
-    await wizard.build()
+    wizard = SetupWizardView(ctx, show_reconfigure_warning=ctx.bot.staff_guild.is_setup())
+    wizard.build()
 
     wizard.message = await ctx.reply(view=wizard)
     timed_out = await wizard.wait()
@@ -573,7 +540,8 @@ async def do_setup(ctx: Context) -> None:
         )
     except NoModmailCategoryError:
         logger.error("Selected channel %s no longer exists in %s", wizard.channel_id, ctx.guild)
-        await wizard.show_error(ctx.t("ftl-wizard-setup-error-channel-gone"))
+        wizard.show_error(ctx.t("ftl-wizard-setup-error-channel-gone"))
         return
+    # TODO: Add another generic error handle for unknown errors
 
-    await wizard.show_success(category_or_forum, log_channel, storage_channel)
+    wizard.show_success(category_or_forum, log_channel, storage_channel)
