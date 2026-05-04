@@ -409,7 +409,7 @@ class ProfileEditorView(BaseLayoutView):
 
     Examples:
         ```python
-        view = ProfileEditorView(ctx=ctx, profile=profile)
+        view = ProfileEditorView(ctx, profile=profile)
         view.build()
         msg = await ctx.reply(view=view)
         view.message = msg
@@ -964,7 +964,7 @@ async def profile_edit_command(cog: Utility, ctx: Context, target: ProfileLookup
             profile_type=target.profile_type,
         )
 
-    view = ProfileEditorView(ctx=ctx, profile=profile)
+    view = ProfileEditorView(ctx, profile=profile)
     view.build()
     message = await ctx.reply(view=view)
     view.message = message

@@ -165,16 +165,18 @@ class Context(commands.Context[Any]):
         string: str,
         /,
         locale: discord.Locale | str | None = ...,
+        escape: bool = ...,
         **kwargs: FluentTypes | HasLocaleStr | locale_str,
     ) -> str: ...
 
     @overload
-    def t(self, string: locale_str, /, locale: discord.Locale | str | None = ...) -> str: ...
+    def t(self, string: locale_str, /, locale: discord.Locale | str | None = ..., escape: bool = ...) -> str: ...
     def t(
         self,
         string: str | locale_str,
         /,
         locale: discord.Locale | str | None = None,
+        escape: bool = True,
         **kwargs: FluentTypes | HasLocaleStr | locale_str,
     ) -> str:
         """Translate `string` into the interaction's locale, or `locale` if given.
@@ -186,6 +188,8 @@ class Context(commands.Context[Any]):
         Args:
             string: FTL message ID or a [`locale_str`][] produced by [`_`][].
             locale: Override locale. Defaults to the interaction locale.
+            escape: Forwarded to [`_`][] when `string` is a bare key; no-op for pre-built
+                [`locale_str`][] instances (see [`_`][] for semantics).
             **kwargs: FTL variables (only used when `string` is a bare key).
 
         Returns:
@@ -194,7 +198,7 @@ class Context(commands.Context[Any]):
         if isinstance(string, str):
             if not string.startswith("ftl-"):  # ftl: ignore
                 logger.debug("Context.t called with a non-locale string: %r", string)
-            string = _(string, **kwargs)
+            string = _(string, escape=escape, **kwargs)
         return self.bot.translate(string, ctx_or_locale=locale if locale is not None else self)
 
 

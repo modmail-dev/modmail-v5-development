@@ -11,7 +11,7 @@ import warnings
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 import discord
 from discord import app_commands
@@ -87,6 +87,8 @@ class Translator(app_commands.Translator):
         if "_string" not in string.extras:
             return None  # Not Modmail's string
 
+        should_escape = bool(string.extras.get("_escape", True))
+
         l10n = _all_l10n[CONFIG.default_locale]
 
         locale_name = locale.value if isinstance(locale, discord.Locale) else locale
@@ -108,16 +110,22 @@ class Translator(app_commands.Translator):
 
         # Convert all extras items to supported types
         for key, value in string.extras.items():
-            if key == "_string":
+            if key in {"_string", "_escape"}:
                 continue
+
             if hasattr(value, "__locale_str__"):
-                string.extras[key] = self._translate(value.__locale_str__(), locale, context)
-            elif isinstance(value, locale_str):
+                value = value.__locale_str__()
+
+            if isinstance(value, locale_str):
                 string.extras[key] = self._translate(value, locale, context)
             elif isinstance(value, FluentTypes):
-                string.extras[key] = value
+                if isinstance(value, str) and should_escape:
+                    string.extras[key] = discord.utils.escape_markdown(value)
+                else:
+                    string.extras[key] = value
             else:
-                string.extras[key] = str(value)
+                converted = str(value)
+                string.extras[key] = discord.utils.escape_markdown(converted) if should_escape else converted
 
         return l10n.format_value(message, string.extras)
 
@@ -163,7 +171,7 @@ class Translator(app_commands.Translator):
         return self._translate(string, locale, context)
 
 
-def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> locale_str:
+def _(string: str, /, *, escape: bool = True, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> locale_str:
     """Mark `string` for translation and pre-render it in the default locale.
 
     Returns a [`locale_str`][] whose `.message` holds the default-locale rendering.
@@ -172,6 +180,8 @@ def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> loca
 
     Args:
         string: FTL message ID.
+        escape: When `True` (default), applies [`discord.utils.escape_markdown`][] to plain
+            `str` kwargs before substitution. Pass `False` for intentional markdown in kwargs.
         **kwargs: FTL variables. Accepts [`FluentTypes`][], objects implementing
             `__locale_str__()`, or nested [`locale_str`][] instances.
 
@@ -185,17 +195,22 @@ def _(string: str, /, **kwargs: FluentTypes | HasLocaleStr | locale_str) -> loca
     temp_kwargs: dict[str, FluentTypes] = {}
 
     for key, value in kwargs.items():
-        # If the value can be converted to a locale_str, use the default message
         if hasattr(value, "__locale_str__"):
-            temp_kwargs[key] = value.__locale_str__().message  # pyright: ignore [reportUnknownMemberType, reportOptionalMemberAccess, reportAttributeAccessIssue]
-        elif isinstance(value, locale_str):
+            value = cast("locale_str", value.__locale_str__())  # pyright: ignore [reportUnknownMemberType, reportOptionalMemberAccess, reportAttributeAccessIssue]
+
+        if isinstance(value, locale_str):
             temp_kwargs[key] = value.message
         elif isinstance(value, FluentTypes):
-            temp_kwargs[key] = value
+            if isinstance(value, str) and escape:
+                temp_kwargs[key] = discord.utils.escape_markdown(value)
+            else:
+                temp_kwargs[key] = value
         else:
             warnings.warn(f"Unsupported type for translation: {value} ({type(value)})", stacklevel=2)
-            temp_kwargs[key] = str(value)  # Convert to string
+            converted = str(value)
+            temp_kwargs[key] = discord.utils.escape_markdown(converted) if escape else converted
 
     default_translated_string = _all_l10n[CONFIG.default_locale].format_value(string, temp_kwargs)
     kwargs["_string"] = string
+    kwargs["_escape"] = escape
     return locale_str(default_translated_string, **kwargs)

@@ -63,7 +63,7 @@ class SetupWizardView(BaseLayoutView):
 
     Examples:
         ```python
-        wizard = SetupWizardView(ctx=ctx, show_reconfigure_warning=False, timeout=300.0)
+        wizard = SetupWizardView(ctx, show_reconfigure_warning=False, timeout=300.0)
         wizard.build()
         msg = await ctx.reply(view=wizard)
         wizard.message = msg
