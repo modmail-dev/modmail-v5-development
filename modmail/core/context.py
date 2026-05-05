@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 from typing import TYPE_CHECKING, Any, overload
 
@@ -10,20 +11,75 @@ import discord
 from discord.app_commands import locale_str
 from discord.ext import commands
 
+from .. import CONFIG
+from ..enum import (
+    PermissionOverrideValue,
+    RequiredAccessLevel,
+    UserAccessAllowReason,
+    UserAccessDenyReason,
+)
 from .translator import _
 from .ui import BaseLayoutView
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from ..enum import AccessLevel
     from .bot import Bot
     from .translator import FluentTypes, HasLocaleStr
 
-__all__ = ["Context"]
+__all__ = ["Context", "UserAccessResult"]
 
 logger = logging.getLogger(__name__)
 
 type AnyStr = str | locale_str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class UserAccessResult:
+    """Outcome of a user access check for a single command invocation.
+
+    Stored on [`Context.user_access`][] after [`Context.check_user_access`][] runs,
+    regardless of whether access was granted or denied.
+
+    Attributes:
+        reason: The specific allow or deny reason. Whether access was granted is inferred
+            from the type: a [`UserAccessAllowReason`][] means allowed, a
+            [`UserAccessDenyReason`][] means denied.
+        profile_id: Discord ID of the profile that decided the outcome (`None` for
+            non-profile decisions such as owner bypass or insufficient access).
+        command_name: Canonical command key involved in the decision — set only for
+            profile override decisions (exact or wildcard).
+        profile_access_level: The profile's [`AccessLevel`][] at decision time (`None`
+            unless `reason` is `level_match`).
+        required_level: The [`RequiredAccessLevel`][] the command demanded (`None` unless
+            `reason` is `level_match` or `insufficient_access`).
+    """
+
+    reason: UserAccessAllowReason | UserAccessDenyReason
+    profile_id: int | None = None
+    command_name: str | None = None
+    profile_access_level: AccessLevel | None = None
+    required_level: RequiredAccessLevel | None = None
+
+    @property
+    def allowed(self) -> bool:
+        """`True` if the user may run the command."""
+        return isinstance(self.reason, UserAccessAllowReason)
+
+    def __str__(self) -> str:
+        """Return a compact human-readable summary of the access outcome."""
+        verdict = "allow" if self.allowed else "deny"
+        parts = [f"{verdict}:{self.reason}"]
+        if self.profile_id is not None:
+            parts.append(f"profile={self.profile_id}")
+        if self.command_name is not None:
+            parts.append(f"cmd={self.command_name}")
+        if self.profile_access_level is not None and self.required_level is not None:
+            parts.append(f"level={self.profile_access_level.name}>={self.required_level.name}")
+        elif self.required_level is not None:
+            parts.append(f"required={self.required_level.name}")
+        return " ".join(parts)
 
 
 class Context(commands.Context[Any]):
@@ -32,8 +88,11 @@ class Context(commands.Context[Any]):
     if TYPE_CHECKING:
         bot: Bot
 
-    perm_check_reason: str
-    """Outcome of the permission check for this invocation (absent if the check has not yet run)."""
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize `user_access` to `None`; all other initialization delegated to super."""
+        super().__init__(*args, **kwargs)
+        self.user_access: UserAccessResult | None = None
+        """`UserAccessResult` cached by `check_user_access`."""
 
     async def send(
         self,
@@ -231,6 +290,111 @@ class Context(commands.Context[Any]):
                 logger.debug("Context.t called with a non-locale string: %r", string)
             string = _(string, escape=escape, **kwargs)
         return self.bot.translate(string, ctx_or_locale=locale if locale is not None else self)
+
+    async def check_user_access(self) -> bool:
+        """Check whether the invoking user may run this context's command.
+
+        Evaluates the full access rule chain on the first call and caches the result in
+        `user_access`. Subsequent calls return the cached result immediately.
+
+        Returns:
+            `True` if the user has sufficient access; `False` otherwise.
+        """
+        if self.user_access is not None:
+            return self.user_access.allowed
+
+        def _cache(result: UserAccessResult) -> bool:
+            self.user_access = result
+            return result.allowed
+
+        if self.author.bot:
+            return _cache(UserAccessResult(UserAccessDenyReason.BOT))
+
+        if self.command is None:  # pragma: nocover ; When would this happen?
+            logger.debug("Context.check_user_access called without a command")
+            return _cache(UserAccessResult(UserAccessAllowReason.UNKNOWN))
+
+        if await self.bot.is_owner(self.author):
+            return _cache(UserAccessResult(UserAccessAllowReason.OWNER))
+
+        command_access_level = self.bot.get_command_access_level(self.command)
+
+        if (
+            CONFIG.permission.discord_admin_bypass
+            and isinstance(self.author, discord.Member)
+            and self.author.guild_permissions.administrator
+            and command_access_level != RequiredAccessLevel.owner
+        ):
+            return _cache(UserAccessResult(UserAccessAllowReason.DISCORD_ADMIN_BYPASS))
+
+        all_profiles = self.bot.get_all_user_profiles(self.author)
+        commands_to_check = [self.command, *self.command.parents]
+
+        for i, command in enumerate(commands_to_check):
+            command_name = self.bot.get_canonical_command_name(command)
+            for profile in all_profiles:
+                if i == 0:
+                    if (
+                        override := profile.permission_overrides.get(command_name)
+                    ) == PermissionOverrideValue.deny:
+                        return _cache(
+                            UserAccessResult(
+                                UserAccessDenyReason.PROFILE_DENY,
+                                profile_id=profile.profile_id,
+                                command_name=command_name,
+                            )
+                        )
+                    if override == PermissionOverrideValue.allow:
+                        return _cache(
+                            UserAccessResult(
+                                UserAccessAllowReason.PROFILE_ALLOW,
+                                profile_id=profile.profile_id,
+                                command_name=command_name,
+                            )
+                        )
+                elif command_access_level == RequiredAccessLevel.owner:
+                    # Owner-only commands cannot be overridden by wildcard overrides on parent.
+                    # However, when i=0, the wildcard override is checked on the exact command name.
+                    break
+
+                wildcard_key = command_name + "+"
+                if (wildcard := profile.permission_overrides.get(wildcard_key)) == PermissionOverrideValue.deny:
+                    return _cache(
+                        UserAccessResult(
+                            UserAccessDenyReason.PROFILE_DENY,
+                            profile_id=profile.profile_id,
+                            command_name=wildcard_key,
+                        )
+                    )
+                if wildcard == PermissionOverrideValue.allow:
+                    return _cache(
+                        UserAccessResult(
+                            UserAccessAllowReason.PROFILE_ALLOW,
+                            profile_id=profile.profile_id,
+                            command_name=wildcard_key,
+                        )
+                    )
+
+        if command_access_level == RequiredAccessLevel.owner:
+            return _cache(UserAccessResult(UserAccessDenyReason.OWNER_ONLY))
+
+        if CONFIG.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
+            return _cache(UserAccessResult(UserAccessAllowReason.EVERYONE))
+
+        for profile in all_profiles:
+            if profile.access_level is not None and profile.access_level >= command_access_level:
+                return _cache(
+                    UserAccessResult(
+                        UserAccessAllowReason.LEVEL_MATCH,
+                        profile_id=profile.profile_id,
+                        profile_access_level=profile.access_level,
+                        required_level=command_access_level,
+                    )
+                )
+
+        return _cache(
+            UserAccessResult(UserAccessDenyReason.INSUFFICIENT_ACCESS, required_level=command_access_level)
+        )
 
 
 class PromptView(BaseLayoutView):

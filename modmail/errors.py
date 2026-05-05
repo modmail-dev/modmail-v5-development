@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     import discord
     from discord.app_commands import locale_str
 
+    from modmail.core.context import UserAccessResult
+
 __all__ = [
     "BadPermissionsError",
     "CacheNotReadyError",
@@ -33,6 +35,7 @@ __all__ = [
     "TicketCreationError",
     "TicketNotFoundError",
     "TicketRecipientOccupiedError",
+    "UserAccessError",
 ]
 
 
@@ -206,3 +209,23 @@ class LocalizedBadArgumentError(ModmailError, commands.BadArgument):
         """
         self.locale_key = key
         super().__init__(str(key))
+
+
+class UserAccessError(ModmailError, commands.CheckFailure):
+    """Raised when a user is denied access to a command.
+
+    Wraps the full [`UserAccessResult`][] so callers have structured access
+    to the denial reason without inspecting the context.
+
+    Attributes:
+        result: The denial outcome produced by [`Context.check_user_access`][].
+    """
+
+    def __init__(self, result: UserAccessResult) -> None:
+        """Initialize with the denial result.
+
+        Args:
+            result: The [`UserAccessResult`][] with `allowed=False`.
+        """
+        self.result = result
+        super().__init__(str(result))

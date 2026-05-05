@@ -20,6 +20,7 @@ from ..errors import (
     InstanceAlreadyRunningError,
     LocalizedBadArgumentError,
     NoStaffGuildError,
+    UserAccessError,
 )
 from .context import Context
 from .embed import EmbedProxy
@@ -99,7 +100,7 @@ class Bot(commands.Bot):
         """Primary interface to the configured backend database."""
 
         self.add_check(self._bot_can_run_check)
-        self.add_check(self._permission_check)
+        self.add_check(self._user_access_check)
         self.before_invoke(self.on_before_invoke)
 
     @staticmethod
@@ -571,12 +572,13 @@ class Bot(commands.Bot):
                     )
                 return
 
-            if getattr(context, "perm_check_reason", "").startswith("fail:"):
+            if isinstance(exc, UserAccessError):
                 logger.debug(
-                    "%s is not allowed to run `%s` (%s)",
+                    "[bold]%s[/bold] denied `%s` — [red]%s[/red]",
                     context.author,
                     context.command,
-                    getattr(context, "perm_check_reason", ""),
+                    exc.result,
+                    extra={"markup": True, "highlighter": None},
                 )
                 if context.interaction is not None and not context.interaction.is_expired():
                     await self.send_message(
@@ -643,21 +645,19 @@ class Bot(commands.Bot):
 
     @staticmethod
     async def on_before_invoke(ctx: Context) -> None:
-        """Log each command invocation, including the permission-check result when available.
+        """Log each command invocation, including the access-check result when available.
 
         Args:
             ctx: The invocation context.
         """
-        if hasattr(ctx, "perm_check_reason"):  # This gets injected by the permission check
-            # noinspection PyProtectedMember
-            logger.debug(
-                "%s is running `%s`, allowed reason (%s)",
-                ctx.author,
-                ctx.command,
-                ctx.perm_check_reason,
-            )
-        else:
-            logger.debug("User %s is running the %s command.", ctx.author, ctx.command)
+        access = f" — [green]{ctx.user_access}[/green]" if ctx.user_access is not None else ""
+        logger.debug(
+            "[bold]%s[/bold] invoked `%s`%s",
+            ctx.author,
+            ctx.command,
+            access,
+            extra={"markup": True, "highlighter": None},
+        )
 
     def add_command(self, command: commands.Command[Any, Any, Any]) -> None:
         """Register `command` and warn if its callback name doesn't follow the `_command` convention.
@@ -771,94 +771,25 @@ class Bot(commands.Bot):
             all_profiles.insert(0, user_profile)
         return all_profiles
 
-    async def _permission_check(self, ctx: Context) -> bool:
-        """Return `True` when the invoking user has permission to run the command.
-
-        Evaluates owner bypass, Discord admin bypass, config overrides, wildcard overrides,
-        and profile access levels in that order. Sets `ctx.perm_check_reason` for logging.
+    @staticmethod
+    async def _user_access_check(ctx: Context) -> bool:
+        """Delegate to [`Context.check_user_access`][]; raise [`UserAccessError`][] on denial.
 
         Args:
             ctx: The invocation context.
 
         Returns:
-            `True` if the user may run the command, `False` otherwise.
+            Always `True`; denial is signaled by raising [`UserAccessError`][].
+
+        Raises:
+            UserAccessError: If the user lacks the required access level.
+            RuntimeError: If `ctx.user_access` is `None`, which should not happen.
         """
-        if ctx.author.bot:  # Ignore commands invoked by bots
-            ctx.perm_check_reason = "fail: bot"
-            return False
-
-        if ctx.command is None:  # pragma: nocover ; When would this happen?
-            logger.warning("The context command is None? %s", ctx)
-            return True
-
-        if await self.is_owner(ctx.author):
-            ctx.perm_check_reason = "pass: owner"
-            return True
-
-        command_access_level = self.get_command_access_level(ctx.command)
-
-        if (
-            CONFIG.permission.discord_admin_bypass
-            and isinstance(ctx.author, discord.Member)
-            and ctx.author.guild_permissions.administrator
-            and command_access_level != RequiredAccessLevel.owner
-        ):
-            ctx.perm_check_reason = "pass: discord admin bypass"
-            return True
-
-        all_profiles = self.get_all_user_profiles(ctx.author)
-
-        # If the command is a subcommand, if so, add the parents of the command (in reverse order).
-        commands_to_check = [ctx.command, *ctx.command.parents]
-
-        for i, command in enumerate(commands_to_check):
-            command_name = self.get_canonical_command_name(command)
-
-            for profile in all_profiles:
-                if i == 0:  # Check for override on the exact command name
-                    if profile.permission_overrides.get(command_name) == PermissionOverrideValue.deny:
-                        ctx.perm_check_reason = f"fail: {profile.profile_id} deny {command_name}"
-                        return False
-                    if profile.permission_overrides.get(command_name) == PermissionOverrideValue.allow:
-                        ctx.perm_check_reason = f"pass: {profile.profile_id} allow {command_name}"
-                        return True
-                elif command_access_level == RequiredAccessLevel.owner:
-                    # Owner-only commands cannot be overridden by wildcard overrides on parent.
-                    # However, when i=0, the wildcard override is checked on the exact command name.
-                    break
-
-                # Check for wildcard override (on parents). e.g. "profile+" will match "profile add"
-                if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.deny:
-                    ctx.perm_check_reason = f"fail: {profile.profile_id} deny {command_name}+"
-                    return False
-
-                if profile.permission_overrides.get(command_name + "+") == PermissionOverrideValue.allow:
-                    ctx.perm_check_reason = f"pass: {profile.profile_id} allow {command_name}+"
-                    return True
-
-        # Owner check
-        if command_access_level == RequiredAccessLevel.owner:
-            ctx.perm_check_reason = "fail: owner only"
-            return False
-
-        if CONFIG.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
-            # If the command is set to everyone, allow it.
-            ctx.perm_check_reason = "pass: everyone"
-            return True
-
-        for profile in all_profiles:
-            if profile.access_level is None:
-                continue
-
-            # Check if the user has the required access level for the command.
-            if profile.access_level >= command_access_level:
-                ctx.perm_check_reason = (
-                    f"pass: {profile.profile_id} level {profile.access_level} >= {command_access_level}"
-                )
-                return True
-
-        ctx.perm_check_reason = f"fail: no access {command_access_level}"
-        return False
+        if not await ctx.check_user_access():
+            if ctx.user_access is None:
+                raise RuntimeError("ctx.user_access should be set by check_user_access, but is None")
+            raise UserAccessError(ctx.user_access)
+        return True
 
     async def _bot_can_run_check(self, ctx: Context) -> bool:
         """Always return `True`; channel-permission validation is not yet implemented.

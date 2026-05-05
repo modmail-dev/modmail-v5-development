@@ -156,6 +156,45 @@ class PermissionOverrideValue(enum.Enum):
     deny = "deny"
 
 
+class UserAccessDenyReason(enum.StrEnum):
+    """Why a user was denied access to a command.
+
+    Attributes:
+        BOT: The invoking user is a bot account.
+        OWNER_ONLY: The command is restricted to the bot owner.
+        PROFILE_DENY: A profile override explicitly denies access.
+        INSUFFICIENT_ACCESS: The user's highest access level is below the required level.
+        UNKNOWN: The user was denied access for an unknown reason.
+    """
+
+    BOT = "bot"
+    OWNER_ONLY = "owner_only"
+    PROFILE_DENY = "profile_deny"
+    INSUFFICIENT_ACCESS = "insufficient_access"
+    UNKNOWN = "unknown"
+
+
+class UserAccessAllowReason(enum.StrEnum):
+    """Why a user was granted access to a command.
+
+    Attributes:
+        OWNER: The user is the bot owner.
+        DISCORD_ADMIN_BYPASS: The user holds the Discord Administrator permission and the
+            bypass is enabled.
+        PROFILE_ALLOW: A profile override explicitly allows access.
+        EVERYONE: The command requires no special access and the everyone-default is on.
+        LEVEL_MATCH: The user's profile access level meets or exceeds the required level.
+        UNKNOWN: The user was granted access for an unknown reason.
+    """
+
+    OWNER = "owner"
+    DISCORD_ADMIN_BYPASS = "discord_admin_bypass"
+    PROFILE_ALLOW = "profile_allow"
+    EVERYONE = "everyone"
+    LEVEL_MATCH = "level_match"
+    UNKNOWN = "unknown"
+
+
 # Technically, this is not an enum, but storing in this file for consistency.
 class ProfileKey(NamedTuple):
     """A composite key identifying a profile.
