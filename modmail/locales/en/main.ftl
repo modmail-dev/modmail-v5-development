@@ -340,6 +340,7 @@ ftl-msg-grant-access-reason = Granting access to { $user_or_role } to Modmail ca
 ftl-msg-revoke-access-reason = Revoking access to { $user_or_role } to Modmail category and channels.
 
 ftl-msg-permission-denied = You do not have permission to use this command.
+ftl-msg-bad-permissions = I'm missing the following permissions here: { $permissions }.
 ftl-msg-command-invoke-error = An unknown error occurred while processing your command, try again later.
                                If the problem persists, please check your logs and report the error to the Modmail team.
 

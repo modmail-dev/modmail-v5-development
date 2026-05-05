@@ -935,7 +935,7 @@ async def profile_command(cog: Utility, ctx: Context) -> None:
     """
     profiles = ctx.bot.database_client.profiles
     if not profiles:
-        await ctx.reply(_("ftl-cmd-profile-list-empty"))
+        await ctx.reply(_("ftl-cmd-profile-list-empty"), ephemeral=True)
         return
 
     sorted_profiles = sorted(profiles, key=lambda p: (-int(p.access_level or 0), p.profile_type.value))
@@ -1007,7 +1007,7 @@ async def profile_delete_command(
             no longer exists (`None` when using `target` instead).
     """
     if target is not None and id_ is not None:
-        await ctx.reply(_("ftl-cmd-profile-delete-both"))
+        await ctx.reply(_("ftl-cmd-profile-delete-both"), ephemeral=True)
         return
 
     if target is not None:
@@ -1015,11 +1015,11 @@ async def profile_delete_command(
     elif id_ is not None:
         profile = next((p for p in ctx.bot.database_client.profiles if p.profile_id == id_), None)
     else:
-        await ctx.reply(_("ftl-cmd-profile-delete-none"))
+        await ctx.reply(_("ftl-cmd-profile-delete-none"), ephemeral=True)
         return
 
     if profile is None:
-        await ctx.reply(_("ftl-cmd-profile-delete-not-found"))
+        await ctx.reply(_("ftl-cmd-profile-delete-not-found"), ephemeral=True)
         return
 
     try:

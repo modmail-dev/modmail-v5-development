@@ -70,12 +70,12 @@ class _ViewMixin:
 
     def defer(self, interaction: discord.Interaction) -> None:
         """Fire-and-forget defer — no-op if the response is already done."""
-        if interaction.response.is_done():
+        if interaction.is_expired() or interaction.response.is_done():
             return
 
         async def respond() -> None:
             async with self._response_lock_for(interaction):
-                if interaction.response.is_done():
+                if interaction.is_expired() or interaction.response.is_done():
                     return
                 with contextlib.suppress(discord.HTTPException):
                     await interaction.response.defer()
@@ -93,14 +93,14 @@ class _ViewMixin:
         delete_after: float | None = 6.0,
         **kwargs: Any,
     ) -> discord.WebhookMessage | None:
-        """Send an ephemeral response, routing to `send_message` or `followup.send`.
+        """Send an ephemeral response, routing to `interaction.response.send_message` or `followup.send`.
 
         Args:
             interaction: The interaction to respond to.
             content: Plain string sent as-is, or a [`locale_str`][] translated via [`Context.t`][].
             ephemeral: Whether to send as an ephemeral message.
             delete_after: Seconds before auto-deletion (`None` to keep).
-            **kwargs: Forwarded to `send_message` or `followup.send`.
+            **kwargs: Forwarded to `interaction.response.send_message` or `followup.send`.
 
         Returns:
             The webhook message if sent using the followup webhook, else `None`.
@@ -115,7 +115,7 @@ class _ViewMixin:
             pos_args.append(content)
 
         async with self._response_lock_for(interaction):
-            if not interaction.response.is_done():
+            if not interaction.is_expired() and not interaction.response.is_done():
                 with contextlib.suppress(discord.HTTPException):
                     await interaction.response.send_message(
                         *pos_args, ephemeral=ephemeral, delete_after=delete_after, **kwargs
@@ -173,7 +173,7 @@ class BaseLayoutView(_ViewMixin, discord.ui.LayoutView):
         async def edit() -> None:
             if interaction is not None:
                 async with self._response_lock_for(interaction):
-                    if not interaction.response.is_done():
+                    if not interaction.is_expired() and not interaction.response.is_done():
                         with contextlib.suppress(discord.HTTPException):
                             await interaction.response.edit_message(view=self)
                         return

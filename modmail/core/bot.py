@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from typing import TYPE_CHECKING, Any, ClassVar, NoReturn, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, NoReturn, cast, overload
 
 import discord
 from discord.ext import commands
@@ -14,7 +14,13 @@ from packaging.version import Version
 from .. import CONFIG, __version__
 from ..backends import create_db_client
 from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
-from ..errors import DatabaseError, InstanceAlreadyRunningError, LocalizedBadArgumentError, NoStaffGuildError
+from ..errors import (
+    BadPermissionsError,
+    DatabaseError,
+    InstanceAlreadyRunningError,
+    LocalizedBadArgumentError,
+    NoStaffGuildError,
+)
 from .context import Context
 from .embed import EmbedProxy
 from .permission import PermissionCommandIndex
@@ -540,17 +546,31 @@ class Bot(commands.Bot):
             return
 
         if isinstance(exc, LocalizedBadArgumentError):
-            message = self.translate(exc.locale_key, ctx_or_locale=context)
-            if context.interaction is not None:
-                await context.reply(message, ephemeral=True)
-            else:
-                # Always true for DM channel and group channel
-                permissions = context.channel.permissions_for(context.me)  # pyright: ignore[reportArgumentType]
-                if permissions.read_messages and permissions.send_messages:
-                    await context.reply(message)
+            await self.send_message(
+                exc.locale_key, channel=context, ephemeral=True, reference=context.message, fail_silently=True
+            )
             return
 
         if isinstance(exc, commands.CheckFailure | discord.app_commands.CheckFailure):
+            if isinstance(exc, BadPermissionsError):
+                missing_names = (
+                    [name.upper() for name, val in exc.missing if val] if exc.missing is not None else []
+                )
+                logger.warning(
+                    "Missing permissions in %r: %s",
+                    exc.channel,
+                    ", ".join(missing_names) if missing_names else "unknown",
+                )
+                if missing_names:
+                    await self.send_message(
+                        _("ftl-msg-bad-permissions", permissions=", ".join(missing_names)),
+                        channel=context,
+                        ephemeral=True,
+                        reference=context.message,
+                        fail_silently=True,
+                    )
+                return
+
             if getattr(context, "perm_check_reason", "").startswith("fail:"):
                 logger.debug(
                     "%s is not allowed to run `%s` (%s)",
@@ -558,9 +578,10 @@ class Bot(commands.Bot):
                     context.command,
                     getattr(context, "perm_check_reason", ""),
                 )
-                if context.interaction is not None:
-                    message = self.translate(_("ftl-msg-permission-denied"), ctx_or_locale=context)
-                    await context.reply(message, ephemeral=True)
+                if context.interaction is not None and not context.interaction.is_expired():
+                    await self.send_message(
+                        _("ftl-msg-permission-denied"), channel=context, ephemeral=True, reference=context.message
+                    )
             return
 
         # commands.CommandInvokeError — prefix command body raised an exception.
@@ -571,6 +592,10 @@ class Bot(commands.Bot):
                 await self._not_in_guild_close()
                 return
 
+            if isinstance(exc.original, commands.CheckFailure):
+                await self.on_command_error(context, exc.original)
+                return
+
             logger.info(
                 "[red]Command %s failed with an uncaught error: %s",
                 context.command,
@@ -579,14 +604,13 @@ class Bot(commands.Bot):
                 extra={"markup": True},
             )
 
-            message = self.translate(_("ftl-msg-command-invoke-error"), ctx_or_locale=context)
-            if context.interaction is not None:
-                await context.reply(message, ephemeral=True)
-            else:
-                # Always true for DM channel and group channel
-                permissions = context.channel.permissions_for(context.me)  # pyright: ignore[reportArgumentType]
-                if permissions.read_messages and permissions.send_messages:
-                    await context.reply(message)
+            await self.send_message(
+                _("ftl-msg-command-invoke-error"),
+                channel=context,
+                ephemeral=True,
+                reference=context.message,
+                fail_silently=True,
+            )
             return
 
         await super().on_command_error(context, exception)
@@ -600,10 +624,21 @@ class Bot(commands.Bot):
             **kwargs: Keyword arguments passed to the event.
         """
         exc_info = sys.exc_info()
+        exc = exc_info[1]
 
-        if isinstance(exc_info[1], NoStaffGuildError):
+        if isinstance(exc, NoStaffGuildError):
             await self._not_in_guild_close()
             return
+
+        if isinstance(exc, BadPermissionsError):
+            missing_names = [name.upper() for name, val in exc.missing if val] if exc.missing is not None else []
+            logger.warning(
+                "Missing permissions in %r: %s",
+                exc.channel,
+                ", ".join(missing_names) if missing_names else "unknown",
+            )
+            return
+
         await super().on_error(event_method, *args, **kwargs)
 
     @staticmethod
@@ -870,48 +905,142 @@ class Bot(commands.Bot):
             return string.message
         return message
 
+    @overload
+    async def send_message(
+        self,
+        content: str | discord.app_commands.locale_str | None = ...,
+        *,
+        channel: discord.abc.Messageable,
+        ephemeral: bool = ...,
+        containerize: bool | None = ...,
+        container_color: discord.Color | int | None = ...,
+        original_message: discord.Message | None = ...,
+        fail_silently: Literal[False] = ...,
+        **kwargs: Any,
+    ) -> discord.Message: ...
+
+    @overload
+    async def send_message(
+        self,
+        content: str | discord.app_commands.locale_str | None = ...,
+        *,
+        channel: discord.abc.Messageable,
+        ephemeral: bool = ...,
+        containerize: bool | None = ...,
+        container_color: discord.Color | int | None = ...,
+        original_message: discord.Message | None = ...,
+        fail_silently: Literal[True],
+        **kwargs: Any,
+    ) -> discord.Message | None: ...
+
     async def send_message(
         self,
         content: str | discord.app_commands.locale_str | None = None,
         *,
         channel: discord.abc.Messageable,
-        auto_embed: bool = True,
+        ephemeral: bool = False,
+        containerize: bool | None = None,
+        container_color: discord.Color | int | None = None,
         original_message: discord.Message | None = None,
+        fail_silently: bool = False,
         **kwargs: Any,
-    ) -> discord.Message:
-        """Send (or edit) a message, translating locale strings and auto-embedding plain text.
+    ) -> discord.Message | None:
+        """Send (or edit) a message, translating locale strings.
 
-        When `auto_embed` is `True` and no `embed`/`embeds` kwarg is provided, wraps `content`
-        in an [`EmbedProxy`][]. When `original_message` is given, edits it instead of sending
-        a new message. Locale is derived from the interaction when `channel` is a [`Context`][].
+        When `containerize` is `None` (the default), public messages are wrapped in a Component V2
+        [`discord.ui.Container`][] and ephemeral ones are sent as plain text. Pass `True` or `False`
+        to override. Wrapping is suppressed when a `view`, `embed`, or `embeds` kwarg is present, or
+        when `content` is `None`. When `original_message` is given, edits it instead of sending a new
+        message. Locale is derived from the interaction when `channel` is a [`Context`][].
 
         Args:
             content: Text or locale string to send.
             channel: Destination channel or [`Context`][].
-            auto_embed: Wrap plain `content` in an embed automatically.
+            ephemeral: Whether the message should be ephemeral or not.
+            containerize: Wrap plain `content` in a Component V2 container. `None` wraps public
+                messages and skips ephemeral ones automatically.
+            container_color: Accent color for the container's left bar (`None` uses Discord's default).
             original_message: Edit this message instead of sending a new one.
+            fail_silently: When `True`, return `None` instead of raising [`BadPermissionsError`][]
+                if the bot lacks required permissions. Defaults to `False`.
             **kwargs: Forwarded to `send` or `edit` (e.g. `embed`, `embeds`, `ephemeral`).
 
         Returns:
-            The sent or edited [`discord.Message`][].
+            The sent or edited [`discord.Message`][], or `None` if `fail_silently` is `True` and
+            the bot lacks the required permissions.
+
+        Raises:
+            BadPermissionsError: If the bot lacks the required permissions and `fail_silently` is
+                `False`.
+            discord.HTTPException: If the send or edit request fails and `fail_silently` is `False`.
         """
         locale: discord.Locale | str = CONFIG.default_locale
+        require_perm_check = True
 
         if isinstance(channel, commands.Context):
-            channel = cast("Context", channel)
-            if channel.interaction is not None and kwargs.get("ephemeral"):
-                locale = channel.interaction.locale
+            channel = cast("commands.Context[Any]", channel)
+            kwargs["ephemeral"] = ephemeral
+            if channel.interaction is not None and not channel.interaction.is_expired():
+                require_perm_check = False
+                if ephemeral:
+                    locale = channel.interaction.locale
 
-        if "embed" in kwargs or "embeds" in kwargs or content is None:
-            auto_embed = False
+        if require_perm_check:
+            required_perms = discord.Permissions.none()
+            required_perms.read_messages = True
 
-        if auto_embed:
-            embed = EmbedProxy(description=content)  # TODO: Format with color/style
-            kwargs["embed"] = embed.to_embed(self.translator, locale)
-            content = None
+            if isinstance(channel, discord.Thread):
+                required_perms.send_messages_in_threads = True
+            elif isinstance(channel, commands.Context) and isinstance(channel.channel, discord.Thread):
+                channel = cast("commands.Context[Any]", channel)
+                required_perms.send_messages_in_threads = True
+            else:
+                required_perms.send_messages = True
+            if kwargs.get("tts"):
+                required_perms.send_tts_messages = True
+            if "embed" in kwargs or "embeds" in kwargs:
+                required_perms.embed_links = True
+            if "file" in kwargs or "files" in kwargs:
+                required_perms.attach_files = True
+            if "poll" in kwargs:
+                required_perms.send_polls = True
+
+            perms = None
+            if isinstance(channel, discord.Thread | discord.abc.GuildChannel):
+                perms = channel.permissions_for(channel.guild.me)
+            elif isinstance(channel, discord.DMChannel | discord.GroupChannel):
+                perms = channel.permissions_for(channel.me)
+            elif isinstance(channel, commands.Context):
+                channel = cast("commands.Context[Any]", channel)
+                perms = channel.channel.permissions_for(channel.me)  # pyright: ignore [reportArgumentType]
+
+            if perms is not None:
+                missing = ~perms & required_perms
+                if missing.value:
+                    if fail_silently:
+                        logger.debug("Skipping send to %r — missing permissions: %s", channel, missing)
+                        return None
+                    raise BadPermissionsError(channel=cast("discord.abc.Messageable", channel), missing=missing)
 
         if isinstance(content, discord.app_commands.locale_str):
             content = self.translate(content, ctx_or_locale=locale)
+
+        if containerize is None:
+            containerize = not ephemeral
+
+        if "view" in kwargs or "embed" in kwargs or "embeds" in kwargs:
+            containerize = False
+
+        if containerize and content:
+            container_view = discord.ui.LayoutView(timeout=None)
+            container_view.add_item(
+                discord.ui.Container(
+                    discord.ui.TextDisplay(content),
+                    accent_color=container_color,
+                )
+            )
+            kwargs["view"] = container_view
+            content = None
 
         if "embed" in kwargs:
             embed = kwargs["embed"]
@@ -927,10 +1056,18 @@ class Bot(commands.Bot):
                     embeds.append(embed)
             kwargs["embeds"] = embeds
 
-        if not isinstance(channel, commands.Context):
-            kwargs.pop("ephemeral", None)
+        try:
+            if original_message is not None:
+                kwargs.pop("reference", None)
+                kwargs.pop("ephemeral", None)
+                return await original_message.edit(content=content, **kwargs)
 
-        if original_message is not None:
-            kwargs.pop("reference", None)
-            return await original_message.edit(content=content, **kwargs)
-        return await channel.send(content, **kwargs)
+            if isinstance(channel, Context):
+                return await super(Context, channel).send(content, **kwargs)
+            return await channel.send(content, **kwargs)
+
+        except discord.HTTPException as exc:
+            if fail_silently:
+                logger.debug("Skipping send to %r — HTTP error: %r", channel, exc)
+                return None
+            raise

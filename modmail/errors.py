@@ -13,6 +13,7 @@ from discord.ext import commands
 if TYPE_CHECKING:
     import datetime
 
+    import discord
     from discord.app_commands import locale_str
 
 __all__ = [
@@ -122,11 +123,33 @@ class NoTicketChannelError(ModmailError):
     """
 
 
-class BadPermissionsError(ModmailError):
-    """Exception for when the bot lacks necessary permissions.
+class BadPermissionsError(ModmailError, commands.CheckFailure):
+    """Exception raised when the bot lacks permissions required to complete an operation."""
 
-    Raised when an operation requires certain permissions but the bot does not have them.
-    """
+    def __init__(
+        self,
+        *,
+        channel: discord.abc.Messageable | discord.abc.GuildChannel | discord.Guild | None,
+        missing: discord.Permissions | None = None,
+    ) -> None:
+        """Initialize the error.
+
+        Args:
+            channel: The channel or guild in which the permission check failed.
+            missing: Permissions that are required but not held.
+        """
+        self.channel = channel
+        """The channel or guild in which the permission check failed"""
+        self.missing = missing
+        """Permissions that are missing"""
+        parts: list[str] = []
+        if channel is not None:
+            parts.append(f"in {channel!r}")
+        if missing is not None:
+            names = [name for name, val in missing if val]
+            parts.append(f"missing: {', '.join(names)}")
+        message = "Bot lacks required permissions" + (f" ({'; '.join(parts)})" if parts else "") + "."
+        super().__init__(message)
 
 
 class TicketCreationError(ModmailError):

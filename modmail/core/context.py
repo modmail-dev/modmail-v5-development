@@ -35,11 +35,13 @@ class Context(commands.Context[Any]):
     perm_check_reason: str
     """Outcome of the permission check for this invocation (absent if the check has not yet run)."""
 
-    async def send_message(
+    async def send(
         self,
         content: AnyStr | None = None,
         *,
-        auto_embed: bool = True,
+        ephemeral: bool = False,
+        containerize: bool | None = None,
+        container_color: discord.Color | int | None = None,
         original_message: discord.Message | None = None,
         **kwargs: Any,
     ) -> discord.Message:
@@ -47,38 +49,62 @@ class Context(commands.Context[Any]):
 
         Args:
             content: Text or locale string to send.
-            auto_embed: Wrap plain `content` in an embed automatically.
+            ephemeral: Whether the message should be ephemeral or not.
+            containerize: Wrap plain `content` in a Component V2 container.
+            container_color: Accent color for the container's left bar.
             original_message: Edit this message instead of sending a new one.
             **kwargs: Forwarded to [`Bot.send_message`][].
 
         Returns:
             The sent [`discord.Message`][].
+
+        Raises:
+            BadPermissionsError: If the bot lacks the required permissions.
+            discord.HTTPException: If the send or edit request fails.
         """
         return await self.bot.send_message(
-            content, channel=self, auto_embed=auto_embed, original_message=original_message, **kwargs
+            content,
+            **kwargs,
+            channel=self,
+            ephemeral=ephemeral,
+            containerize=containerize,
+            container_color=container_color,
+            original_message=original_message,
+            fail_silently=False,
         )
 
     async def reply(
         self,
         content: AnyStr | None = None,
         *,
-        auto_embed: bool = True,
+        ephemeral: bool = False,
+        containerize: bool | None = None,
+        container_color: discord.Color | int | None = None,
         **kwargs: Any,
     ) -> discord.Message:
         """Reply to the invoking message, or send normally for slash commands.
 
         Args:
             content: Text or locale string to send.
-            auto_embed: Wrap plain `content` in an embed automatically.
+            ephemeral: Whether the message should be ephemeral or not.
+            containerize: Wrap plain `content` in a Component V2 container.
+            container_color: Accent color for the container's left bar.
             **kwargs: Forwarded to [`Bot.send_message`][].
 
         Returns:
             The sent [`discord.Message`][].
+
+        Raises:
+            BadPermissionsError: If the bot lacks the required permissions.
+            discord.HTTPException: If the send or edit request fails.
         """
         if self.interaction is None:
             kwargs.setdefault("reference", self.message)
         kwargs["original_message"] = None
-        return await self.bot.send_message(content, channel=self, auto_embed=auto_embed, **kwargs)
+
+        return await self.send(
+            content, **kwargs, ephemeral=ephemeral, containerize=containerize, container_color=container_color
+        )
 
     async def prompt(
         self,
@@ -102,16 +128,17 @@ class Context(commands.Context[Any]):
             `(prompt_message, user_reply)` — the second item is `None` if canceled or timed out.
 
         Raises:
-            asyncio.CancelledError: If the wait is interrupted externally (not by the cancel button).
+            BadPermissionsError: If the bot lacks the required permissions.
+            discord.HTTPException: If the send or edit request fails.
         """
         wait_for = float(wait_for)
 
         view = PromptView(ctx=self, content=content or "", timeout=wait_for)
 
         if reply:
-            prompt_message = await self.reply(auto_embed=False, view=view, **kwargs)
+            prompt_message = await self.reply(view=view, **kwargs)
         else:
-            prompt_message = await self.send_message(auto_embed=False, view=view, **kwargs)
+            prompt_message = await self.send(view=view, **kwargs)
         view.message = prompt_message
 
         timed_out = await view.wait()
@@ -142,15 +169,19 @@ class Context(commands.Context[Any]):
 
         Returns:
             `(prompt_message, selected_index)` — the second item is `None` if canceled or timed out.
+
+        Raises:
+            BadPermissionsError: If the bot lacks the required permissions.
+            discord.HTTPException: If the send or edit request fails.
         """
         wait_for = float(wait_for)
 
         view = PromptChoicesView(ctx=self, content=content or "", choices=choices, timeout=wait_for)
 
         if reply:
-            prompt_message = await self.reply(auto_embed=False, view=view, **kwargs)
+            prompt_message = await self.reply(view=view, **kwargs)
         else:
-            prompt_message = await self.send_message(auto_embed=False, view=view, **kwargs)
+            prompt_message = await self.send(view=view, **kwargs)
         view.message = prompt_message
 
         timed_out = await view.wait()

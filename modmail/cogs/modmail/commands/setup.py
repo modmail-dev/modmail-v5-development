@@ -332,7 +332,7 @@ class SetupWizardView(BaseLayoutView):
                         return
 
                     min_perms = self._ctx.bot.staff_guild.MIN_PERMISSIONS
-                    if real_channel.permissions_for(interaction.guild.me) & min_perms != min_perms:
+                    if (~real_channel.permissions_for(interaction.guild.me) & min_perms).value:
                         await self.send(interaction, _("ftl-wizard-setup-select-existing-no-perms"))
                         return
 
@@ -490,11 +490,11 @@ async def setup_command(cog: Modmail, ctx: Context) -> None:
         ctx: The command context containing information about the invocation.
     """
     if ctx.guild is None or ctx.guild.id != ctx.bot.staff_guild.guild_id:
-        await ctx.reply(_("ftl-cmd-setup-wrong-guild", guild_name=ctx.bot.staff_guild.guild.name))
+        await ctx.reply(_("ftl-cmd-setup-wrong-guild", guild_name=ctx.bot.staff_guild.guild.name), ephemeral=True)
         return
 
     if setup_lock.locked():
-        await ctx.reply(_("ftl-cmd-setup-already-running"))
+        await ctx.reply(_("ftl-cmd-setup-already-running"), ephemeral=True)
         return
 
     async with setup_lock:
@@ -518,8 +518,8 @@ async def do_setup(ctx: Context) -> None:
     if ctx.guild is None:
         raise RuntimeError("Expected guild context for setup")
 
-    if ctx.guild.me.guild_permissions & ctx.bot.staff_guild.MIN_PERMISSIONS != ctx.bot.staff_guild.MIN_PERMISSIONS:
-        await ctx.reply(_("ftl-cmd-setup-not-enough-guild-permissions"))
+    if (~ctx.guild.me.guild_permissions & ctx.bot.staff_guild.MIN_PERMISSIONS).value:
+        await ctx.reply(_("ftl-cmd-setup-not-enough-guild-permissions"), ephemeral=True)
         logger.debug("Bot does not have enough permissions to run setup in %s", ctx.guild)
         return
 

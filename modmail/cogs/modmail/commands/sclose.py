@@ -55,11 +55,15 @@ async def sclose_command(
 
     Raises:
         ModmailError: If the command is invoked outside a Modmail ticket.
+        RuntimeError: If the command is invoked in a non-text channel, which should be impossible due
+            to the in_modmail_ticket check.
     """
-    if ctx.interaction is not None:
-        await ctx.reply(_("ftl-cmd-sclose-message-sending"), delete_after=3, ephemeral=True, auto_embed=False)
+    if not isinstance(ctx.channel, discord.TextChannel | discord.Thread):
+        raise RuntimeError("Command invoked in a non-text channel, which should be impossible.")
 
-    assert isinstance(ctx.channel, discord.TextChannel | discord.Thread)
+    if ctx.interaction is not None:
+        await ctx.reply(_("ftl-cmd-sclose-message-sending"), delete_after=3, ephemeral=True)
+
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
     if ticket is None:
         raise ModmailError("Ticket should not be None here.")

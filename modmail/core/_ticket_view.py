@@ -78,8 +78,9 @@ class TicketView:
             raise NoTicketChannelError("Ticket channel is not a text channel or thread.")
 
         perms = channel.permissions_for(channel.guild.me)
-        if perms & self.staff_guild.MIN_PERMISSIONS != self.staff_guild.MIN_PERMISSIONS:
-            raise BadPermissionsError("Bot does not have the required permissions to access the channel.")
+        missing = ~perms & self.staff_guild.MIN_PERMISSIONS
+        if missing.value:
+            raise BadPermissionsError(channel=channel, missing=missing)
         return channel
 
     @property

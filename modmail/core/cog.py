@@ -10,7 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from .. import CONFIG
-from ..errors import NotInTicketError, StaffGuildNotConfiguredError
+from ..errors import BadPermissionsError, NotInTicketError, StaffGuildNotConfiguredError
 
 if TYPE_CHECKING:
     from .bot import Bot
@@ -266,6 +266,7 @@ def in_modmail_ticket() -> Any:
         Raises:
             StaffGuildNotConfiguredError: If Modmail is not configured.
             NotInTicketError: If the channel is not an open ticket.
+            BadPermissionsError: If the bot is missing required permissions in the ticket channel.
         """
         if not ctx.bot.staff_guild.is_setup():
             raise StaffGuildNotConfiguredError("Modmail is not configured.")
@@ -273,9 +274,15 @@ def in_modmail_ticket() -> Any:
         if ctx.guild is None or ctx.guild.id != ctx.bot.staff_guild.guild_id:
             raise NotInTicketError("This command can only be used in Modmail tickets.")
 
+        perms = ctx.channel.permissions_for(ctx.me)  # pyright: ignore [reportArgumentType]
+        missing = ~perms & ctx.bot.staff_guild.MIN_PERMISSIONS
+        if missing.value:
+            raise BadPermissionsError(channel=ctx.channel, missing=missing)
+
         ticket_model = await ctx.bot.database_client.get_ticket_by_channel(ctx.channel.id, only_open=True)
         if ticket_model is None:
             raise NotInTicketError("This command can only be used in Modmail tickets.")
+
         return True
 
     return wrap(commands.guild_only)(wrap(lambda: commands.check(predicate)))
@@ -296,9 +303,6 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
         """
         self.bot = bot
         """The [`Bot`][] instance this cog is attached to."""
-
-    # TODO: Add a before invoke hook (here or in bot) that checks if using ctx.send()
-    # and warns to use cog.send().
 
 
 def create_cog(

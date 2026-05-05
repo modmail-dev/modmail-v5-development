@@ -61,16 +61,20 @@ async def reply_command(
 
     Raises:
         ModmailError: If the command is invoked outside a Modmail ticket (exception caught internally).
+        RuntimeError: If the command is invoked in a non-text channel, which should be impossible due
+            to the in_modmail_ticket check.
     """
+    if not isinstance(ctx.channel, discord.TextChannel | discord.Thread):
+        raise RuntimeError("Command invoked in a non-text channel, which should be impossible.")
+
     # TODO: Support sending stickers
     if not message and not attachment:
-        await ctx.reply(_("ftl-cmd-reply-message-empty"), ephemeral=True, auto_embed=False)
+        await ctx.reply(_("ftl-cmd-reply-message-empty"), ephemeral=True)
         return
 
     if ctx.interaction is not None:
-        await ctx.reply(_("ftl-cmd-reply-message-sending"), delete_after=3, ephemeral=True, auto_embed=False)
+        await ctx.reply(_("ftl-cmd-reply-message-sending"), delete_after=3, ephemeral=True)
 
-    assert isinstance(ctx.channel, discord.TextChannel | discord.Thread)
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
     if ticket is None:
         raise ModmailError("Ticket should not be None here.")
@@ -81,11 +85,11 @@ async def reply_command(
         if failed_recipients:
             # Send a message about the failed recipients
             failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
-            await ctx.send_message(_("ftl-cmd-reply-message-failed-recipients", recipients=failed_recipients_str))
+            await ctx.send(_("ftl-cmd-reply-message-failed-recipients", recipients=failed_recipients_str))
 
     except Exception:
         logger.exception("Failed to send reply in %s", ctx.channel)
-        await ctx.reply(_("ftl-cmd-reply-message-failed"))
+        await ctx.reply(_("ftl-cmd-reply-message-failed"), ephemeral=True)
     else:
         if ctx.interaction is not None:
             await ctx.interaction.delete_original_response()

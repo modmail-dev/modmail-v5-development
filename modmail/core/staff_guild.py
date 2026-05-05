@@ -154,11 +154,9 @@ class StaffGuild:
             )
 
         perms = category_or_forum.permissions_for(category_or_forum.guild.me)
-        if perms & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
-            logger.error("One or more essential permissions are missing from the main category or forum.")
-            raise BadPermissionsError(
-                "One or more essential permissions are missing from the main category or forum."
-            )
+        missing = ~perms & self.MIN_PERMISSIONS
+        if missing.value:
+            raise BadPermissionsError(channel=category_or_forum, missing=missing)
         return category_or_forum
 
     async def get_log_channel(self) -> discord.TextChannel | discord.Thread | None:
@@ -195,7 +193,7 @@ class StaffGuild:
             return None
 
         perms = channel.permissions_for(channel.guild.me)
-        if perms & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
+        if (~perms & self.MIN_PERMISSIONS).value:
             logger.warning("Some permissions are missing from the log channel, channel is unusable.")
             return None
         return channel
@@ -235,7 +233,7 @@ class StaffGuild:
             return None
 
         perms = channel.permissions_for(channel.guild.me)
-        if perms & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
+        if (~perms & self.MIN_PERMISSIONS).value:
             logger.critical("Some permissions are missing from the storage channel, channel is unusable.")
             return None
         return channel
@@ -327,8 +325,9 @@ class StaffGuild:
         log_channel: discord.TextChannel | discord.Thread
         storage_channel: discord.TextChannel
 
-        if self.guild.me.guild_permissions & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
-            raise BadPermissionsError("Bot lacks the minimum guild permissions required to run setup.")
+        missing = ~self.guild.me.guild_permissions & self.MIN_PERMISSIONS
+        if missing.value:
+            raise BadPermissionsError(channel=self.guild, missing=missing)
 
         if existing_channel_id is not None:
             resolved = self.guild.get_channel(existing_channel_id)
@@ -336,8 +335,10 @@ class StaffGuild:
                 raise NoModmailCategoryError(
                     f"Existing channel {existing_channel_id} not found or is the wrong type."
                 )
-            if resolved.permissions_for(resolved.guild.me) & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
-                raise BadPermissionsError("Bot lacks the minimum channel permissions required to run setup.")
+            perms = resolved.permissions_for(resolved.guild.me)
+            missing = ~perms & self.MIN_PERMISSIONS
+            if missing.value:
+                raise BadPermissionsError(channel=resolved, missing=missing)
 
             category_or_forum = resolved
             await category_or_forum.set_permissions(
@@ -574,7 +575,7 @@ class StaffGuild:
             await self.close_ticket(ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion)
             return None
 
-        if channel.permissions_for(channel.guild.me) & self.MIN_PERMISSIONS != self.MIN_PERMISSIONS:
+        if (~channel.permissions_for(channel.guild.me) & self.MIN_PERMISSIONS).value:
             # TODO: probably handle this differently, maybe alert staff that the channel is inaccessible
             #  and needs permissions fixed rather than silently closing the ticket
             logger.warning(

@@ -56,11 +56,15 @@ async def close_command(
 
     Raises:
         ModmailError: If the command is invoked outside a Modmail ticket.
+        RuntimeError: If the command is invoked in a non-text channel, which should be impossible due
+            to the in_modmail_ticket check.
     """
-    if ctx.interaction is not None:
-        await ctx.reply(_("ftl-cmd-close-message-sending"), delete_after=3, ephemeral=True, auto_embed=False)
+    if not isinstance(ctx.channel, discord.TextChannel | discord.Thread):
+        raise RuntimeError("Command invoked in a non-text channel, which should be impossible.")
 
-    assert isinstance(ctx.channel, discord.TextChannel | discord.Thread)
+    if ctx.interaction is not None:
+        await ctx.reply(_("ftl-cmd-close-message-sending"), delete_after=3, ephemeral=True)
+
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
     if ticket is None:
         raise ModmailError("Ticket should not be None here.")
@@ -74,11 +78,11 @@ async def close_command(
         if failed_recipients:
             # Send a message about the failed recipients
             failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
-            await ctx.send_message(_("ftl-cmd-close-message-failed-recipients", recipients=failed_recipients_str))
+            await ctx.send(_("ftl-cmd-close-message-failed-recipients", recipients=failed_recipients_str))
 
     except Exception:
         logger.exception("Failed to send close message in %s", ctx.channel)
-        await ctx.reply(_("ftl-cmd-close-message-failed"))
+        await ctx.reply(_("ftl-cmd-close-message-failed"), ephemeral=True)
     else:
         if ctx.interaction is not None:
             await ctx.interaction.delete_original_response()
