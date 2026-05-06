@@ -307,6 +307,7 @@ ftl-cmd-close-message-sending = Ticket wird geschlossen...
 ftl-cmd-close-message-failed-recipients = Die Schließnachricht konnte nicht an folgende Empfänger gesendet werden: { $recipients }.
                                           Sie haben möglicherweise DMs deaktiviert, mich blockiert oder teilen keinen Server mit mir.
 ftl-cmd-close-message-failed = Fehler beim Senden der Schließnachricht. Bitte überprüfe die Protokolle für weitere Informationen.
+ftl-cmd-close-failed = Fehler beim Schließen des Tickets. Bitte überprüfe die Protokolle für weitere Informationen.
 
 ## Command: Modmail.sclose
 
@@ -317,6 +318,7 @@ ftl-cmd-sclose-param-attachment-description = Der mit der Schließnachricht zu s
 ftl-cmd-sclose-param-message-name = nachricht
 ftl-cmd-sclose-param-message-description = Die als Schließnachricht zu speichernde Nachricht.
 ftl-cmd-sclose-message-sending = Ticket wird geschlossen...
+ftl-cmd-sclose-failed = Fehler beim Schließen des Tickets. Bitte überprüfe die Protokolle für weitere Informationen.
 
 ### ========================
 ###         Messages

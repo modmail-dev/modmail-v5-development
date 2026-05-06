@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import sys
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, NoReturn, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast, overload
 
 import discord
 from discord.ext import commands
@@ -29,6 +30,8 @@ from .staff_guild import StaffGuild
 from .translator import Translator, _
 
 if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
     from ..backends.common import ActivityModel, DBClient, ProfileModel
 
 logger = logging.getLogger(__name__)
@@ -38,9 +41,6 @@ __all__ = ["Bot"]
 
 class Bot(commands.Bot):
     """[`commands.Bot`][] subclass wiring together Modmail's database, permissions, and staff guild."""
-
-    asyncio_pending_tasks: ClassVar[set[asyncio.Task[Any]]] = set()
-    """Fire-and-forget tasks kept alive until they complete."""
 
     permission_command_index: PermissionCommandIndex
     """Locale-aware index of commands for permission override management, built at startup."""
@@ -86,6 +86,9 @@ class Bot(commands.Bot):
         discord.VoiceClient.warn_dave = False
 
         super().__init__(*args, **kwargs)
+
+        self._pending_tasks: set[asyncio.Task[Any]] = set()
+        """Fire-and-forget background tasks kept alive until they complete."""
 
         self.translator: Translator = Translator()
         """Handles FTL-based localization."""
@@ -285,6 +288,64 @@ class Bot(commands.Bot):
                     profile.model_copy(update={"permission_overrides": new_overrides})
                 )
 
+    def _task_done_callback(self, task: asyncio.Task[Any], *, suppress_errors: bool) -> None:
+        """Discard `task` from tracking and log any unhandled exception.
+
+        Args:
+            task: The completed task passed by the event loop.
+            suppress_errors: When `True`, log at DEBUG instead of ERROR level.
+        """
+        self._pending_tasks.discard(task)
+        if not task.cancelled() and (exc := task.exception()) is not None:
+            if suppress_errors:
+                logger.debug("Background task %r raised an exception", task.get_name(), exc_info=exc)
+            else:
+                logger.error("Background task %r raised an unhandled exception", task.get_name(), exc_info=exc)
+
+    def spawn_task[T](
+        self,
+        coro: Coroutine[Any, Any, T],
+        *,
+        name: str | None = None,
+        suppress_errors: bool = False,
+    ) -> asyncio.Task[T]:
+        """Schedule `coro` as a fire-and-forget background task.
+
+        The task is tracked in `_pending_tasks` to prevent premature garbage collection.
+        All in-flight tasks are canceled gracefully when the bot closes.
+
+        Args:
+            coro: The coroutine to run as a background task.
+            name: Optional name passed to [`asyncio.create_task`][].
+            suppress_errors: When `True`, unhandled exceptions are logged at DEBUG level
+                instead of ERROR. Use for best-effort operations where failure is expected
+                and non-critical (e.g. adding a reaction, deleting a message).
+
+        Returns:
+            The created [`asyncio.Task`][].
+        """
+        task: asyncio.Task[T] = asyncio.create_task(coro, name=name)
+        self._pending_tasks.add(task)
+        task.add_done_callback(functools.partial(self._task_done_callback, suppress_errors=suppress_errors))
+        return task
+
+    async def _cleanup(self) -> None:
+        """Cancel all in-flight background tasks and wait for them to stop.
+
+        Sends [`asyncio.Task.cancel`][] to every tracked task, then waits up to 5 seconds
+        for them to acknowledge cancellation. Each task times out independently — an exception
+        in one does not affect the others. Tasks still running after the timeout are logged
+        as a warning and dropped from tracking.
+        """
+        if self._pending_tasks:
+            logger.debug("Cancelling %d pending background task(s).", len(self._pending_tasks))
+            for task in list(self._pending_tasks):
+                task.cancel()
+            _, still_running = await asyncio.wait(self._pending_tasks, timeout=5.0)
+            if still_running:
+                logger.warning("%d background task(s) did not stop within the timeout.", len(still_running))
+            self._pending_tasks.clear()
+
     def run(self, *args: Any, **kwargs: Any) -> NoReturn:
         """Always raises; use [`run_bot`][] to start the bot.
 
@@ -311,12 +372,15 @@ class Bot(commands.Bot):
                 logger.warning("[red]Loading extension jishaku (this may be unsafe)", extra={"markup": True})
                 await self.load_extension("jishaku")
 
-            async with self:
-                logger.info("[bold green]Modmail is starting.", extra={"markup": True})
-                try:
+            try:
+                async with self:
+                    logger.info("[bold green]Modmail is starting.", extra={"markup": True})
                     await self.start(CONFIG.bot.token.get_secret_value(), reconnect=True)
-                finally:
+            finally:
+                try:
                     await self.database_client.disconnect()
+                finally:
+                    await self._cleanup()
 
         try:
             if not TYPE_CHECKING:

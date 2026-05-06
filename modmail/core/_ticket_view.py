@@ -107,17 +107,23 @@ class TicketView:
                     members_mapping[member.id].append(member)
         else:
             for guild in self.bot.guilds:
-                for recipient in self.recipients:
-                    try:
-                        member = await guild.fetch_member(recipient.id)
-                    except discord.NotFound:
+                results = await asyncio.gather(
+                    *[guild.fetch_member(r.id) for r in self.recipients],
+                    return_exceptions=True,
+                )
+                for recipient, result in zip(self.recipients, results, strict=True):
+                    if isinstance(result, discord.Member):
+                        members_mapping[result.id].append(result)
+                    elif isinstance(result, discord.NotFound):
                         pass
-                    except discord.HTTPException as e:
+                    elif isinstance(result, discord.HTTPException):
                         logger.warning(
-                            "Something went wrong when querying member %s %s %s", recipient, channel.guild, e
+                            "Something went wrong when querying member %s in %s: %s", recipient, guild, result
                         )
                     else:
-                        members_mapping[recipient.id].append(member)
+                        logger.warning(
+                            "Unexpected error querying member %s in %s", recipient, guild, exc_info=result
+                        )
 
         for recipient in self.recipients:
             embed = EmbedProxy()
@@ -309,17 +315,9 @@ class TicketView:
             created_at=message.created_at,
             type=TicketMessageType.dm,
         )
-        task = asyncio.create_task(self.bot.database_client.save_message(ticket_message_model))
-        self.bot.asyncio_pending_tasks.add(task)
-        task.add_done_callback(
-            lambda t: (
-                self.bot.asyncio_pending_tasks.discard(t),
-                (
-                    logger.warning("Error saving message for ticket %s", self.model.key, exc_info=t.exception())
-                    if t.exception()
-                    else None
-                ),
-            )
+        self.bot.spawn_task(
+            self.bot.database_client.save_message(ticket_message_model),
+            name=f"save_message:{self.model.key}",
         )
         return failed_recipients
 
@@ -387,21 +385,8 @@ class TicketView:
             created_at=ctx.message.created_at,
             type=message_type,
         )
-        task = asyncio.create_task(self.bot.database_client.save_message(ticket_message_model))
-        self.bot.asyncio_pending_tasks.add(task)
-        task.add_done_callback(
-            lambda t: (
-                self.bot.asyncio_pending_tasks.discard(t),
-                (
-                    logger.error(
-                        "Error saving %s message for ticket %s",
-                        message_type,
-                        self.model.key,
-                        exc_info=t.exception(),
-                    )
-                    if t.exception()
-                    else None
-                ),
-            )
+        self.bot.spawn_task(
+            self.bot.database_client.save_message(ticket_message_model),
+            name=f"save_message:{self.model.key}:{message_type}",
         )
         return failed_recipients

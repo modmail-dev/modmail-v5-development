@@ -60,10 +60,15 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
             msg = cog.bot.translate(_("ftl-msg-dm-received-not-configured", guild_name=staff_guild.guild.name))
             try:
                 await message.reply(msg)
-                if error_emoji:
-                    await message.add_reaction(error_emoji)
             except discord.HTTPException, TypeError:
-                logger.exception("Failed to send DM or attach emoji to %s", message.author)
+                logger.exception("Failed to send DM to %s", message.author)
+            else:
+                if error_emoji:
+                    cog.bot.spawn_task(
+                        message.add_reaction(error_emoji),
+                        name=f"add_reaction:{message.id}",
+                        suppress_errors=True,
+                    )
         return
 
     try:
@@ -94,13 +99,15 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
     except Exception:
         logger.exception("Failed to process DM message from %s", message.author)
         if error_emoji:
-            try:
-                await message.add_reaction(error_emoji)
-            except discord.HTTPException, TypeError:
-                logger.exception("Failed to add error emoji to %s", message.author)
+            cog.bot.spawn_task(
+                message.add_reaction(error_emoji),
+                name=f"add_reaction:{message.id}",
+                suppress_errors=True,
+            )
     else:
         if success_emoji:
-            try:
-                await message.add_reaction(success_emoji)
-            except discord.HTTPException, TypeError:
-                logger.exception("Failed to add success emoji to %s", message.author)
+            cog.bot.spawn_task(
+                message.add_reaction(success_emoji),
+                name=f"add_reaction:{message.id}",
+                suppress_errors=True,
+            )

@@ -64,9 +64,7 @@ class _ViewMixin:
             with contextlib.suppress(discord.HTTPException):
                 await target.delete()
 
-        task = asyncio.create_task(delete())
-        self._bot.asyncio_pending_tasks.add(task)
-        task.add_done_callback(self._bot.asyncio_pending_tasks.discard)
+        self._bot.spawn_task(delete(), name=f"delete_message:{target.id}")
 
     def defer(self, interaction: discord.Interaction) -> None:
         """Fire-and-forget defer — no-op if the response is already done."""
@@ -80,9 +78,7 @@ class _ViewMixin:
                 with contextlib.suppress(discord.HTTPException):
                     await interaction.response.defer()
 
-        task = asyncio.create_task(respond())
-        self._bot.asyncio_pending_tasks.add(task)
-        task.add_done_callback(self._bot.asyncio_pending_tasks.discard)
+        self._bot.spawn_task(respond(), name=f"defer:{interaction.id}")
 
     async def send(
         self,
@@ -181,10 +177,13 @@ class BaseLayoutView(_ViewMixin, discord.ui.LayoutView):
                 with contextlib.suppress(discord.HTTPException):
                     await self.message.edit(view=self)
 
-        task = asyncio.create_task(edit())
-        self._bot.asyncio_pending_tasks.add(task)
-        task.add_done_callback(self._bot.asyncio_pending_tasks.discard)
-        return task
+        if interaction is not None:
+            msg_id = interaction.id
+        elif self.message is not None:
+            msg_id = self.message.id
+        else:
+            msg_id = None
+        return self._bot.spawn_task(edit(), name=f"update_message:{msg_id or '?'}")
 
 
 class BaseModal(_ViewMixin, discord.ui.Modal):

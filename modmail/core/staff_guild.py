@@ -667,11 +667,10 @@ class StaffGuild:
 
         embed = await self._format_log_channel_message_embed(ticket, title=title, description=description)
         log_channel_message = await log_channel.send(embed=embed)
-        task = asyncio.create_task(
-            self.bot.database_client.set_ticket_log_channel_message_id(ticket.key, log_channel_message.id)
+        self.bot.spawn_task(
+            self.bot.database_client.set_ticket_log_channel_message_id(ticket.key, log_channel_message.id),
+            name=f"set_log_message_id:{ticket.key}",
         )
-        self.bot.asyncio_pending_tasks.add(task)
-        task.add_done_callback(self.bot.asyncio_pending_tasks.discard)
         return log_channel_message.id
 
     async def _update_log_channel_message(self, ticket: TicketModel) -> None:
@@ -792,11 +791,10 @@ class StaffGuild:
             await self.bot.database_client.create_ticket(ticket)
             view = TicketView(self, ticket, list(recipients))
 
-            task = asyncio.create_task(
-                self._send_log_channel_message(ticket, recipients, starter_message=starter_message)
+            self.bot.spawn_task(
+                self._send_log_channel_message(ticket, recipients, starter_message=starter_message),
+                name=f"send_log_message:{ticket.key}",
             )
-            self.bot.asyncio_pending_tasks.add(task)
-            task.add_done_callback(self.bot.asyncio_pending_tasks.discard)
 
             await asyncio.gather(
                 view.send_initial_staff_message(),
@@ -896,12 +894,7 @@ class StaffGuild:
 
         logger.info("Closed ticket %s for %s.", ticket.key, ticket.recipients)
 
-        # Deletion/archive the ticket channel
-        task = asyncio.create_task(self._delete_after_ticket_closed(ticket, closer=closer))
-        self.bot.asyncio_pending_tasks.add(task)
-        task.add_done_callback(self.bot.asyncio_pending_tasks.discard)
-
-        # Update the log channel message
-        task2 = asyncio.create_task(self._update_log_channel_message(ticket))
-        self.bot.asyncio_pending_tasks.add(task2)
-        task2.add_done_callback(self.bot.asyncio_pending_tasks.discard)
+        self.bot.spawn_task(
+            self._delete_after_ticket_closed(ticket, closer=closer), name=f"delete_ticket_channel:{ticket.key}"
+        )
+        self.bot.spawn_task(self._update_log_channel_message(ticket), name=f"update_log_message:{ticket.key}")

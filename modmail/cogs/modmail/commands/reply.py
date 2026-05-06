@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 import discord
 
 from modmail.core import Context, _, in_modmail_ticket, lazy_hybrid_command, staff_only, wrap
-from modmail.errors import ModmailError
 
 if TYPE_CHECKING:
     from .. import Modmail
@@ -60,9 +59,7 @@ async def reply_command(
         message: The message to send as a reply.
 
     Raises:
-        ModmailError: If the command is invoked outside a Modmail ticket (exception caught internally).
-        RuntimeError: If the command is invoked in a non-text channel, which should be impossible due
-            to the in_modmail_ticket check.
+        RuntimeError: If an impossible situation is encountered.
     """
     if not isinstance(ctx.channel, discord.TextChannel | discord.Thread):
         raise RuntimeError("Command invoked in a non-text channel, which should be impossible.")
@@ -73,28 +70,39 @@ async def reply_command(
         return
 
     if ctx.interaction is not None:
-        await ctx.reply(_("ftl-cmd-reply-message-sending"), delete_after=3, ephemeral=True)
+        await ctx.reply(_("ftl-cmd-reply-message-sending"), delete_after=2, ephemeral=True)
 
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
     if ticket is None:
-        raise ModmailError("Ticket should not be None here.")
+        raise RuntimeError("Ticket should not be None here.")
 
     try:
         failed_recipients = await ticket.process_reply_message(ctx, message)
-
         if failed_recipients:
             # Send a message about the failed recipients
             failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
-            await ctx.send(_("ftl-cmd-reply-message-failed-recipients", recipients=failed_recipients_str))
+            cog.bot.spawn_task(
+                ctx.send(_("ftl-cmd-reply-message-failed-recipients", recipients=failed_recipients_str)),
+                name=f"send_failed_recipients:{failed_recipients_str}",
+                suppress_errors=True,
+            )
 
     except Exception:
         logger.exception("Failed to send reply in %s", ctx.channel)
         await ctx.reply(_("ftl-cmd-reply-message-failed"), ephemeral=True)
-    else:
+        return
+
+    finally:
         if ctx.interaction is not None:
-            await ctx.interaction.delete_original_response()
-        else:
-            try:
-                await ctx.message.delete()
-            except discord.HTTPException as e:
-                logger.info("Failed to delete the message after replying in %s: %s", ctx.channel, e)
+            cog.bot.spawn_task(
+                ctx.interaction.delete_original_response(),
+                name=f"delete_original_response:{ctx.interaction.id}",
+                suppress_errors=True,
+            )
+
+    if ctx.interaction is None:
+        cog.bot.spawn_task(
+            ctx.message.delete(),
+            name=f"delete_message:{ctx.message.id}",
+            suppress_errors=True,
+        )

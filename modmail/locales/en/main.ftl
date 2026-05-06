@@ -307,6 +307,7 @@ ftl-cmd-close-message-sending = Closing the ticket...
 ftl-cmd-close-message-failed-recipients = Failed to send the close message to the following recipients: { $recipients }.
                                           They may have disabled DMs, blocked me, or does not share any servers with me.
 ftl-cmd-close-message-failed = Failed to send the close message, please check my logs for more information.
+ftl-cmd-close-failed = Failed to close the ticket, please check my logs for more information.
 
 ## Command: Modmail.sclose
 
@@ -317,6 +318,7 @@ ftl-cmd-sclose-param-attachment-description = The attachment to store with the c
 ftl-cmd-sclose-param-message-name = message
 ftl-cmd-sclose-param-message-description = The message to store as the close message.
 ftl-cmd-sclose-message-sending = Closing the ticket...
+ftl-cmd-sclose-failed = Failed to close the ticket, please check my logs for more information.
 
 ### ========================
 ###         Messages

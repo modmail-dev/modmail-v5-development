@@ -5,6 +5,7 @@ This command allows staff members to close a Modmail ticket without sending a me
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING
 
@@ -12,7 +13,6 @@ import discord
 
 from modmail.core import Context, _, in_modmail_ticket, lazy_hybrid_command, staff_only, wrap
 from modmail.enum import TicketMessageType, TicketStatus
-from modmail.errors import ModmailError
 
 if TYPE_CHECKING:
     from .. import Modmail
@@ -54,19 +54,17 @@ async def sclose_command(
         message: The message to save as a close message (not sent to recipient).
 
     Raises:
-        ModmailError: If the command is invoked outside a Modmail ticket.
-        RuntimeError: If the command is invoked in a non-text channel, which should be impossible due
-            to the in_modmail_ticket check.
+        RuntimeError: If an impossible situation is encountered.
     """
     if not isinstance(ctx.channel, discord.TextChannel | discord.Thread):
         raise RuntimeError("Command invoked in a non-text channel, which should be impossible.")
 
     if ctx.interaction is not None:
-        await ctx.reply(_("ftl-cmd-sclose-message-sending"), delete_after=3, ephemeral=True)
+        await ctx.reply(_("ftl-cmd-sclose-message-sending"), delete_after=2, ephemeral=True)
 
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
     if ticket is None:
-        raise ModmailError("Ticket should not be None here.")
+        raise RuntimeError("Ticket should not be None here.")
 
     if not message and not attachment:
         message = "Ticket closed."  # TODO: config
@@ -74,17 +72,16 @@ async def sclose_command(
     try:
         await ticket.process_reply_message(ctx, message, TicketMessageType.sclose)
     except Exception:
-        logger.exception("Something went wrong sending sclose message in %s", ctx.channel)
-    else:
-        if ctx.interaction is not None:
+        logger.exception("Failed to save sclose message in %s", ctx.channel)
+
+    if ctx.interaction is not None:
+        with contextlib.suppress(discord.HTTPException):
             await ctx.interaction.delete_original_response()
-        else:
-            try:
-                await ctx.message.delete()
-            except discord.HTTPException as e:
-                logger.info("Failed to delete the message after closing in %s: %s", ctx.channel, e)
-    finally:
-        # Close the ticket
+
+    try:
         await cog.bot.staff_guild.close_ticket(
             ticket.model, closer=ctx.author, close_status=TicketStatus.closed_by_command
         )
+    except Exception:
+        logger.exception("Failed to close ticket in %s", ctx.channel)
+        await ctx.reply(_("ftl-cmd-sclose-failed"), ephemeral=True)
