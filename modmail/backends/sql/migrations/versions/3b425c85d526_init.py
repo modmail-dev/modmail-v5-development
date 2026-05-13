@@ -71,6 +71,7 @@ def upgrade() -> None:
         "ticket_user",
         sa.Column("user_id", sa.BigInteger(), autoincrement=False, nullable=False),
         sa.Column("user_name", sa.String(length=128), nullable=False),
+        sa.Column("avatar", sa.String(length=512), nullable=False),
         sa.PrimaryKeyConstraint("user_id", name=op.f("pk_ticket_user")),
         mariadb_charset="utf8mb4",
         mariadb_collate="utf8mb4_unicode_ci",

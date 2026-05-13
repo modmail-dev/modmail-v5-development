@@ -21,7 +21,8 @@ class TicketUserModel(BaseModel):
     """Discord snowflake ID of the user."""
     user_name: str
     """Display name captured at ticket time."""
-    # TODO: Add user's avatar
+    avatar: str
+    """Display avatar URL captured at ticket time."""
 
     @classmethod
     def from_user(cls, user: discord.User | discord.Member | discord.ClientUser) -> TicketUserModel:
@@ -31,6 +32,7 @@ class TicketUserModel(BaseModel):
             user: The Discord user or member.
 
         Returns:
-            TicketUserModel: Constructed from the user's Discord ID and display name.
+            TicketUserModel: Constructed from the user's Discord ID, display name, and
+            display avatar URL.
         """
-        return cls(user_id=user.id, user_name=user.name)
+        return cls(user_id=user.id, user_name=user.name, avatar=str(user.display_avatar))

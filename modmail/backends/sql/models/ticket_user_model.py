@@ -34,6 +34,8 @@ class SQLTicketUserTable(SQLBase):
     """Discord snowflake user ID."""
     user_name: Mapped[str] = mapped_column(String(128))
     """Display name captured at ticket time."""
+    avatar: Mapped[str] = mapped_column(String(512))
+    """Display avatar URL captured at ticket time."""
 
     def to_model(self) -> TicketUserModel:
         """Convert this row to a [TicketUserModel][]{ data-preview }.
@@ -44,6 +46,7 @@ class SQLTicketUserTable(SQLBase):
         return TicketUserModel(
             user_id=self.user_id,
             user_name=self.user_name,
+            avatar=self.avatar,
         )
 
     @classmethod
@@ -73,7 +76,9 @@ class SQLTicketUserTable(SQLBase):
             return
 
         unique_users = {u.user_id: u for u in models}
-        values = [{"user_id": u.user_id, "user_name": u.user_name} for u in unique_users.values()]
+        values = [
+            {"user_id": u.user_id, "user_name": u.user_name, "avatar": u.avatar} for u in unique_users.values()
+        ]
 
         dialect_name = session.get_bind().dialect.name
         if dialect_name == "sqlite":
@@ -89,7 +94,7 @@ class SQLTicketUserTable(SQLBase):
                 .all()
             )
             session.add_all(
-                cls(user_id=u.user_id, user_name=u.user_name)
+                cls(user_id=u.user_id, user_name=u.user_name, avatar=u.avatar)
                 for u in unique_users.values()
                 if u.user_id not in existing_ids
             )

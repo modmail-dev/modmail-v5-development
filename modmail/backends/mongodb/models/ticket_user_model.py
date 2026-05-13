@@ -30,6 +30,8 @@ class MongoDBTicketUserDocument(Document):
     """Discord snowflake user ID, stored as the MongoDB `_id`."""
     user_name: str
     """Display name captured at ticket time."""
+    avatar: str
+    """Display avatar URL captured at ticket time."""
 
     class Settings:
         """Settings for MongoDB ticket user collection."""
@@ -49,7 +51,7 @@ class MongoDBTicketUserDocument(Document):
         Returns:
             MongoDBTicketUserDocument: An unsaved document constructed from the model.
         """
-        return cls(id=model.user_id, user_name=model.user_name)
+        return cls(id=model.user_id, user_name=model.user_name, avatar=model.avatar)
 
     def to_model(self) -> TicketUserModel:
         """Convert this document to a common [TicketUserModel][]{ data-preview }.
@@ -57,7 +59,7 @@ class MongoDBTicketUserDocument(Document):
         Returns:
             TicketUserModel: The converted common user model.
         """
-        return TicketUserModel(user_id=self.id, user_name=self.user_name)
+        return TicketUserModel(user_id=self.id, user_name=self.user_name, avatar=self.avatar)
 
     @classmethod
     async def put_model(cls, model: TicketUserModel) -> MongoDBTicketUserDocument:

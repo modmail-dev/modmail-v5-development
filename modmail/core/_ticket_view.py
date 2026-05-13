@@ -127,7 +127,7 @@ class TicketView:
 
         for recipient in self.recipients:
             embed = EmbedProxy()
-            embed.set_author(name=str(recipient), icon_url=str(recipient.avatar), url=self.log_url)
+            embed.set_author(name=str(recipient), icon_url=str(recipient.display_avatar), url=self.log_url)
             embed.description = _(
                 "ftl-msg-new-ticket-initial-embed-description",
                 created=discord.utils.format_dt(recipient.created_at, "R"),
@@ -204,7 +204,7 @@ class TicketView:
 
         embed = EmbedProxy()
         author_url = f"https://discordapp.com/users/{author.id}"
-        embed.set_author(name=str(author), icon_url=str(author.avatar), url=author_url)
+        embed.set_author(name=str(author), icon_url=str(author.display_avatar), url=author_url)
         embed.description = content
         embed.timestamp = created_at
 
@@ -242,7 +242,7 @@ class TicketView:
             created_at = original_message.created_at
 
         embed = EmbedProxy()
-        embed.set_author(name=str(author), icon_url=str(author.avatar))
+        embed.set_author(name=str(author), icon_url=str(author.display_avatar))
         embed.description = content
         embed.timestamp = created_at
 

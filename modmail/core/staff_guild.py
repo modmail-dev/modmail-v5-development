@@ -83,7 +83,8 @@ class StaffGuild:
             manage_messages=True,
             manage_roles=True,
             manage_threads=True,
-            # TODO: Add pin messages and bypass slowmode perms
+            pin_messages=True,
+            bypass_slowmode=True,
         )
 
     @property
@@ -106,7 +107,8 @@ class StaffGuild:
             manage_channels=True,
             manage_messages=True,
             manage_threads=True,
-            # TODO: Add pin messages and bypass slowmode perms
+            pin_messages=True,
+            bypass_slowmode=True,
         )
 
     @property
