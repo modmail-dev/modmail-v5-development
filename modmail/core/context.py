@@ -5,20 +5,14 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any, overload
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord.app_commands import locale_str
 from discord.ext import commands
 
-from .. import CONFIG
-from ..enum import (
-    PermissionOverrideValue,
-    RequiredAccessLevel,
-    UserAccessAllowReason,
-    UserAccessDenyReason,
-)
-from .translator import _
+from ..enum import RequiredAccessLevel, UserAccessAllowReason, UserAccessDenyReason
+from .translator import _, locale_for, using_ephemeral
 from .ui import BaseLayoutView
 
 if TYPE_CHECKING:
@@ -39,7 +33,7 @@ type AnyStr = str | locale_str
 class UserAccessResult:
     """Outcome of a user access check for a single command invocation.
 
-    Stored on [`Context.user_access`][] after [`Context.check_user_access`][] runs,
+    Stored on [`Context.user_access`][] after [`Bot.check_user_access`][] runs,
     regardless of whether access was granted or denied.
 
     Attributes:
@@ -92,26 +86,24 @@ class Context(commands.Context[Any]):
         """Initialize `user_access` to `None`; all other initialization delegated to super."""
         super().__init__(*args, **kwargs)
         self.user_access: UserAccessResult | None = None
-        """`UserAccessResult` cached by `check_user_access`."""
+        """Access outcome cached by [`Bot._user_access_check`][]."""
 
     async def send(
         self,
         content: AnyStr | None = None,
         *,
-        ephemeral: bool = False,
+        ephemeral: bool | None = None,
         containerize: bool | None = None,
         container_color: discord.Color | int | None = None,
-        original_message: discord.Message | None = None,
         **kwargs: Any,
     ) -> discord.Message:
         """Send a message to this context's channel; delegates to [`Bot.send_message`][].
 
         Args:
             content: Text or locale string to send.
-            ephemeral: Whether the message should be ephemeral or not.
+            ephemeral: `True` for ephemeral. `None` follows the active [`ephemeral_scope`][], if any.
             containerize: Wrap plain `content` in a Component V2 container.
             container_color: Accent color for the container's left bar.
-            original_message: Edit this message instead of sending a new one.
             **kwargs: Forwarded to [`Bot.send_message`][].
 
         Returns:
@@ -128,7 +120,6 @@ class Context(commands.Context[Any]):
             ephemeral=ephemeral,
             containerize=containerize,
             container_color=container_color,
-            original_message=original_message,
             fail_silently=False,
         )
 
@@ -136,16 +127,16 @@ class Context(commands.Context[Any]):
         self,
         content: AnyStr | None = None,
         *,
-        ephemeral: bool = False,
+        ephemeral: bool | None = None,
         containerize: bool | None = None,
         container_color: discord.Color | int | None = None,
         **kwargs: Any,
     ) -> discord.Message:
-        """Reply to the invoking message, or send normally for slash commands.
+        """Reply to the invoking message; for slash commands, behaves like [`send`][].
 
         Args:
             content: Text or locale string to send.
-            ephemeral: Whether the message should be ephemeral or not.
+            ephemeral: Same as [`send`][].
             containerize: Wrap plain `content` in a Component V2 container.
             container_color: Accent color for the container's left bar.
             **kwargs: Forwarded to [`Bot.send_message`][].
@@ -159,7 +150,6 @@ class Context(commands.Context[Any]):
         """
         if self.interaction is None:
             kwargs.setdefault("reference", self.message)
-        kwargs["original_message"] = None
 
         return await self.send(
             content, **kwargs, ephemeral=ephemeral, containerize=containerize, container_color=container_color
@@ -190,9 +180,13 @@ class Context(commands.Context[Any]):
             BadPermissionsError: If the bot lacks the required permissions.
             discord.HTTPException: If the send or edit request fails.
         """
-        wait_for = float(wait_for)
-
-        view = PromptView(ctx=self, content=content or "", timeout=wait_for)
+        view = PromptView(
+            bot=self.bot,
+            author=self.author,
+            channel_id=self.channel.id,
+            content=content or "",
+            timeout=float(wait_for),
+        )
 
         if reply:
             prompt_message = await self.reply(view=view, **kwargs)
@@ -233,9 +227,9 @@ class Context(commands.Context[Any]):
             BadPermissionsError: If the bot lacks the required permissions.
             discord.HTTPException: If the send or edit request fails.
         """
-        wait_for = float(wait_for)
-
-        view = PromptChoicesView(ctx=self, content=content or "", choices=choices, timeout=wait_for)
+        view = PromptChoicesView(
+            bot=self.bot, author=self.author, content=content or "", choices=choices, timeout=float(wait_for)
+        )
 
         if reply:
             prompt_message = await self.reply(view=view, **kwargs)
@@ -249,152 +243,34 @@ class Context(commands.Context[Any]):
 
         return prompt_message, view.result
 
-    @overload
-    def t(
-        self,
-        string: str,
-        /,
-        locale: discord.Locale | str | None = ...,
-        escape: bool = ...,
-        **kwargs: FluentTypes | HasLocaleStr | locale_str,
-    ) -> str: ...
-
-    @overload
-    def t(self, string: locale_str, /, locale: discord.Locale | str | None = ..., escape: bool = ...) -> str: ...
     def t(
         self,
         string: str | locale_str,
         /,
-        locale: discord.Locale | str | None = None,
         escape: bool = True,
         **kwargs: FluentTypes | HasLocaleStr | locale_str,
     ) -> str:
-        """Translate `string` into the interaction's locale, or `locale` if given.
-
-        Accepts either a bare FTL message ID (`str`) or a pre-built [`locale_str`][].
-        When a key string is passed, `kwargs` are forwarded to the FTL bundle.
-        When a [`locale_str`][] is passed, `kwargs` are not accepted.
+        """Translate `string` — user's locale inside [`ephemeral_scope`][], default locale otherwise.
 
         Args:
-            string: FTL message ID or a [`locale_str`][] produced by [`_`][].
-            locale: Override locale. Defaults to the interaction locale.
-            escape: Forwarded to [`_`][] when `string` is a bare key; no-op for pre-built
-                [`locale_str`][] instances (see [`_`][] for semantics).
-            **kwargs: FTL variables (only used when `string` is a bare key).
+            string: FTL message ID or a [`locale_str`][] from [`_`][].
+            escape: Escape Discord markdown in substituted variables.
+            **kwargs: FTL variables (when `string` is a bare key).
 
         Returns:
-            Translated string in the resolved locale.
+            Translated string.
         """
         if isinstance(string, str):
             if not string.startswith("ftl-"):  # ftl: ignore
                 logger.debug("Context.t called with a non-locale string: %r", string)
+                return string
             string = _(string, escape=escape, **kwargs)
-        return self.bot.translate(string, ctx_or_locale=locale if locale is not None else self)
 
-    async def check_user_access(self) -> bool:
-        """Check whether the invoking user may run this context's command.
-
-        Evaluates the full access rule chain on the first call and caches the result in
-        `user_access`. Subsequent calls return the cached result immediately.
-
-        Returns:
-            `True` if the user has sufficient access; `False` otherwise.
-        """
-        if self.user_access is not None:
-            return self.user_access.allowed
-
-        def _cache(result: UserAccessResult) -> bool:
-            self.user_access = result
-            return result.allowed
-
-        if self.author.bot:
-            return _cache(UserAccessResult(UserAccessDenyReason.BOT))
-
-        if self.command is None:  # pragma: nocover ; When would this happen?
-            logger.debug("Context.check_user_access called without a command")
-            return _cache(UserAccessResult(UserAccessAllowReason.UNKNOWN))
-
-        if await self.bot.is_owner(self.author):
-            return _cache(UserAccessResult(UserAccessAllowReason.OWNER))
-
-        command_access_level = self.bot.get_command_access_level(self.command)
-
-        if (
-            CONFIG.permission.discord_admin_bypass
-            and isinstance(self.author, discord.Member)
-            and self.author.guild_permissions.administrator
-            and command_access_level != RequiredAccessLevel.owner
-        ):
-            return _cache(UserAccessResult(UserAccessAllowReason.DISCORD_ADMIN_BYPASS))
-
-        all_profiles = self.bot.get_all_user_profiles(self.author)
-        commands_to_check = [self.command, *self.command.parents]
-
-        for i, command in enumerate(commands_to_check):
-            command_name = self.bot.get_canonical_command_name(command)
-            for profile in all_profiles:
-                if i == 0:
-                    if (
-                        override := profile.permission_overrides.get(command_name)
-                    ) == PermissionOverrideValue.deny:
-                        return _cache(
-                            UserAccessResult(
-                                UserAccessDenyReason.PROFILE_DENY,
-                                profile_id=profile.profile_id,
-                                command_name=command_name,
-                            )
-                        )
-                    if override == PermissionOverrideValue.allow:
-                        return _cache(
-                            UserAccessResult(
-                                UserAccessAllowReason.PROFILE_ALLOW,
-                                profile_id=profile.profile_id,
-                                command_name=command_name,
-                            )
-                        )
-                elif command_access_level == RequiredAccessLevel.owner:
-                    # Owner-only commands cannot be overridden by wildcard overrides on parent.
-                    # However, when i=0, the wildcard override is checked on the exact command name.
-                    break
-
-                wildcard_key = command_name + "+"
-                if (wildcard := profile.permission_overrides.get(wildcard_key)) == PermissionOverrideValue.deny:
-                    return _cache(
-                        UserAccessResult(
-                            UserAccessDenyReason.PROFILE_DENY,
-                            profile_id=profile.profile_id,
-                            command_name=wildcard_key,
-                        )
-                    )
-                if wildcard == PermissionOverrideValue.allow:
-                    return _cache(
-                        UserAccessResult(
-                            UserAccessAllowReason.PROFILE_ALLOW,
-                            profile_id=profile.profile_id,
-                            command_name=wildcard_key,
-                        )
-                    )
-
-        if command_access_level == RequiredAccessLevel.owner:
-            return _cache(UserAccessResult(UserAccessDenyReason.OWNER_ONLY))
-
-        if CONFIG.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
-            return _cache(UserAccessResult(UserAccessAllowReason.EVERYONE))
-
-        for profile in all_profiles:
-            if profile.access_level is not None and profile.access_level >= command_access_level:
-                return _cache(
-                    UserAccessResult(
-                        UserAccessAllowReason.LEVEL_MATCH,
-                        profile_id=profile.profile_id,
-                        profile_access_level=profile.access_level,
-                        required_level=command_access_level,
-                    )
-                )
-
-        return _cache(
-            UserAccessResult(UserAccessDenyReason.INSUFFICIENT_ACCESS, required_level=command_access_level)
-        )
+        if using_ephemeral(self.interaction):
+            locale = locale_for(self.interaction)
+        else:
+            locale = locale_for(None)
+        return self.bot.translate(string, locale=locale)
 
 
 class PromptView(BaseLayoutView):
@@ -407,31 +283,36 @@ class PromptView(BaseLayoutView):
     def __init__(
         self,
         *,
-        ctx: Context,
+        bot: Bot,
+        author: discord.Member | discord.User,
+        channel_id: int,
         content: str | locale_str,
         timeout: float,
     ) -> None:
         """Build the card layout.
 
         Args:
-            ctx: Used for translation, author check, and channel filtering.
+            bot: The bot instance.
+            author: The user who invoked the command, for interaction gating and message
+                filtering.
+            channel_id: ID of the channel to listen for replies in.
             content: Prompt text shown inside the card.
             timeout: Seconds before the view stops accepting interactions.
         """
-        super().__init__(ctx, timeout=timeout)
+        super().__init__(bot, author, interaction=None, timeout=timeout)
         self.result: discord.Message | None = None
         """The user's typed reply (`None` if canceled or timed out)."""
         self.canceled = False
         """`True` if the user clicked the cancel button (as opposed to a timeout or external
         cancellation)."""
-        self._channel_id = ctx.channel.id
+        self._channel_id = channel_id
         self._wait_task: asyncio.Task[discord.Message] | None = None
 
         if isinstance(content, locale_str):
-            content = ctx.t(content)
+            content = self._t(content)
 
         cancel_btn: discord.ui.Button[PromptView] = discord.ui.Button(
-            label=ctx.t("ftl-view-prompt-cancel-label"),
+            label=self._t("ftl-view-prompt-cancel-label"),
             style=discord.ButtonStyle.danger,
         )
         cancel_btn.callback = self._on_cancel
@@ -473,7 +354,7 @@ class PromptView(BaseLayoutView):
             logger.debug("%s.wait() called without message set; timeout cleanup skipped", type(self).__name__)
 
         def check(m: discord.Message) -> bool:
-            return m.author.id == self._ctx.author.id and m.channel.id == self._channel_id
+            return m.author.id == self._author.id and m.channel.id == self._channel_id
 
         wait_task: asyncio.Task[discord.Message] = asyncio.create_task(
             self._bot.wait_for("message", check=check, timeout=self.timeout)
@@ -512,7 +393,8 @@ class PromptChoicesView(BaseLayoutView):
     def __init__(
         self,
         *,
-        ctx: Context,
+        bot: Bot,
+        author: discord.Member | discord.User,
         content: str | locale_str,
         choices: list[str | locale_str],
         timeout: float,
@@ -520,23 +402,24 @@ class PromptChoicesView(BaseLayoutView):
         """Build the card layout.
 
         Args:
-            ctx: Used for translation and author check.
+            bot: The bot instance.
+            author: The user who invoked the command, for interaction gating.
             content: Prompt text shown inside the card.
             choices: Ordered list of button labels.
             timeout: Seconds before the view stops accepting interactions.
         """
-        super().__init__(ctx, timeout=timeout)
+        super().__init__(bot, author, interaction=None, timeout=timeout)
         self.result: int | None = None
         """Index of the chosen option, or `None` if canceled or timed out."""
         self._buttons: list[discord.ui.Button[PromptChoicesView]] = []
 
         if isinstance(content, locale_str):
-            content = ctx.t(content)
+            content = self._t(content)
 
         action_row: discord.ui.ActionRow[PromptChoicesView] = discord.ui.ActionRow()
         for i, label in enumerate(choices):
             if isinstance(label, locale_str):
-                label = ctx.t(label)
+                label = self._t(label)
             btn: discord.ui.Button[PromptChoicesView] = discord.ui.Button(
                 label=label, style=discord.ButtonStyle.primary
             )
@@ -545,7 +428,7 @@ class PromptChoicesView(BaseLayoutView):
             self._buttons.append(btn)
 
         cancel: discord.ui.Button[PromptChoicesView] = discord.ui.Button(
-            label=ctx.t("ftl-view-prompt-cancel-label"), style=discord.ButtonStyle.danger
+            label=self._t("ftl-view-prompt-cancel-label"), style=discord.ButtonStyle.danger
         )
         cancel.callback = self._on_cancel
         action_row.add_item(cancel)

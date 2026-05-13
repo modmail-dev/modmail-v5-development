@@ -15,7 +15,7 @@ else:
     del CONFIG
 
 from .bot import *
-from .cog import *
+from .commands import *
 from .context import *
 from .converters import *
 from .embed import *

@@ -9,12 +9,21 @@ import sys
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast, overload
 
 import discord
+from discord.app_commands import locale_str
 from discord.ext import commands
 from packaging.version import Version
 
 from .. import CONFIG, __version__
 from ..backends import create_db_client
-from ..enum import ActivityType, PermissionOverrideValue, ProfileType, RequiredAccessLevel, StatusType
+from ..enum import (
+    ActivityType,
+    PermissionOverrideValue,
+    ProfileType,
+    RequiredAccessLevel,
+    StatusType,
+    UserAccessAllowReason,
+    UserAccessDenyReason,
+)
 from ..errors import (
     BadPermissionsError,
     DatabaseError,
@@ -23,11 +32,11 @@ from ..errors import (
     NoStaffGuildError,
     UserAccessError,
 )
-from .context import Context
+from .context import Context, UserAccessResult
 from .embed import EmbedProxy
 from .permission import PermissionCommandIndex
 from .staff_guild import StaffGuild
-from .translator import Translator, _
+from .translator import Translator, _, locale_for, using_ephemeral
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine
@@ -84,6 +93,9 @@ class Bot(commands.Bot):
         # Disable "voice will NOT be supported" warning.
         discord.VoiceClient.warn_nacl = False
         discord.VoiceClient.warn_dave = False
+
+        # Disable the built-in DefaultHelpCommand; the utility cog registers its own /help.
+        kwargs.setdefault("help_command", None)
 
         super().__init__(*args, **kwargs)
 
@@ -782,6 +794,10 @@ class Bot(commands.Bot):
         Returns:
             The resolved access level.
         """
+        # Jishaku is an owner-only debug extension that enforces its own access checks.
+        if CONFIG.bot.enable_jishaku and base_command.cog_name == "Jishaku":
+            return RequiredAccessLevel.owner
+
         default_access_level: RequiredAccessLevel | None = None
 
         # If the command is a subcommand, if so, add the parents of the command (in reverse order)
@@ -835,9 +851,154 @@ class Bot(commands.Bot):
             all_profiles.insert(0, user_profile)
         return all_profiles
 
+    @overload
+    async def check_user_access(
+        self,
+        *,
+        author: discord.User | discord.Member,
+        command: commands.Command[Any, Any, Any],
+    ) -> UserAccessResult: ...
+
+    @overload
+    async def check_user_access(
+        self,
+        *,
+        author: discord.User | discord.Member,
+        command_key: str,
+        parent_keys: list[str],
+        command_access_level: RequiredAccessLevel,
+        profiles: list[ProfileModel],
+        is_owner: bool,
+        is_jishaku: bool,
+    ) -> UserAccessResult: ...
+
+    async def check_user_access(
+        self,
+        *,
+        author: discord.User | discord.Member,
+        command: commands.Command[Any, Any, Any] | None = None,
+        command_key: str | None = None,
+        parent_keys: list[str] | None = None,
+        command_access_level: RequiredAccessLevel | None = None,
+        profiles: list[ProfileModel] | None = None,
+        is_owner: bool | None = None,
+        is_jishaku: bool | None = None,
+    ) -> UserAccessResult:
+        """Evaluate Modmail access rules for `author`.
+
+        Provide either `command` or the `(command_key, parent_keys, command_access_level,
+        profiles, is_owner, is_jishaku)` set.
+
+        Args:
+            author: The user being checked.
+            command: Command to evaluate (preferred when available).
+            command_key: Canonical command key, required when `command` is `None`.
+            parent_keys: Canonical command keys for parent commands, required when `command` is `None`
+            command_access_level: Required access level, required when `command` is `None`.
+            profiles: Cached profiles for `author`.
+            is_owner: Precomputed owner flag.
+            is_jishaku: Whether the command belongs to Jishaku.
+
+        Returns:
+            The [`UserAccessResult`][] describing the decision.
+        """
+        if author.bot:
+            return UserAccessResult(UserAccessDenyReason.BOT)
+
+        if command is not None:
+            if CONFIG.bot.enable_jishaku and command.cog_name == "Jishaku":
+                return UserAccessResult(UserAccessAllowReason.JISHAKU)
+
+            if await self.is_owner(author):
+                return UserAccessResult(UserAccessAllowReason.OWNER)
+
+            command_key = self.get_canonical_command_name(command)
+            parent_keys = [self.get_canonical_command_name(p) for p in command.parents]
+            command_access_level = self.get_command_access_level(command)
+            profiles = self.get_all_user_profiles(author)
+
+        else:
+            if is_jishaku:
+                return UserAccessResult(UserAccessAllowReason.JISHAKU)
+            if is_owner or (is_owner is None and await self.is_owner(author)):
+                return UserAccessResult(UserAccessAllowReason.OWNER)
+            if profiles is None:
+                profiles = self.get_all_user_profiles(author)
+            if command_key is None or parent_keys is None or command_access_level is None:
+                logger.debug("Bot.check_user_access called without command info")
+                return UserAccessResult(UserAccessAllowReason.UNKNOWN)
+
+        # Remove unused vars to avoid confusion
+        del command
+        del is_jishaku
+        del is_owner
+
+        if (
+            CONFIG.permission.discord_admin_bypass
+            and isinstance(author, discord.Member)
+            and author.guild_permissions.administrator
+            and command_access_level != RequiredAccessLevel.owner
+        ):
+            return UserAccessResult(UserAccessAllowReason.DISCORD_ADMIN_BYPASS)
+
+        command_names = [command_key, *parent_keys]
+
+        for i, name in enumerate(command_names):
+            for profile in profiles:
+                if i == 0:
+                    override = profile.permission_overrides.get(name)
+                    if override == PermissionOverrideValue.deny:
+                        return UserAccessResult(
+                            UserAccessDenyReason.PROFILE_DENY,
+                            profile_id=profile.profile_id,
+                            command_name=name,
+                        )
+                    if override == PermissionOverrideValue.allow:
+                        return UserAccessResult(
+                            UserAccessAllowReason.PROFILE_ALLOW,
+                            profile_id=profile.profile_id,
+                            command_name=name,
+                        )
+                elif command_access_level == RequiredAccessLevel.owner:
+                    # Owner-only commands cannot be overridden by wildcard overrides on parent.
+                    # However, when i=0, the wildcard override is checked on the exact command name.
+                    break
+
+                wildcard_key = name + "+"
+                wildcard = profile.permission_overrides.get(wildcard_key)
+                if wildcard == PermissionOverrideValue.deny:
+                    return UserAccessResult(
+                        UserAccessDenyReason.PROFILE_DENY,
+                        profile_id=profile.profile_id,
+                        command_name=wildcard_key,
+                    )
+                if wildcard == PermissionOverrideValue.allow:
+                    return UserAccessResult(
+                        UserAccessAllowReason.PROFILE_ALLOW,
+                        profile_id=profile.profile_id,
+                        command_name=wildcard_key,
+                    )
+
+        if command_access_level == RequiredAccessLevel.owner:
+            return UserAccessResult(UserAccessDenyReason.OWNER_ONLY)
+
+        if CONFIG.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
+            return UserAccessResult(UserAccessAllowReason.EVERYONE)
+
+        for profile in profiles:
+            if profile.access_level is not None and profile.access_level >= command_access_level:
+                return UserAccessResult(
+                    UserAccessAllowReason.LEVEL_MATCH,
+                    profile_id=profile.profile_id,
+                    profile_access_level=profile.access_level,
+                    required_level=command_access_level,
+                )
+
+        return UserAccessResult(UserAccessDenyReason.INSUFFICIENT_ACCESS, required_level=command_access_level)
+
     @staticmethod
     async def _user_access_check(ctx: Context) -> bool:
-        """Delegate to [`Context.check_user_access`][]; raise [`UserAccessError`][] on denial.
+        """Evaluate access using [`Bot.check_user_access`][]; raise [`UserAccessError`][] on denial.
 
         Args:
             ctx: The invocation context.
@@ -847,11 +1008,13 @@ class Bot(commands.Bot):
 
         Raises:
             UserAccessError: If the user lacks the required access level.
-            RuntimeError: If `ctx.user_access` is `None`, which should not happen.
         """
-        if not await ctx.check_user_access():
-            if ctx.user_access is None:
-                raise RuntimeError("ctx.user_access should be set by check_user_access, but is None")
+        if ctx.user_access is None:
+            if ctx.command is None:
+                ctx.user_access = UserAccessResult(UserAccessAllowReason.UNKNOWN)
+            else:
+                ctx.user_access = await ctx.bot.check_user_access(author=ctx.author, command=ctx.command)
+        if not ctx.user_access.allowed:
             raise UserAccessError(ctx.user_access)
         return True
 
@@ -864,35 +1027,20 @@ class Bot(commands.Bot):
         Returns:
             `True`.
         """
-        return True  # TODO: Implement this check
+        return True  # TODO: Implement this check? is this still necessary?
 
-    # TODO: implement caching
-    def translate(
-        self,
-        string: discord.app_commands.locale_str,
-        *,
-        ctx_or_locale: commands.Context[Any] | discord.Locale | str | None = None,
-    ) -> str:
-        """Translate `string` into the locale implied by `ctx_or_locale`.
-
-        Falls back to the default locale when `ctx_or_locale` is `None` or the context
-        has no interaction. Returns `string.message` when translation fails.
+    def translate(self, string: locale_str, *, locale: str | None = None) -> str:
+        """Translate `string` to `locale` (`CONFIG.default_locale` when `None`).
 
         Args:
-            string: The locale string to translate.
-            ctx_or_locale: A [`Context`][] (locale taken from its interaction), a
-                [`discord.Locale`][] or BCP-47 string, or `None` for the default locale.
+            string: The [`locale_str`][] to translate.
+            locale: Target BCP-47 locale.
 
         Returns:
-            The translated string.
+            Translated string, or `string.message` if not found.
         """
-        locale: discord.Locale | str = CONFIG.default_locale
-
-        if isinstance(ctx_or_locale, commands.Context):
-            if ctx_or_locale.interaction is not None:
-                locale = ctx_or_locale.interaction.locale
-        elif isinstance(ctx_or_locale, discord.Locale | str):
-            locale = ctx_or_locale
+        if locale is None:
+            locale = locale_for(None)
 
         message = self.translator.translate_sync(string, locale)
         if message is None:
@@ -903,13 +1051,12 @@ class Bot(commands.Bot):
     @overload
     async def send_message(
         self,
-        content: str | discord.app_commands.locale_str | None = ...,
+        content: str | locale_str | None = ...,
         *,
         channel: discord.abc.Messageable,
-        ephemeral: bool = ...,
+        ephemeral: bool | None = ...,
         containerize: bool | None = ...,
         container_color: discord.Color | int | None = ...,
-        original_message: discord.Message | None = ...,
         fail_silently: Literal[False] = ...,
         **kwargs: Any,
     ) -> discord.Message: ...
@@ -917,68 +1064,69 @@ class Bot(commands.Bot):
     @overload
     async def send_message(
         self,
-        content: str | discord.app_commands.locale_str | None = ...,
+        content: str | locale_str | None = ...,
         *,
         channel: discord.abc.Messageable,
-        ephemeral: bool = ...,
+        ephemeral: bool | None = ...,
         containerize: bool | None = ...,
         container_color: discord.Color | int | None = ...,
-        original_message: discord.Message | None = ...,
         fail_silently: Literal[True],
         **kwargs: Any,
     ) -> discord.Message | None: ...
 
     async def send_message(
         self,
-        content: str | discord.app_commands.locale_str | None = None,
+        content: str | locale_str | None = None,
         *,
         channel: discord.abc.Messageable,
-        ephemeral: bool = False,
+        ephemeral: bool | None = None,
         containerize: bool | None = None,
         container_color: discord.Color | int | None = None,
-        original_message: discord.Message | None = None,
         fail_silently: bool = False,
         **kwargs: Any,
     ) -> discord.Message | None:
-        """Send (or edit) a message, translating locale strings.
+        """Send or edit a message, translating locale strings.
 
-        When `containerize` is `None` (the default), public messages are wrapped in a Component V2
-        [`discord.ui.Container`][] and ephemeral ones are sent as plain text. Pass `True` or `False`
-        to override. Wrapping is suppressed when a `view`, `embed`, or `embeds` kwarg is present, or
-        when `content` is `None`. When `original_message` is given, edits it instead of sending a new
-        message. Locale is derived from the interaction when `channel` is a [`Context`][].
+        Public messages are wrapped in a Component V2 container by default; ephemeral messages are
+        plain text. Pass `containerize=True/False` to override. Containerization is suppressed when
+        `view`, `embed`, or `embeds` are present.
 
         Args:
             content: Text or locale string to send.
             channel: Destination channel or [`Context`][].
-            ephemeral: Whether the message should be ephemeral or not.
-            containerize: Wrap plain `content` in a Component V2 container. `None` wraps public
-                messages and skips ephemeral ones automatically.
-            container_color: Accent color for the container's left bar (`None` uses Discord's default).
-            original_message: Edit this message instead of sending a new one.
-            fail_silently: When `True`, return `None` instead of raising [`BadPermissionsError`][]
-                if the bot lacks required permissions. Defaults to `False`.
-            **kwargs: Forwarded to `send` or `edit` (e.g. `embed`, `embeds`, `ephemeral`).
+            ephemeral: `True` for ephemeral. `None` follows the active [`ephemeral_scope`][] when
+                `channel` is a [`Context`][] — `False` otherwise.
+            containerize: Wrap `content` in a Component V2 container. `None` wraps public messages only.
+            container_color: Accent color for the container's left bar.
+            fail_silently: Return `None` instead of raising on permission errors.
+            **kwargs: Forwarded to `send` or `edit`.
 
         Returns:
-            The sent or edited [`discord.Message`][], or `None` if `fail_silently` is `True` and
-            the bot lacks the required permissions.
+            The sent or edited [`discord.Message`][], or `None` when `fail_silently` is `True` and the
+            bot lacks permissions.
 
         Raises:
-            BadPermissionsError: If the bot lacks the required permissions and `fail_silently` is
-                `False`.
-            discord.HTTPException: If the send or edit request fails and `fail_silently` is `False`.
+            BadPermissionsError: Insufficient channel permissions (when `fail_silently` is `False`).
+            discord.HTTPException: Send or edit failed.
         """
-        locale: discord.Locale | str = CONFIG.default_locale
         require_perm_check = True
+        interaction = None
 
         if isinstance(channel, commands.Context):
             channel = cast("commands.Context[Any]", channel)
-            kwargs["ephemeral"] = ephemeral
-            if channel.interaction is not None and not channel.interaction.is_expired():
+            interaction = channel.interaction
+            if interaction is not None and not interaction.is_expired():
                 require_perm_check = False
-                if ephemeral:
-                    locale = channel.interaction.locale
+                if ephemeral is None:
+                    ephemeral = using_ephemeral(interaction)
+                kwargs["ephemeral"] = ephemeral
+        elif ephemeral is None:
+            ephemeral = False
+
+        if ephemeral:
+            locale = locale_for(interaction)
+        else:
+            locale = locale_for(None)
 
         if require_perm_check:
             required_perms = discord.Permissions.none()
@@ -1017,14 +1165,14 @@ class Bot(commands.Bot):
                         return None
                     raise BadPermissionsError(channel=cast("discord.abc.Messageable", channel), missing=missing)
 
-        if isinstance(content, discord.app_commands.locale_str):
-            content = self.translate(content, ctx_or_locale=locale)
+        if isinstance(content, locale_str):
+            content = self.translate(content, locale=locale)
 
         if containerize is None:
-            containerize = not ephemeral
+            containerize = not ephemeral  # If the message is intended to be ephemeral, don't containerize
 
         if "view" in kwargs or "embed" in kwargs or "embeds" in kwargs:
-            containerize = False
+            containerize = False  # Cannot containerize if there's other message components
 
         if containerize and content:
             container_view = discord.ui.LayoutView(timeout=None)
@@ -1052,11 +1200,6 @@ class Bot(commands.Bot):
             kwargs["embeds"] = embeds
 
         try:
-            if original_message is not None:
-                kwargs.pop("reference", None)
-                kwargs.pop("ephemeral", None)
-                return await original_message.edit(content=content, **kwargs)
-
             if isinstance(channel, Context):
                 return await super(Context, channel).send(content, **kwargs)
             return await channel.send(content, **kwargs)

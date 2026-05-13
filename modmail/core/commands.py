@@ -1,29 +1,32 @@
-"""[`Cog`][] base class, [`create_cog`][] factory, and lazy hybrid command machinery."""
+"""[`Cog`][] base class, [`create_cog`][] factory, and bot command machinery."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 from .. import CONFIG
 from ..errors import BadPermissionsError, NotInTicketError, StaffGuildNotConfiguredError
 
 if TYPE_CHECKING:
+    from discord.app_commands import locale_str
+
     from .bot import Bot
     from .context import Context
 
 __all__ = [
     "Cog",
-    "LazyHybridCommand",
-    "LazyHybridGroup",
+    "CommandBuilder",
+    "GroupBuilder",
+    "ParamInfo",
+    "bot_command",
+    "bot_group",
     "create_cog",
     "in_modmail_ticket",
-    "lazy_hybrid_command",
-    "lazy_hybrid_group",
     "wrap",
 ]
 
@@ -35,7 +38,20 @@ type DecoFactory[T: Co] = Callable[
 type HcHg = commands.HybridCommand[Any, Any, Any] | commands.HybridGroup[Any, Any, Any]
 
 
-class LazyHybridCommand[T: Co]:
+@dataclass
+class ParamInfo:
+    """Localized name and description for a single command parameter.
+
+    Attributes:
+        name: Localized display name for the parameter (shown on Discord for slash commands).
+        description: Localized description shown in slash command tooltips and the help browser.
+    """
+
+    name: locale_str | str
+    description: locale_str | str
+
+
+class CommandBuilder[T: Co]:
     """Deferred wrapper around a hybrid command callback.
 
     Stores the callback and its decorators without creating a command object, so the cog
@@ -44,28 +60,42 @@ class LazyHybridCommand[T: Co]:
     Attributes:
         base_func: Constructor used to build the command; defaults to `commands.hybrid_command`,
             overridden to the parent group's `.command` or `.group` method by
-            [`LazyHybridGroup.get_commands`][].
+            [`GroupBuilder.get_commands`][].
         callback: The original async function passed to the decorator.
         args: Positional arguments forwarded to the command constructor.
         kwargs: Keyword arguments forwarded to the command constructor.
-        wrappers: Deferred decorators (e.g. `app_commands.describe`) applied inside
+        wrappers: Deferred decorators (e.g. `commands.has_permissions`) applied inside
             [`get_commands`][].
+        param_info: Per-parameter localized name and description, keyed by Python parameter name.
+        help_text: Localized long help text shown in the interactive help browser (`None` to omit).
     """
 
-    __slots__ = ("args", "base_func", "callback", "kwargs", "wrappers")
+    __slots__ = ("args", "base_func", "callback", "help_text", "kwargs", "param_info", "wrappers")
 
-    def __init__(self, func: T, args: Any, kwargs: Any) -> None:
+    def __init__(
+        self,
+        func: T,
+        args: Any,
+        kwargs: Any,
+        *,
+        param_info: dict[str, ParamInfo] | None = None,
+        help_text: locale_str | str | None = None,
+    ) -> None:
         """Store the callback and its constructor arguments for deferred command creation.
 
         Args:
             func: The async function that becomes the command callback.
             args: Positional arguments forwarded to `commands.hybrid_command`.
             kwargs: Keyword arguments forwarded to `commands.hybrid_command`.
+            param_info: Per-parameter localized names and descriptions.
+            help_text: Localized long help text shown in the interactive help browser.
         """
         self.base_func: Callable[..., Callable[[T], HcHg]] = commands.hybrid_command
         self.callback = func
         self.args = args
         self.kwargs = kwargs
+        self.param_info: dict[str, ParamInfo] = param_info or {}
+        self.help_text: locale_str | str = help_text or ""
 
         # Store the wrappers for the command (discord.py's command decorators)
         if hasattr(func, "__modmail_wrappers__"):
@@ -73,13 +103,13 @@ class LazyHybridCommand[T: Co]:
         else:
             self.wrappers = []
 
-        # Allow the commands should be used in guilds only
+        # All the commands should be used in guilds only
         self.wrappers.append((commands.guild_only, (), {}))
 
         # Set the default permissions for the slash command
         if CONFIG.permission.slash_minimum_permission_int != 0:
             self.wrappers.append((
-                app_commands.default_permissions,
+                discord.app_commands.default_permissions,
                 (discord.Permissions(CONFIG.permission.slash_minimum_permission_int),),
                 {},
             ))
@@ -92,6 +122,10 @@ class LazyHybridCommand[T: Co]:
     def get_commands(self, cog_name: str) -> dict[str, HcHg]:
         """Inject `cog_name` into `__qualname__`, apply wrappers, and return the command dict.
 
+        Automatically applies `app_commands.rename` and `app_commands.describe` from
+        [`param_info`][] before any other wrappers, then stores `param_info` on the
+        created command for the help system to read.
+
         Args:
             cog_name: Name of the cog that will own this command.
 
@@ -102,8 +136,22 @@ class LazyHybridCommand[T: Co]:
         if not self.callback.__qualname__.startswith(f"{cog_name}."):
             self.callback.__qualname__ = f"{cog_name}.{self._callback_name}"
 
-        # Apply the wrappers to the function directly (app_command decorators does not work on command)
         func = self.callback
+
+        # Store these to the callback (cannot store to the Command since Command isn't persisted)
+        vars(func)["_bot_help"] = self.help_text
+        vars(func)["_bot_param_info"] = self.param_info
+
+        # Apply param renames and descriptions from param_info
+        if self.param_info:
+            rename_kw = {n: i.name for n, i in self.param_info.items()}
+            desc_kw = {n: i.description for n, i in self.param_info.items()}
+            if rename_kw:
+                func = discord.app_commands.rename(**rename_kw)(func)
+            if desc_kw:
+                func = discord.app_commands.describe(**desc_kw)(func)
+
+        # Apply remaining wrappers
         for wrapper_func, wrapper_args, wrapper_kwargs in self.wrappers:
             func = wrapper_func(*wrapper_args, **wrapper_kwargs)(func)
 
@@ -113,22 +161,32 @@ class LazyHybridCommand[T: Co]:
         return {self._callback_name: command}
 
 
-class LazyHybridGroup[T: Co](LazyHybridCommand[T]):
-    """[`LazyHybridCommand`][] that owns child commands and subgroups."""
+class GroupBuilder[T: Co](CommandBuilder[T]):
+    """[`CommandBuilder`][] that owns child commands and subgroups."""
 
     __slots__ = ("children",)
 
-    def __init__(self, func: T, args: Any, kwargs: Any) -> None:
+    def __init__(
+        self,
+        func: T,
+        args: Any,
+        kwargs: Any,
+        *,
+        param_info: dict[str, ParamInfo] | None = None,
+        help_text: locale_str | str | None = None,
+    ) -> None:
         """Store the callback and constructor arguments; initialize `children` to empty.
 
         Args:
             func: The async function that becomes the group callback.
             args: Positional arguments forwarded to `commands.hybrid_group`.
             kwargs: Keyword arguments forwarded to `commands.hybrid_group`.
+            param_info: Per-parameter localized names and descriptions for the group callback.
+            help_text: Localized long help text shown in the interactive help browser.
         """
-        super().__init__(func, args, kwargs)
+        super().__init__(func, args, kwargs, param_info=param_info, help_text=help_text)
         self.base_func: Callable[..., Callable[[T], HcHg]] = commands.hybrid_group
-        self.children: list[LazyHybridCommand[Any]] = []
+        self.children: list[CommandBuilder[Any]] = []
         """Child commands and subgroups registered under this group."""
 
     def get_commands(self, cog_name: str) -> dict[str, HcHg]:
@@ -141,7 +199,7 @@ class LazyHybridGroup[T: Co](LazyHybridCommand[T]):
             Mapping of callback name to command object for this group and all descendants.
 
         Raises:
-            TypeError: If a child is not a [`LazyHybridCommand`][] or [`LazyHybridGroup`][].
+            TypeError: If a child is not a [`CommandBuilder`][] or [`GroupBuilder`][].
         """
         # Get the hybrid group of the func
         command_mapping = super().get_commands(cog_name)
@@ -150,9 +208,9 @@ class LazyHybridGroup[T: Co](LazyHybridCommand[T]):
 
         for child in self.children:
             # Change the base_func of the child to the group's
-            if isinstance(child, LazyHybridGroup):
+            if isinstance(child, GroupBuilder):
                 child.base_func = group.group
-            elif isinstance(child, LazyHybridCommand):  # pyright: ignore [reportUnnecessaryIsInstance]
+            elif isinstance(child, CommandBuilder):  # pyright: ignore [reportUnnecessaryIsInstance]
                 child.base_func = group.command
             else:
                 raise TypeError(f"Unexpected child type: {type(child)}")  # pragma: no cover
@@ -161,67 +219,114 @@ class LazyHybridGroup[T: Co](LazyHybridCommand[T]):
             command_mapping.update(child_command_mapping)
         return command_mapping
 
-    def command[U: Co](self, *args: Any, **kwargs: Any) -> Callable[[U], LazyHybridCommand[U]]:
+    def command[U: Co](
+        self,
+        *args: Any,
+        help: locale_str | str | None = None,  # noqa: A002
+        param_info: dict[str, ParamInfo] | None = None,
+        **kwargs: Any,
+    ) -> Callable[[U], CommandBuilder[U]]:
         """Decorator to add a child command to this group.
 
+        Args:
+            help: Localized long help text shown in the interactive help browser.
+            param_info: Per-parameter localized names and descriptions for the callback.
+            *args: Positional arguments forwarded to [`CommandBuilder`][].
+            **kwargs: Keyword arguments forwarded to [`CommandBuilder`][].
+
         Returns:
-            A decorator that wraps the function in a [`LazyHybridCommand`][] and registers it.
+            A decorator that wraps the function in a [`CommandBuilder`][] and registers it.
         """
 
-        def decorator(func: U) -> LazyHybridCommand[U]:
-            child = LazyHybridCommand(func, args, kwargs)
+        def decorator(func: U) -> CommandBuilder[U]:
+            child = CommandBuilder(func, args, kwargs, param_info=param_info, help_text=help)
             self.children.append(child)
             return child
 
         return decorator
 
-    def group[U: Co](self, *args: Any, **kwargs: Any) -> Callable[[U], LazyHybridGroup[U]]:
+    def group[U: Co](
+        self,
+        *args: Any,
+        help: locale_str | str | None = None,  # noqa: A002
+        param_info: dict[str, ParamInfo] | None = None,
+        **kwargs: Any,
+    ) -> Callable[[U], GroupBuilder[U]]:
         """Decorator to add a child subgroup to this group.
 
+        Args:
+            help: Localized long help text shown in the interactive help browser.
+            param_info: Per-parameter localized names and descriptions for the callback.
+            *args: Positional arguments forwarded to [`GroupBuilder`][].
+            **kwargs: Keyword arguments forwarded to [`GroupBuilder`][].
+
         Returns:
-            A decorator that wraps the function in a [`LazyHybridGroup`][] and registers it.
+            A decorator that wraps the function in a [`GroupBuilder`][] and registers it.
         """
 
-        def decorator(func: U) -> LazyHybridGroup[U]:
-            child = LazyHybridGroup(func, args, kwargs)
+        def decorator(func: U) -> GroupBuilder[U]:
+            child = GroupBuilder(func, args, kwargs, param_info=param_info, help_text=help)
             self.children.append(child)
             return child
 
         return decorator
 
 
-def lazy_hybrid_command[T: Co](*args: Any, **kwargs: Any) -> Callable[[T], LazyHybridCommand[T]]:
-    """Return a decorator that wraps a function in a [`LazyHybridCommand`][].
+def bot_command[T: Co](
+    *args: Any,
+    help: locale_str | str | None = None,  # noqa: A002
+    param_info: dict[str, ParamInfo] | None = None,
+    **kwargs: Any,
+) -> Callable[[T], CommandBuilder[T]]:
+    """Return a decorator that wraps a function in a [`CommandBuilder`][].
 
-    Arguments are forwarded verbatim to `commands.hybrid_command` when the cog loads.
+    Args:
+        help: Localized long help text shown in the interactive help browser.
+        param_info: Per-parameter localized names and descriptions for the callback.
+        *args: Positional arguments for [`CommandBuilder`][].
+        **kwargs: Keyword arguments for [`CommandBuilder`][].
     """
 
-    def decorator(func: T) -> LazyHybridCommand[T]:
-        return LazyHybridCommand(func, args, kwargs)
+    def decorator(func: T) -> CommandBuilder[T]:
+        return CommandBuilder(func, args, kwargs, param_info=param_info, help_text=help)
 
     return decorator
 
 
-def lazy_hybrid_group[T: Co](*args: Any, **kwargs: Any) -> Callable[[T], LazyHybridGroup[T]]:
-    """Return a decorator that wraps a function in a [`LazyHybridGroup`][].
+def bot_group[T: Co](
+    *args: Any,
+    help: locale_str | str | None = None,  # noqa: A002
+    param_info: dict[str, ParamInfo] | None = None,
+    **kwargs: Any,
+) -> Callable[[T], GroupBuilder[T]]:
+    """Return a decorator that wraps a function in a [`GroupBuilder`][].
 
-    Arguments are forwarded verbatim to `commands.hybrid_group` when the cog loads.
+    Args:
+        help: Localized long help text shown in the interactive help browser.
+        param_info: Per-parameter localized names and descriptions for the callback.
+        *args: Positional arguments for [`GroupBuilder`][].
+        **kwargs: Keyword arguments for [`GroupBuilder`][].
     """
 
-    def decorator(func: T) -> LazyHybridGroup[T]:
-        return LazyHybridGroup(func, args, kwargs)
+    def decorator(func: T) -> GroupBuilder[T]:
+        return GroupBuilder(func, args, kwargs, param_info=param_info, help_text=help)
 
     return decorator
 
 
 def wrap[T](dpy_func: Any, *args: Any, **kwargs: Any) -> Callable[[T], T]:
-    """Attach a discord.py decorator to a [`LazyHybridCommand`][] or plain function.
+    """Attach a discord.py decorator to a [`CommandBuilder`][] or plain function.
 
     Defers application until the cog loads, so decorators that inspect `__qualname__`
     see the correct name.
 
+    Note:
+        Prefer `param_info=` in [`bot_command`][] / [`bot_group`][] over `wrap` for
+        `app_commands.rename` and `app_commands.describe` — those are handled automatically
+        when [`ParamInfo`][] is supplied.
+
     Args:
-        dpy_func: The discord.py decorator factory (e.g. `app_commands.describe`).
+        dpy_func: The discord.py decorator factory (e.g. `commands.has_permissions`).
         *args: Positional arguments forwarded to `dpy_func`.
         **kwargs: Keyword arguments forwarded to `dpy_func`.
 
@@ -231,14 +336,14 @@ def wrap[T](dpy_func: Any, *args: Any, **kwargs: Any) -> Callable[[T], T]:
     Example:
         ```python
         @wrap(commands.has_permissions, manage_messages=True)
-        @lazy_hybrid_command()
+        @bot_command()
         async def example(ctx): ...
         ```
     """
 
     def decorator(func: T) -> T:
         # If the function is already a lazy class
-        if isinstance(func, LazyHybridCommand):
+        if isinstance(func, CommandBuilder):
             func.wrappers.append((dpy_func, args, kwargs))  # pyright: ignore [reportUnknownMemberType]
         else:
             # Otherwise, add the wrapper to the function directly
@@ -285,7 +390,7 @@ def in_modmail_ticket() -> Any:
 
         return True
 
-    return wrap(commands.guild_only)(wrap(lambda: commands.check(predicate)))
+    return wrap(lambda: commands.check(predicate))
 
 
 class Cog(commands.Cog, group_auto_locale_strings=False):
@@ -294,6 +399,15 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
     renamed_command_keys: ClassVar[list[tuple[str, str]]] = []
     """Old-to-new override key pairs for renamed callbacks. Add an entry when renaming a callback;
     remove it after 2-3 version bumps once all profiles have been migrated."""
+
+    help_name: ClassVar[locale_str | str | None] = None
+    """Localized display name for this cog in the help overview (`None` falls back to the class name)."""
+
+    help_description: ClassVar[locale_str | str | None] = None
+    """Short description shown in the help overview select (`None` to show no description)."""
+
+    help_color: ClassVar[discord.Color | None] = None
+    """Accent color used in the help command's category card (`None` for default gray)."""
 
     def __init__(self, bot: Bot) -> None:
         """Attach the bot instance.
@@ -308,18 +422,24 @@ class Cog(commands.Cog, group_auto_locale_strings=False):
 def create_cog(
     name: str,
     *,
-    all_commands: list[LazyHybridCommand[Any]] | None = None,
+    all_commands: list[CommandBuilder[Any]] | None = None,
     other_methods: list[Callable[..., Any]] | None = None,
     renamed_command_keys: list[tuple[str, str]] | None = None,
+    help_name: locale_str | str | None = None,
+    help_description: locale_str | str | None = None,
+    help_color: discord.Color | None = None,
 ) -> type[Cog]:
     """Dynamically build a [`Cog`][] subclass with the given commands and methods.
 
     Args:
         name: Name for the new cog class.
-        all_commands: [`LazyHybridCommand`][] instances to finalize and attach.
+        all_commands: [`CommandBuilder`][] instances to finalize and attach.
         other_methods: Additional callables attached as cog methods.
         renamed_command_keys: Old-to-new callback name pairs applied at startup
             to rewrite any stale permission override keys stored in profiles.
+        help_color: Accent color for this cog's card in the help command.
+        help_name: Localized display name shown in the help overview.
+        help_description: Short description shown in the help overview select.
 
     Returns:
         A new [`Cog`][] subclass ready for `bot.add_cog()`.
@@ -340,4 +460,10 @@ def create_cog(
     cls = type(name, (Cog,), methods, group_auto_locale_strings=False)
     if renamed_command_keys:
         cls.renamed_command_keys = renamed_command_keys
+    if help_name is not None:
+        cls.help_name = help_name
+    if help_description is not None:
+        cls.help_description = help_description
+    if help_color is not None:
+        cls.help_color = help_color
     return cls

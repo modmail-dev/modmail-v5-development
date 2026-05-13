@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from modmail.core import Context, _, in_modmail_ticket, lazy_hybrid_command, staff_only, wrap
+from modmail.core import Context, ParamInfo, _, bot_command, in_modmail_ticket, staff_only
 from modmail.enum import TicketMessageType, TicketStatus
 
 if TYPE_CHECKING:
@@ -23,19 +23,20 @@ logger = logging.getLogger(__name__)
 
 
 @staff_only
-@wrap(
-    discord.app_commands.rename,
-    attachment=_("ftl-cmd-sclose-param-attachment-name"),
-    message=_("ftl-cmd-sclose-param-message-name"),
-)
-@wrap(
-    discord.app_commands.describe,
-    attachment=_("ftl-cmd-sclose-param-attachment-description"),
-    message=_("ftl-cmd-sclose-param-message-description"),
-)
-@lazy_hybrid_command(
+@bot_command(
     name=_("ftl-cmd-sclose-name"),
     description=_("ftl-cmd-sclose-description"),
+    help=_("ftl-cmd-sclose-help"),
+    param_info={
+        "attachment": ParamInfo(
+            name=_("ftl-cmd-sclose-param-attachment-name"),
+            description=_("ftl-cmd-sclose-param-attachment-description"),
+        ),
+        "message": ParamInfo(
+            name=_("ftl-cmd-sclose-param-message-name"),
+            description=_("ftl-cmd-sclose-param-message-description"),
+        ),
+    },
 )
 @in_modmail_ticket()
 async def sclose_command(
@@ -45,16 +46,18 @@ async def sclose_command(
     *,
     message: str = "",
 ) -> None:
-    """Silently close a ticket in Modmail.
+    """Close the current ticket without notifying the recipient(s).
+
+    Any `message` or `attachment` is saved in the ticket log but not delivered.
 
     Args:
         cog: The Modmail cog instance.
-        ctx: The command context containing information about the invocation.
-        attachment: An optional attachment to include in the close message. Auto parsed by discord.py.
-        message: The message to save as a close message (not sent to recipient).
+        ctx: The command context.
+        attachment: Attachment to log (not sent to recipients).
+        message: Note saved to the ticket log, not delivered to recipients.
 
     Raises:
-        RuntimeError: If an impossible situation is encountered.
+        RuntimeError: When invoked outside a recognized ticket channel.
     """
     if not isinstance(ctx.channel, discord.TextChannel | discord.Thread):
         raise RuntimeError("Command invoked in a non-text channel, which should be impossible.")

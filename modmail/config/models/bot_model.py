@@ -21,29 +21,30 @@ IDType = Annotated[int, Field(gt=100000000000000, lt=99999999999999999999)]  # 1
 
 
 class BotConfig(BaseModel):
-    """Configuration model for the bot settings.
-
-    Attributes:
-        token: The bot token used for authentication.
-        staff_server_id: The Discord ID of the staff server.
-        prefix: The command prefix for the bot. If None, prefix commands are disabled.
-        respond_bot_mention: Whether the bot should respond to mentions.
-        owner_ids: A set of user IDs that have owner-level permissions.
-        use_slash_commands: Whether to use Discord slash commands.
-        force_sync_commands: Whether to force sync commands with Discord on startup.
-        enable_jishaku: Whether to enable the jishaku debugging extension.
-        bypass_public_bot_check: Whether to bypass the public bot check (not recommended).
-    """
+    """Configuration model for the bot settings."""
 
     token: SecretStr
+    """The bot token used for authentication."""
     staff_server_id: IDType
+    """The Discord ID of the staff server."""
     prefix: str | None = "?"  # when prefix is None, the bot will not use a prefix
+    """The command prefix for the bot. If None, prefix commands are disabled."""
     respond_bot_mention: bool = True
+    """Whether the bot should respond to mentions."""
     owner_ids: set[IDType] = set()
+    """A set of user IDs that have owner-level permissions."""
     use_slash_commands: bool = True
+    """Whether to use Discord slash commands."""
     force_sync_commands: bool = False
+    """Whether to force sync commands with Discord on startup."""
     enable_jishaku: bool = False
+    """Whether to enable the jishaku debugging extension."""
     bypass_public_bot_check: bool = False
+    """Whether to bypass the public bot check (not recommended)."""
+    hide_owner_commands: bool = True
+    """Hide owner-only commands from non-owner users in the `/help` menu."""
+    hide_inaccessible: bool = True
+    """Hide commands the invoking user cannot run in the `/help` menu."""
 
     @field_validator("token")
     @classmethod

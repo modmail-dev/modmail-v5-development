@@ -192,6 +192,7 @@ class UserAccessAllowReason(enum.StrEnum):
     PROFILE_ALLOW = "profile_allow"
     EVERYONE = "everyone"
     LEVEL_MATCH = "level_match"
+    JISHAKU = "jishaku"
     UNKNOWN = "unknown"
 
 

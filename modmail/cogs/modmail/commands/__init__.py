@@ -15,13 +15,13 @@ from .sclose import sclose_command
 from .setup import setup_command
 
 if TYPE_CHECKING:
-    from modmail.core import LazyHybridCommand
+    from modmail.core import CommandBuilder
 
 __all__ = [
     "all_commands",
 ]
 
-all_commands: list[LazyHybridCommand[Any]] = [
+all_commands: list[CommandBuilder[Any]] = [
     setup_command,
     reply_command,
     close_command,

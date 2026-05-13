@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import weakref
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
+from discord.app_commands import locale_str
+
+from .translator import _, locale_for, using_ephemeral
 
 if TYPE_CHECKING:
-    from discord.app_commands import locale_str
-
     from .bot import Bot
-    from .context import Context
 
 __all__ = ["BaseLayoutView", "BaseModal"]
+
+logger = logging.getLogger(__name__)
 
 
 class _ViewMixin:
@@ -23,10 +26,16 @@ class _ViewMixin:
 
     Note:
         Internal mixin — subclass [`BaseLayoutView`][] or [`BaseModal`][] instead.
-        Concrete subclasses must assign `self._ctx` in their `__init__`.
     """
 
-    _ctx: Context
+    _bot: Bot
+    """The bot instance."""
+    _author: discord.Member | discord.User
+    """The user who invoked the command, used to gate interactions."""
+    _locale: str
+    """Translation locale captured at construction via [`locale_for`][]."""
+    _interaction: discord.Interaction | None
+    """The invoking interaction, stored for passing to child modals or views."""
     _message: discord.Message | None
     _response_locks: ClassVar[weakref.WeakValueDictionary[int, asyncio.Lock]] = weakref.WeakValueDictionary()
 
@@ -39,13 +48,41 @@ class _ViewMixin:
     def message(self, value: discord.Message | None) -> None:
         self._message = value
 
-    @property
-    def _bot(self) -> Bot:
-        return self._ctx.bot
-
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Return `True` only when the interaction originates from the command invoker."""
-        return interaction.user == self._ctx.author
+        return interaction.user == self._author
+
+    def _t(
+        self,
+        string: str | locale_str,
+        interaction: discord.Interaction[Any] | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """Translate `string` using the construction-time locale, or an interaction's locale.
+
+        Args:
+            string: FTL message ID or a [`locale_str`][] from [`_`][].
+            interaction: When given and registered via [`ephemeral_scope`][], uses its locale
+                instead of the construction-time locale.
+            **kwargs: FTL variables (when `string` is a bare key).
+
+        Returns:
+            Translated string.
+        """
+        if isinstance(string, str):
+            if not string.startswith("ftl-"):  # ftl: ignore
+                logger.debug("View._t called with a non-locale string: %r", string)
+                return string
+            string = _(string, **kwargs)
+
+        if interaction is None:
+            locale = self._locale
+        elif using_ephemeral(interaction):
+            locale = locale_for(interaction)
+        else:
+            locale = locale_for(None)
+
+        return self._bot.translate(string, locale=locale)
 
     def _response_lock_for(self, interaction: discord.Interaction) -> asyncio.Lock:
         """Return the per-interaction response lock, creating it on first use."""
@@ -56,7 +93,11 @@ class _ViewMixin:
 
     def _delete_message(self, interaction: discord.Interaction | None = None) -> None:
         """Fire-and-forget delete of `interaction.message` or [`message`][]."""
-        target = (interaction.message if interaction is not None else None) or self.message
+        if interaction is None or interaction.is_expired():
+            target = self.message
+        else:
+            target = interaction.message or self.message
+
         if target is None:
             return
 
@@ -85,29 +126,34 @@ class _ViewMixin:
         interaction: discord.Interaction,
         content: str | locale_str | None = None,
         *,
-        ephemeral: bool = True,
+        ephemeral: bool | None = None,
         delete_after: float | None = 6.0,
         **kwargs: Any,
-    ) -> discord.WebhookMessage | None:
-        """Send an ephemeral response, routing to `interaction.response.send_message` or `followup.send`.
+    ) -> None:
+        """Send a response to a view interaction.
 
         Args:
             interaction: The interaction to respond to.
-            content: Plain string sent as-is, or a [`locale_str`][] translated via [`Context.t`][].
-            ephemeral: Whether to send as an ephemeral message.
+            content: Text or [`locale_str`][] to send.
+            ephemeral: `True` for ephemeral. `None` follows the active [`ephemeral_scope`][].
             delete_after: Seconds before auto-deletion (`None` to keep).
-            **kwargs: Forwarded to `interaction.response.send_message` or `followup.send`.
-
-        Returns:
-            The webhook message if sent using the followup webhook, else `None`.
+            **kwargs: Forwarded to the underlying Discord send call.
         """
         if "view" in kwargs:
-            delete_after = None  # Don't auto delete views
+            delete_after = None
+
+        if ephemeral is None:
+            ephemeral = using_ephemeral(interaction)
+
+        if ephemeral:
+            locale = locale_for(interaction)
+        else:
+            locale = locale_for(None)
 
         pos_args: list[str] = []
         if content is not None:
-            if isinstance(content, discord.app_commands.locale_str):
-                content = self._ctx.t(content)
+            if isinstance(content, locale_str):
+                content = self._bot.translate(content, locale=locale)
             pos_args.append(content)
 
         async with self._response_lock_for(interaction):
@@ -116,39 +162,70 @@ class _ViewMixin:
                     await interaction.response.send_message(
                         *pos_args, ephemeral=ephemeral, delete_after=delete_after, **kwargs
                     )
-                return None
+                return
 
         with contextlib.suppress(discord.HTTPException):
-            if delete_after is not None:
-                msg = await interaction.followup.send(*pos_args, ephemeral=ephemeral, wait=True, **kwargs)
-                await msg.delete(delay=delete_after)
+            if interaction.is_expired():
+                if not isinstance(interaction.channel, discord.abc.Messageable):
+                    return
+                # Try to send to the channel directly
+                msg = await self._bot.send_message(
+                    content, channel=interaction.channel, ephemeral=ephemeral, fail_silently=True, **kwargs
+                )
+                if msg and delete_after is not None:
+                    await msg.delete(delay=delete_after)
             else:
-                msg = await interaction.followup.send(*pos_args, ephemeral=ephemeral, wait=False, **kwargs)
-            return msg
-        return None
+                if delete_after is not None:
+                    msg = await interaction.followup.send(*pos_args, ephemeral=ephemeral, wait=True, **kwargs)
+                    await msg.delete(delay=delete_after)
+                else:
+                    await interaction.followup.send(*pos_args, ephemeral=ephemeral, wait=False, **kwargs)
+        return
+
+    async def send_ephemeral(
+        self,
+        interaction: discord.Interaction,
+        content: str | locale_str | None = None,
+        *,
+        delete_after: float | None = 6.0,
+        **kwargs: Any,
+    ) -> None:
+        """Send a private response visible only to the interaction user.
+
+        Args:
+            interaction: The interaction to respond to.
+            content: Text or [`locale_str`][] to send, or `None` for component-only responses.
+            delete_after: Seconds before auto-deletion (`None` to keep).
+            **kwargs: Forwarded to [`send`][].
+        """
+        await self.send(interaction, content, ephemeral=True, delete_after=delete_after, **kwargs)
 
 
 class BaseLayoutView(_ViewMixin, discord.ui.LayoutView):
-    """Base class for context-aware Component v2 layout views.
-
-    Stores the command [`Context`][], exposes `._bot`, enforces author-only
-    [`interaction_check`][], and provides [`send`][] and [`_update_message`][] helpers.
+    """Base class for Component v2 layout views with locale and author support.
 
     Args:
-        ctx: The invoking command context.
+        bot: The bot instance.
+        author: The user who invoked the command — only they can interact with the view.
+        interaction: Invoking interaction for locale capture. `None` uses `CONFIG.default_locale`.
         timeout: Seconds before the view stops accepting interactions.
     """
 
-    def __init__(self, ctx: Context, *, timeout: float | None = 180.0) -> None:
-        """Store `ctx` and initialize the layout view.
-
-        Args:
-            ctx: The invoking command context.
-            timeout: Seconds before the view stops accepting interactions.
-        """
-        super().__init__(timeout=timeout)
-        self._ctx = ctx
+    def __init__(
+        self,
+        bot: Bot,
+        author: discord.Member | discord.User,
+        *,
+        interaction: discord.Interaction[Any] | None,
+        timeout: float | None = 180.0,
+    ) -> None:
+        """See class docstring."""
+        self._bot = bot
+        self._author = author
+        self._interaction = interaction
+        self._locale: str = locale_for(interaction)
         self._message: discord.Message | None = None
+        super().__init__(timeout=timeout)
 
     def _update_message(self, interaction: discord.Interaction | None = None) -> asyncio.Task[None]:
         """Fire-and-forget view edit, using `edit_message` or falling back to [`message`][].edit.
@@ -187,25 +264,30 @@ class BaseLayoutView(_ViewMixin, discord.ui.LayoutView):
 
 
 class BaseModal(_ViewMixin, discord.ui.Modal):
-    """Base class for context-aware modals.
-
-    Stores the command [`Context`][], exposes `._bot`, enforces author-only
-    [`interaction_check`][], and provides a [`send`][] helper.
+    """Base class for modals with locale and author support.
 
     Args:
-        ctx: The invoking command context.
-        title: The modal title shown to the user (up to 45 characters).
+        bot: The bot instance.
+        author: The user who invoked the command — only they can submit the modal.
+        title: Modal title (up to 45 characters). A [`locale_str`][] is translated using the
+            captured locale.
+        interaction: Invoking interaction for locale capture. `None` uses `CONFIG.default_locale`.
         timeout: Seconds before the modal stops accepting input.
     """
 
-    def __init__(self, ctx: Context, *, title: str, timeout: float | None = None) -> None:
-        """Store `ctx` and initialize the modal.
-
-        Args:
-            ctx: The invoking command context.
-            title: The modal title shown to the user (up to 45 characters).
-            timeout: Seconds before the modal stops accepting input.
-        """
-        super().__init__(title=title, timeout=timeout)
-        self._ctx = ctx
+    def __init__(
+        self,
+        bot: Bot,
+        author: discord.Member | discord.User,
+        *,
+        title: str | locale_str,
+        interaction: discord.Interaction[Any] | None,
+        timeout: float | None = None,
+    ) -> None:
+        """See class docstring."""
+        self._bot = bot
+        self._author = author
+        self._interaction = interaction
+        self._locale: str = locale_for(interaction)
         self._message: discord.Message | None = None
+        super().__init__(title=self._t(title) if isinstance(title, locale_str) else title, timeout=timeout)

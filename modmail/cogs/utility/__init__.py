@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from modmail.core import Bot, Cog, create_cog
+import discord
+
+from modmail.core import Bot, Cog, _, create_cog
 
 from .commands import all_commands
 
@@ -19,7 +21,13 @@ if TYPE_CHECKING:
         """Utility commands cog for the Modmail bot."""
 
 else:
-    Utility = create_cog("Utility", all_commands=all_commands)
+    Utility = create_cog(
+        "Utility",
+        all_commands=all_commands,
+        help_name=_("ftl-view-help-category-utility-name"),
+        help_description=_("ftl-view-help-category-utility-description"),
+        help_color=discord.Color.teal(),
+    )
 
 
 __all__ = ["Utility", "setup"]

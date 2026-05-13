@@ -10,13 +10,13 @@ from discord.ext import commands
 
 from .. import CONFIG
 from ..enum import RequiredAccessLevel
-from .cog import LazyHybridCommand
+from .commands import CommandBuilder
 from .translator import supported_locales
 
 if TYPE_CHECKING:
     from .bot import Bot
 
-type AnyCo = commands.Command[Any, Any, Any] | LazyHybridCommand[Any] | Callable[..., Coroutine[Any, Any, Any]]
+type AnyCo = commands.Command[Any, Any, Any] | CommandBuilder[Any] | Callable[..., Coroutine[Any, Any, Any]]
 
 __all__ = [
     "PermissionCommandIndex",
@@ -30,6 +30,8 @@ __all__ = [
 
 def _locale_candidates(locale: str) -> list[str]:
     """Return locale lookup candidates: full tag, language-only, then `CONFIG.default_locale`."""
+    if locale == CONFIG.default_locale:
+        return [CONFIG.default_locale]
     return list(dict.fromkeys([locale, locale.partition("-")[0], CONFIG.default_locale]))
 
 
@@ -43,11 +45,12 @@ def _set_access_level[T: AnyCo](func: T, access_level: RequiredAccessLevel) -> T
     Returns:
         `func` unchanged (for decorator chaining).
     """
-    # Lots of type ignore here because we are using function injection to set the access level.
-    if isinstance(func, commands.Command | LazyHybridCommand):  # Inject into the command callback
-        func.callback.__permission__ = access_level  # pyright: ignore [reportUnknownMemberType, reportFunctionMemberAccess]
+    if isinstance(func, commands.Command | CommandBuilder):  # Inject into the command callback
+        vars(cast("commands.Command[Any, Any, Any] | CommandBuilder[Any]", func).callback)["__permission__"] = (
+            access_level
+        )
     else:  # Inject into the function itself
-        func.__permission__ = access_level  # pyright: ignore [reportFunctionMemberAccess]
+        vars(func)["__permission__"] = access_level
     return func  # pyright: ignore [reportUnknownVariableType, reportReturnType]
 
 
@@ -215,7 +218,7 @@ class PermissionCommandIndex:
                 ancestors.insert(0, node)
                 node = cast("commands.Group[Any, Any, Any] | None", node.parent)
             return " ".join(
-                bot.translate(name, ctx_or_locale=locale)
+                bot.translate(name, locale=locale)
                 if isinstance(name := getattr(a, "_locale_name", a.name), locale_str) and "_string" in name.extras
                 else str(a.name)
                 for a in ancestors

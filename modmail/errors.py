@@ -218,7 +218,7 @@ class UserAccessError(ModmailError, commands.CheckFailure):
     to the denial reason without inspecting the context.
 
     Attributes:
-        result: The denial outcome produced by [`Context.check_user_access`][].
+        result: The denial outcome produced by [`Bot.check_user_access`][].
     """
 
     def __init__(self, result: UserAccessResult) -> None:

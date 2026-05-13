@@ -70,6 +70,13 @@ bot:
   # Must install the jishaku package with "pdm install -G debug" to enable.
   # enable_jishaku: false
 
+  # Whether to hide owner-only commands from users who are not the bot owner in /help.
+  # hide_owner_commands: true
+
+  # Whether to hide commands the user cannot access from the /help menu.
+  # Cogs with no accessible commands are also omitted.
+  # hide_inaccessible: true
+
 # Required: The URL to the bot's logviewer address.
 log_url: "https://example.com/"
 

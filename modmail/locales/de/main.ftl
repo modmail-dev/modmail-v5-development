@@ -17,6 +17,63 @@ ftl-view-prompt-cancel-label = Abbrechen
 ###         Commands
 ### ========================
 
+## Command: Utility.help
+
+ftl-cmd-help-name = hilfe
+ftl-cmd-help-description = Alle verfügbaren Bot-Befehle interaktiv durchsuchen.
+ftl-cmd-help-param-command-name = befehl
+ftl-cmd-help-param-command-description = Befehl oder Unterbefehl, zu dem direkt Hilfe angezeigt werden soll.
+
+## Help view — overview
+
+ftl-view-help-title = ### Modmail-Hilfe
+ftl-view-help-subtitle = Wähle unten eine Kategorie aus oder verwende den Hilfebefehl mit einem Befehlsnamen für Details.
+ftl-view-help-select-category-placeholder = Kategorie auswählen…
+
+## Category names and descriptions (referenced from cog setup)
+
+ftl-view-help-category-modmail-name = Modmail
+ftl-view-help-category-modmail-description = Ticket-Verwaltung und Antworten
+ftl-view-help-category-utility-name = Hilfsfunktionen
+ftl-view-help-category-utility-description = Bot-Konfiguration und Profile
+ftl-view-help-category-jishaku-name = Jishaku
+ftl-view-help-category-jishaku-description = Externe Entwickler- und Debug-Werkzeuge.
+ftl-view-help-category-other-name = Sonstiges
+
+# :param $categories: number of categories, :param $commands: number of commands
+ftl-view-help-overview-stats = { $categories } { $categories ->
+    [one]   Kategorie
+   *[other] Kategorien
+} · { $commands } { $commands ->
+    [one]   Befehl
+   *[other] Befehle
+} verfügbar
+
+## Help view — category page
+
+# :param $page: current page number, :param $total: total number of pages
+ftl-view-help-page-indicator = Seite { $page } von { $total }
+ftl-view-help-select-command-placeholder = Befehl für Details auswählen…
+ftl-view-help-btn-back = ← Zurück
+ftl-view-help-btn-prev = ‹ Zurück
+ftl-view-help-btn-next = Weiter ›
+ftl-view-help-prefix-only = nur Präfix
+ftl-view-help-category-empty-title = ### { $category }
+ftl-view-help-category-empty-body =
+    In dieser Kategorie gibt es noch keine Befehle.
+    Wähle eine andere Kategorie oder schau später wieder vorbei.
+ftl-view-help-no-access = -# Du hast keinen Zugriff auf Befehle.
+
+## Help view — command detail page
+
+# :param $level: access level label (e.g. Staff, Admin)
+ftl-view-help-detail-access = **Zugriff:** { $level }
+ftl-view-help-detail-param-header = **Parameter:**
+ftl-view-help-detail-param-optional-label = optional
+ftl-view-help-detail-prefix-note = Dieser Befehl ist nur über das Bot-Präfix verfügbar.
+# :param $command: the command name the user searched for
+ftl-view-help-not-found = Befehl `{ $command }` wurde nicht gefunden.
+
 ## Command: Utility.about
 
 ftl-cmd-about-name = über
@@ -35,6 +92,12 @@ ftl-cmd-about-version-message = Modmail v{ $version }
 ftl-cmd-status-name = status
 ftl-cmd-status-fallback-name = setzen
 ftl-cmd-status-description = Setzt den Status des Modmail-Bots.
+ftl-cmd-status-help =
+    Setze den Bot-Status oder die Aktivität, oder zeige die aktuellen Werte ohne Eingabe an.
+    Statuswerte: online, abwesend, bns, offline.
+    Aktivitätsformate: spielt <name>, schaut <name>, hört <name>, tritt an in <name>.
+    Streaming-Format: streamt <name> <twitch-url>.
+    Jeder andere Text wird als benutzerdefinierte Aktivität gesetzt. Nutze "löschen" zum Zurücksetzen.
 ftl-cmd-status-param-status-name = status
 ftl-cmd-status-param-status-description = Der zu setzende Status.
 
@@ -42,11 +105,16 @@ ftl-cmd-status-param-status-description = Der zu setzende Status.
 
 ftl-cmd-status-clear-name = löschen
 ftl-cmd-status-clear-description = Löscht den Status des Modmail-Bots.
+ftl-cmd-status-clear-help =
+    Entfernt den aktuellen Status und die Aktivität des Bots.
 
 ## Command: Utility.profile
 
 ftl-cmd-profile-name = profil
 ftl-cmd-profile-description = Berechtigungsprofile für Benutzer und Rollen anzeigen und verwalten.
+ftl-cmd-profile-help =
+    Listet alle konfigurierten Berechtigungsprofile nach Zugriffsebene sortiert auf.
+    Verwende "bearbeiten", um ein Profil anzulegen oder zu ändern, oder "löschen" zum Entfernen.
 ftl-cmd-profile-fallback-name = liste
 
 ## Modals: profile appearance and override
@@ -143,6 +211,9 @@ ftl-cmd-profile-list-tip = -# Verwende `/{ ftl-cmd-profile-name } { ftl-cmd-prof
 
 ftl-cmd-profile-edit-name = bearbeiten
 ftl-cmd-profile-edit-description = Zugriffsebene, Aussehen und Befehlsüberschreibungen eines Profils bearbeiten.
+ftl-cmd-profile-edit-help =
+    Öffnet einen interaktiven Editor für ein Benutzer- oder Rollenprofil.
+    Dort kannst du Zugriffsebene, Tag, Farbe und Befehlsüberschreibungen setzen.
 ftl-cmd-profile-edit-param-target-name = benutzer_oder_rolle
 ftl-cmd-profile-edit-param-target-description = Der Benutzer oder die Rolle, dessen/deren Profil bearbeitet werden soll.
 
@@ -150,6 +221,9 @@ ftl-cmd-profile-edit-param-target-description = Der Benutzer oder die Rolle, des
 
 ftl-cmd-profile-delete-name = löschen
 ftl-cmd-profile-delete-description = Profil löschen und alle Zugriffseinstellungen sowie Befehlsüberschreibungen entfernen.
+ftl-cmd-profile-delete-help =
+    Löscht ein Profil und entfernt alle Zugriffseinstellungen sowie Befehlsüberschreibungen.
+    Gib einen Benutzer oder eine Rolle an, oder nutze eine ID, falls die Entität nicht mehr existiert.
 ftl-cmd-profile-delete-param-target-name = benutzer_oder_rolle
 ftl-cmd-profile-delete-param-target-description = Der Benutzer oder die Rolle, dessen/deren Profil gelöscht werden soll.
 ftl-cmd-profile-delete-param-id-name = id
@@ -166,11 +240,16 @@ ftl-cmd-profile-delete-failed = Profil konnte nicht gelöscht werden. Bitte vers
 # :param $command: the name of the command
 ftl-cmd-profile-override-owner-command = Nur Bot-Besitzer können diesen Befehl überschreiben.
 ftl-cmd-profile-override-command-not-found = Befehl `{ $command }` nicht gefunden.
+ftl-cmd-profile-override-jishaku-command = Jishaku verwaltet seine eigenen Berechtigungen und unterstützt keine Modmail-Überschreibungen.
 
 ## Command: Modmail.setup
 
 ftl-cmd-setup-name = setup
 ftl-cmd-setup-description = Richtet den Modmail-Bot ein.
+ftl-cmd-setup-help =
+    Startet den interaktiven Einrichtungsassistenten im Mitarbeiter-Server.
+    Wähle Kategorie oder Forum und lasse den Bot die Kanäle erstellen oder konfigurieren.
+    Es kann immer nur eine Einrichtung laufen.
 ftl-cmd-setup-not-enough-guild-permissions = Ich habe nicht genug Berechtigungen in diesem Server.
 # :param $guild_name: the name of the staff guild
 ftl-cmd-setup-wrong-guild = Du kannst den Modmail-Bot nur im Mitarbeiter-Server ({ $guild_name }) einrichten.
@@ -283,6 +362,9 @@ ftl-wizard-setup-success-content-forum =
 
 ftl-cmd-reply-name = antworten
 ftl-cmd-reply-description = Auf ein Modmail-Ticket antworten.
+ftl-cmd-reply-help =
+    Antworte dem Benutzer aus einem Modmail-Ticketkanal oder -Thread heraus.
+    Gib eine Nachricht, einen Anhang oder beides an. Mindestens eines ist erforderlich.
 ftl-cmd-reply-param-attachment-name = anhang
 ftl-cmd-reply-param-attachment-description = Der zu sendende Anhang. Kann eine Datei oder ein Bild sein.
 ftl-cmd-reply-param-message-name = nachricht
@@ -298,6 +380,9 @@ ftl-cmd-reply-message-failed = Fehler beim Senden der Antwort. Bitte überprüfe
 
 ftl-cmd-close-name = schließen
 ftl-cmd-close-description = Ein Modmail-Ticket schließen.
+ftl-cmd-close-help =
+    Schließt das aktuelle Ticket und sendet dem Benutzer eine Schließnachricht.
+    Gib eine Nachricht, einen Anhang oder beides an. Ohne Eingabe wird eine Standardnachricht verwendet.
 ftl-cmd-close-param-attachment-name = anhang
 ftl-cmd-close-param-attachment-description = Der zu sendende Anhang. Kann eine Datei oder ein Bild sein.
 ftl-cmd-close-param-message-name = nachricht
@@ -313,6 +398,9 @@ ftl-cmd-close-failed = Fehler beim Schließen des Tickets. Bitte überprüfe die
 
 ftl-cmd-sclose-name = sschließen
 ftl-cmd-sclose-description = Ein Modmail-Ticket lautlos schließen.
+ftl-cmd-sclose-help =
+    Schließt das aktuelle Ticket, ohne dem Benutzer eine DM zu senden.
+    Optional kannst du eine Nachricht oder einen Anhang für das Ticketprotokoll speichern.
 ftl-cmd-sclose-param-attachment-name = anhang
 ftl-cmd-sclose-param-attachment-description = Der mit der Schließnachricht zu speichernde Anhang. Kann eine Datei oder ein Bild sein.
 ftl-cmd-sclose-param-message-name = nachricht

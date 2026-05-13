@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from modmail.core import Context, _, lazy_hybrid_group
+from modmail.core import Context, _, bot_group
 
 if TYPE_CHECKING:
     from .. import Utility
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 __all__ = ["about_command"]
 
 
-@lazy_hybrid_group(
+@bot_group(
     name=_("ftl-cmd-about-name"),
     fallback=_("ftl-cmd-about-fallback-name"),
     description=_("ftl-cmd-about-description"),

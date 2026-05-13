@@ -1,17 +1,19 @@
 """Fluent-based translation services for Modmail.
 
-[`Translator`][] wraps `FluentLocalization` and resolves [`locale_str`][] objects at
-render time. The module-level [`_`][] function marks a string for translation and
-pre-renders it in the default locale.
+Ephemeral responses use the user's locale; public responses use `CONFIG.default_locale`.
+Use [`ephemeral_scope`][] to declare an interaction as ephemeral — [`ctx.t`][] and
+[`Bot.send_message`][] resolve locale automatically from there.
 """
 
 from __future__ import annotations
 
 import warnings
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import discord
 from discord import app_commands
@@ -20,7 +22,10 @@ from fluent.runtime import FluentLocalization, FluentResourceLoader
 
 from .. import CONFIG
 
-__all__ = ["Translator", "_", "supported_locales"]
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+__all__ = ["Translator", "_", "ephemeral_scope", "locale_for", "supported_locales", "using_ephemeral"]
 
 # Fluent supported types (see: fluent.runtime.utils.native_to_fluent)
 FluentTypes = str | int | float | Decimal | datetime | date | None
@@ -59,6 +64,71 @@ def supported_locales() -> frozenset[str]:
         Frozenset of BCP-47 locale strings for which FTL bundles are available.
     """
     return frozenset(_all_l10n)
+
+
+_interaction_scope: ContextVar[dict[int, bool]] = ContextVar("modmail_interaction_scope")
+"""Task-local scope dict mapping interaction IDs to their ephemeral flag.
+
+Populated by [`ephemeral_scope`][]. Isolated per asyncio task via copy-on-write semantics.
+"""
+
+
+def locale_for(interaction: discord.Interaction[Any] | None) -> str:
+    """Return the locale for `interaction`, or `CONFIG.default_locale` when unavailable.
+
+    Args:
+        interaction: The Discord interaction, or `None`.
+
+    Returns:
+        BCP-47 locale string.
+    """
+    if interaction is None or interaction.is_expired():
+        return CONFIG.default_locale
+    return str(interaction.locale)
+
+
+def using_ephemeral(interaction: discord.Interaction[Any] | None) -> bool:
+    """Return `True` if `interaction` was declared ephemeral via [`ephemeral_scope`][].
+
+    Args:
+        interaction: The Discord interaction to check, or `None`.
+
+    Returns:
+        `True` if [`ephemeral_scope`][] is active for this interaction.
+    """
+    if interaction is None or interaction.is_expired():
+        return False
+    return _interaction_scope.get({}).get(interaction.id, False)
+
+
+@contextmanager
+def ephemeral_scope(interaction: discord.Interaction[Any] | None) -> Generator[None]:
+    """Mark `interaction`'s responses as ephemeral for the duration of the block.
+
+    Within the block, [`using_ephemeral`][] returns `True` for this interaction, [`ctx.t`][]
+    resolves to the user's locale, and sends default to ephemeral. Has no effect when
+    `interaction` is `None` or expired.
+
+    Note:
+        Pass `interaction=interaction` to any view constructors inside this block so they
+        capture the user's locale.
+
+    Args:
+        interaction: The interaction that will receive the ephemeral responses.
+
+    Yields:
+        Nothing.
+    """
+    if interaction is None or interaction.is_expired():
+        yield
+        return
+
+    current = _interaction_scope.get({})
+    token = _interaction_scope.set({**current, interaction.id: True})
+    try:
+        yield
+    finally:
+        _interaction_scope.reset(token)
 
 
 class Translator(app_commands.Translator):
