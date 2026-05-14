@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import datetime
 import logging
 import re
@@ -14,14 +13,19 @@ import discord
 from .. import CONFIG
 from ..backends.common import TicketModel, TicketUserModel
 from ..enum import AccessLevel, ProfileType, TicketStatus
-from ..errors import BadPermissionsError, NoModmailCategoryError, NoStaffGuildError
+from ..errors import (
+    BadPermissionsError,
+    ModmailError,
+    NoModmailCategoryError,
+    NoStaffGuildError,
+    NoTicketChannelError,
+    TicketCreationError,
+)
 from ._ticket_view import TicketView
-from .embed import EmbedProxy
 from .translator import _
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
-
+    from ._partial_recipient import PartialRecipient
     from .bot import Bot
 
 __all__ = ["StaffGuild"]
@@ -524,196 +528,8 @@ class StaffGuild:
         reason = self.bot.translate(_("ftl-msg-revoke-access-reason", user_or_role=str(user_or_role)))
         await self.category_or_forum.edit(overwrites=all_overwrites, reason=reason)
 
-    async def get_ticket(
-        self, user_or_channel: discord.User | discord.Member | discord.TextChannel | discord.Thread, /
-    ) -> TicketView | None:
-        """Return the open ticket associated with a user or ticket channel.
-
-        Args:
-            user_or_channel: A Discord user or member to look up by recipient, or the ticket
-                channel/thread to look up directly.
-
-        Returns:
-            The matching [`TicketView`][] (`None` if no open ticket exists).
-        """
-        if isinstance(user_or_channel, discord.User | discord.Member):
-            ticket_model = await self.bot.database_client.get_ticket_by_recipient(user_or_channel.id)
-        else:
-            ticket_model = await self.bot.database_client.get_ticket_by_channel(user_or_channel.id, only_open=True)
-
-        if ticket_model is None:
-            logger.debug("No ticket found for %s", user_or_channel)
-            return None
-
-        channel = self.guild.get_channel_or_thread(ticket_model.channel_id)
-        if channel is None:
-            try:
-                channel = await self.guild.fetch_channel(ticket_model.channel_id)
-            except discord.HTTPException as e:
-                if isinstance(e, discord.NotFound):
-                    # Ticket channel does not exist, close the ticket
-                    logger.warning(
-                        "Ticket channel %s does not exist, closing ticket %s",
-                        ticket_model.channel_id,
-                        ticket_model.key,
-                    )
-                    await self.close_ticket(
-                        ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion
-                    )
-                else:
-                    logger.exception(
-                        "Something went wrong fetching ticket channel %s for ticket %s",
-                        ticket_model.channel_id,
-                        ticket_model.key,
-                    )
-                return None
-
-        if not isinstance(channel, discord.TextChannel | discord.Thread):
-            logger.warning(
-                "Ticket channel %s is not a text channel or thread, closing ticket %s",
-                ticket_model.channel_id,
-                ticket_model.key,
-            )
-            await self.close_ticket(ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion)
-            return None
-
-        if (~channel.permissions_for(channel.guild.me) & self.MIN_PERMISSIONS).value:
-            # TODO: probably handle this differently, maybe alert staff that the channel is inaccessible
-            #  and needs permissions fixed rather than silently closing the ticket
-            logger.warning(
-                "Insufficient permissions to access ticket channel %s for ticket %s, closing ticket.",
-                channel.id,
-                ticket_model.key,
-            )
-            await self.close_ticket(ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion)
-            return None
-
-        recipients: list[discord.User | discord.Member] = []
-        for recipient in ticket_model.recipients:
-            try:
-                # Using .fetch_user since members are not cached
-                user = await self.bot.fetch_user(recipient.user_id)  # TODO: Implement some caching
-            except discord.NotFound:  # TODO: Handle this better (show to user)
-                logger.info("User %s account deleted", recipient.user_id)
-                continue
-            except discord.HTTPException:
-                logger.warning("Failed to fetch user %s", recipient.user_id)
-                continue
-            recipients.append(user)
-        # TODO: handle no recipients
-        return TicketView(self, ticket_model, recipients)
-
-    async def _format_log_channel_message_embed(
-        self, ticket: TicketModel, *, title: str, description: str
-    ) -> discord.Embed:
-        """Build a colored, timestamped log-channel embed for `ticket`.
-
-        Args:
-            ticket: The ticket whose status and timestamps the embed reflects.
-            title: Embed title — typically the recipient usernames.
-            description: Embed description — typically the ticket key and summary.
-
-        Returns:
-            A [`discord.Embed`][] ready to post or edit in the log channel.
-        """
-        embed = EmbedProxy(title=title, description=description)
-        # TODO: configable colors
-        if ticket.status.is_open():
-            embed.color = discord.Color.green()
-            embed.set_footer(text=_("ftl-msg-log-embed-open-footer"))
-            embed.timestamp = ticket.created_at
-        else:
-            embed.color = discord.Color.red()
-            if not ticket.closed_by or ticket.closed_by.user_id == self.guild.me.id:
-                embed.set_footer(text=_("ftl-msg-log-embed-closed-footer-unknown-closer"))
-            else:
-                embed.set_footer(text=_("ftl-msg-log-embed-closed-footer", user=ticket.closed_by.user_name))
-            embed.timestamp = ticket.closed_at or True  # Fallback to current time if closed_at is None
-        return embed.to_embed(self.bot.translator, CONFIG.default_locale)
-
-    async def _send_log_channel_message(
-        self,
-        ticket: TicketModel,
-        recipients: Iterable[discord.User | discord.Member],
-        *,
-        starter_message: discord.Message | None = None,
-    ) -> int | None:
-        """Post an opening entry to the log channel for a newly created ticket.
-
-        Args:
-            ticket: The ticket to log.
-            recipients: The users the ticket was opened for.
-            starter_message: The message that triggered ticket creation (`None` if unavailable).
-
-        Returns:
-            The message ID of the log entry, or `None` if no log channel is configured.
-        """
-        log_channel = await self.get_log_channel()
-        if log_channel is None:
-            logger.info("No log channel set, skipping log message for %s.", ticket.key)
-            return None
-
-        if starter_message is not None and starter_message.content.strip():
-            # Remove excessive whitespace and limit to 75 characters for thread starter message preview
-            ticket_summary = re.sub(r"\s+", " ", starter_message.content.strip())
-            wrap_limit = 75
-            if len(ticket_summary) > wrap_limit:
-                ticket_summary = ticket_summary[: wrap_limit - 3] + "..."
-            ticket_summary = discord.utils.escape_markdown(ticket_summary.strip())
-        else:
-            ticket_summary = self.bot.translate(_("ftl-msg-log-embed-no-content-description"))
-
-        log_url = self.bot.get_log_url(ticket.key)
-        description = f"[`{ticket.key}`]({log_url}): {ticket_summary}"
-        title = " ".join([f"@{recipient.name}" for recipient in recipients])
-
-        embed = await self._format_log_channel_message_embed(ticket, title=title, description=description)
-        log_channel_message = await log_channel.send(embed=embed)
-        self.bot.spawn_task(
-            self.bot.database_client.set_ticket_log_channel_message_id(ticket.key, log_channel_message.id),
-            name=f"set_log_message_id:{ticket.key}",
-        )
-        return log_channel_message.id
-
-    async def _update_log_channel_message(self, ticket: TicketModel) -> None:
-        """Edit the log-channel entry for a ticket to reflect its closed state.
-
-        Args:
-            ticket: The [`TicketModel`][] that was just closed.
-        """
-        if ticket.log_channel_message_id is None:
-            logger.info("No log channel message ID set, skipping log message update for %s.", ticket.key)
-            return
-
-        log_channel = await self.get_log_channel()
-        if log_channel is None:
-            logger.info("No log channel set, skipping log message update for %s.", ticket.key)
-            return
-
-        try:
-            log_channel_message = await log_channel.fetch_message(ticket.log_channel_message_id)
-        except discord.HTTPException as e:
-            if isinstance(e, discord.NotFound):
-                logger.info(
-                    "Log channel message %d not found in log channel, won't update.", ticket.log_channel_message_id
-                )
-            else:
-                logger.error("Failed to fetch log channel message %d: %s", ticket.log_channel_message_id, e)
-            return
-
-        if not log_channel_message.embeds:
-            logger.error("The log channel message %d has no embeds, won't update.", ticket.log_channel_message_id)
-            return
-
-        title = log_channel_message.embeds[0].title or "?"
-        description = log_channel_message.embeds[0].description or "?"
-
-        embed = await self._format_log_channel_message_embed(ticket, title=title, description=description)
-        await log_channel_message.edit(embed=embed)
-        logger.debug("Updated log channel message ID %d.", ticket.log_channel_message_id)
-
     @staticmethod
-    def _make_channel_name(*users: discord.User | discord.Member) -> str:
+    def _make_channel_name(*users: discord.User | discord.Member | PartialRecipient) -> str:
         """Return a hyphen-joined channel name derived from the recipients' usernames.
 
         Args:
@@ -741,43 +557,47 @@ class StaffGuild:
         Raises:
             NoStaffGuildError: If the staff guild is not configured.
             ValueError: If no recipients are provided.
+            TicketCreationError: If the ticket creation fails.
         """
-        if not self.is_setup():
-            raise NoStaffGuildError("Staff guild is not configured")
-
         if not recipients:
             raise ValueError("At least one user must be provided")
+
+        if not self.is_setup():
+            raise NoStaffGuildError("Staff guild is not configured")
 
         reason = self.bot.translate(
             _("ftl-msg-new-ticket-reason", users=", ".join(str(user) for user in recipients))
         )
-        # TODO: error handle http reqs
-        if isinstance(self.category_or_forum, discord.CategoryChannel):
-            channel = await self.category_or_forum.create_text_channel(
-                name=self._make_channel_name(*recipients), reason=reason
-            )
-        else:
-            # New forum threads require a starter message
-            if starter_message is not None and starter_message.content.strip():
-                # Remove excessive whitespace and limit to 150 characters
-                # for thread starter message preview
-                ticket_summary = re.sub(r"\s+", " ", starter_message.content.strip())
-                wrap_limit = 150
-                if len(ticket_summary) > wrap_limit:
-                    ticket_summary = ticket_summary[: wrap_limit - 3] + "..."
-                ticket_summary = discord.utils.escape_markdown(ticket_summary)
+        try:
+            if isinstance(self.category_or_forum, discord.CategoryChannel):
+                channel = await self.category_or_forum.create_text_channel(
+                    name=self._make_channel_name(*recipients), reason=reason
+                )
             else:
-                ticket_summary = self.bot.translate(
-                    _(
-                        "ftl-msg-new-ticket-default-thread-opening-message",
-                        users=" ".join(user.mention for user in recipients),
+                # New forum threads require a starter message
+                if starter_message is not None and starter_message.content.strip():
+                    # Remove excessive whitespace and limit to 150 characters
+                    # for thread starter message preview
+                    ticket_summary = re.sub(r"\s+", " ", starter_message.content.strip())
+                    wrap_limit = 150
+                    if len(ticket_summary) > wrap_limit:
+                        ticket_summary = ticket_summary[: wrap_limit - 3] + "..."
+                    ticket_summary = discord.utils.escape_markdown(ticket_summary)
+                else:
+                    ticket_summary = self.bot.translate(
+                        _(
+                            "ftl-msg-new-ticket-default-thread-opening-message",
+                            users=" ".join(user.mention for user in recipients),
+                        )
                     )
-                )
-            channel = (
-                await self.category_or_forum.create_thread(
-                    name=self._make_channel_name(*recipients), content=ticket_summary, reason=reason
-                )
-            ).thread
+                channel = (
+                    await self.category_or_forum.create_thread(
+                        name=self._make_channel_name(*recipients), content=ticket_summary, reason=reason
+                    )
+                ).thread
+        except discord.HTTPException as exc:
+            logger.exception("Failed to create ticket channel for %s", recipients)
+            raise TicketCreationError from exc
 
         ticket = TicketModel(
             bot_id=CONFIG.bot.bot_id,
@@ -789,114 +609,87 @@ class StaffGuild:
             status=TicketStatus.open,
         )
 
+        async def _handle_ticket_creation_failure(exc_info: BaseException) -> None:
+            logger.error("Failed to create ticket channel for %s", recipients, exc_info=exc_info)
+            # TODO: handle this better, tell the user if created by dm
+            await self.bot.send_message(
+                self.bot.translate(_("ftl-msg-create-ticket-failed")),
+                channel=channel,
+                ephemeral=True,
+                fail_silently=True,
+            )
+
         try:
             await self.bot.database_client.create_ticket(ticket)
-            view = TicketView(self, ticket, list(recipients))
+        except TicketCreationError as exc:
+            await _handle_ticket_creation_failure(exc)
+            raise
+        except ModmailError as exc:
+            await _handle_ticket_creation_failure(exc)
+            raise TicketCreationError from exc
 
-            self.bot.spawn_task(
-                self._send_log_channel_message(ticket, recipients, starter_message=starter_message),
-                name=f"send_log_message:{ticket.key}",
-            )
+        view = TicketView(self, ticket)
+        try:
+            await view.open(starter_message=starter_message)
+        except NoStaffGuildError as exc:
+            await _handle_ticket_creation_failure(exc)
+            raise
+        except ModmailError as exc:
+            await _handle_ticket_creation_failure(exc)
+            raise TicketCreationError from exc
 
-            await asyncio.gather(
-                view.send_initial_staff_message(),
-                # TODO: send initial recipient message (welcome/starter message)
-            )
-        except Exception:
-            logger.exception("Failed to create ticket or send initial message.")
-            # Send a message to the channel indicating the failure
-            try:
-                await channel.send(self.bot.translate(_("ftl-msg-create-ticket-failed")))
-            except discord.HTTPException:
-                logger.exception("Failed to send error message to channel %s", channel.id)
-            raise  # TODO: reraise a custom modmail error
         return view
 
-    async def _delete_after_ticket_closed(
-        self, ticket: TicketModel, *, closer: discord.User | discord.Member | None
-    ) -> None:
-        """Delete or lock the ticket channel after the ticket is marked closed.
+    async def get_ticket(
+        self,
+        lookup: discord.User | discord.Member | discord.TextChannel | discord.Thread | TicketModel,
+        /,
+    ) -> TicketView | None:
+        """Return the ticket associated with a user, channel, or existing model.
+
+        When a [`TicketModel`][] is passed the view is returned immediately with no database or
+        channel lookup — useful when the caller already has the model (e.g. deletion listeners).
+        For a user or channel, the open ticket is looked up in the database and the channel is
+        checked for existence (permissions are not verified here; they surface on first use).
 
         Args:
-            ticket: The [`TicketModel`][] whose channel should be cleaned up.
-            closer: The user who closed the ticket (`None` if the closer is unknown).
+            lookup: A Discord user/member (looks up by recipient), a ticket channel/thread
+                (looks up by channel ID), or a [`TicketModel`][] (wraps directly).
+
+        Returns:
+            The matching [`TicketView`][], or `None` if no open ticket exists or the channel
+            has been deleted.
+
+        Raises:
+            NoStaffGuildError: If the staff guild is unavailable.
         """
-        channel = self.guild.get_channel_or_thread(ticket.channel_id)
-        if channel is None:
-            with contextlib.suppress(discord.HTTPException):
-                channel = await self.guild.fetch_channel(ticket.channel_id)
+        if isinstance(lookup, TicketModel):
+            return TicketView(self, lookup)
 
-        if channel is None:
-            return
-
-        if not isinstance(channel, discord.TextChannel | discord.Thread):
-            return
-
-        if isinstance(channel, discord.Thread) and channel.locked:
-            return
-
-        perms = channel.permissions_for(channel.guild.me)
-        if (isinstance(channel, discord.TextChannel) and not perms.manage_channels) or (
-            isinstance(channel, discord.Thread) and not perms.manage_threads
-        ):
-            logger.info(
-                "%s is closed, skipping thread close operation due to lacking Discord permissions.", ticket.key
-            )
-            return
-
-        if closer is None:
-            close_reason = self.bot.translate(_("ftl-msg-ticket-closed-reason-unknown-closer"))
+        if isinstance(lookup, discord.User | discord.Member):
+            ticket_model = await self.bot.database_client.get_ticket_by_recipient(lookup.id)
         else:
-            close_reason = self.bot.translate(_("ftl-msg-ticket-closed-reason", user=closer.name))
+            ticket_model = await self.bot.database_client.get_ticket_by_channel(lookup.id, only_open=True)
 
+        if ticket_model is None:
+            logger.debug("No ticket found for %s", lookup)
+            return None
+
+        view = TicketView(self, ticket_model)
         try:
-            # TODO: config archive or delete on close
-            if isinstance(channel, discord.Thread):
-                await channel.edit(archived=True, locked=True, reason=close_reason)
-            else:
-                await channel.delete(reason=close_reason)
-        except discord.HTTPException:
-            logger.exception("Failed to delete/archive ticket channel %s", channel)
-
-    async def close_ticket(
-        self, ticket: TicketModel, *, closer: discord.User | discord.Member | None, close_status: TicketStatus
-    ) -> None:
-        """Mark a ticket as closed and schedule channel cleanup and log updates.
-
-        Args:
-            ticket: The [`TicketModel`][] to close.
-            closer: The user closing the ticket (`None` if the closer is unknown).
-            close_status: The [`TicketStatus`][] value to set on the ticket.
-        """
-        if not ticket.status.is_open():
-            logger.info("Ticket %s is already closed, skipping close operation.", ticket.key)
-            return
-
-        logger.debug("Closing ticket %s: %s", ticket.key, close_status)
-        if close_status.is_open():
-            logger.warning(
-                "Close status cannot be open for ticket %s, defaulting to closed_by_command.", ticket.key
+            # Skip permission check here — bad permissions surface as an error on first use
+            await view.get_channel(check_permissions=False)
+        except NoTicketChannelError:
+            logger.warning("Ticket channel for %s is missing, closing.", ticket_model.key)
+            try:
+                await view.close(closer=None, close_status=TicketStatus.closed_by_deletion)
+            except ModmailError as exc:
+                logger.error("Failed to close ticket %s: %s", ticket_model.key, exc)
+            return None
+        except discord.HTTPException as exc:
+            logger.error(
+                "An unexpected discord API error while accessing channel for ticket %s: %s",
+                ticket_model.key,
+                exc,
             )
-            close_status = TicketStatus.closed_by_command
-
-        if closer is None:
-            closer_model = TicketUserModel.from_user(cast("discord.ClientUser", self.bot.user))
-        else:
-            closer_model = TicketUserModel.from_user(closer)
-
-        await self.bot.database_client.close_ticket(ticket.key, closer_model, ticket_status=close_status)
-        # Update the ticket model locally
-        ticket = ticket.model_copy(
-            update={
-                "status": close_status,
-                "closed_by": closer_model,
-                "closed_at": datetime.datetime.now(datetime.UTC),
-            }
-        )
-
-        logger.info("Closed ticket %s for %s.", ticket.key, ticket.recipients)
-
-        self.bot.spawn_task(
-            self._delete_after_ticket_closed(ticket, closer=closer), name=f"delete_ticket_channel:{ticket.key}"
-        )
-        self.bot.spawn_task(self._update_log_channel_message(ticket), name=f"update_log_message:{ticket.key}")
+        return view

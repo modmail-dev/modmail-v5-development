@@ -34,7 +34,6 @@ __all__ = [
     "StaffGuildNotConfiguredError",
     "TicketCreationError",
     "TicketNotFoundError",
-    "TicketRecipientOccupiedError",
     "UserAccessError",
 ]
 
@@ -159,13 +158,6 @@ class TicketCreationError(ModmailError):
     """Exceptions during ticket creation.
 
     Raised when an operation attempts to create a ticket but fails due to various reasons.
-    """
-
-
-class TicketRecipientOccupiedError(TicketCreationError):
-    """Exception for when the recipient is already in another open ticket.
-
-    Raised when an operation attempts to create a ticket with an occupied recipient.
     """
 
 

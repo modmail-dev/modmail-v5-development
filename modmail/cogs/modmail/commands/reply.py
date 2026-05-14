@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
             name=_("ftl-cmd-reply-param-attachment-name"),
             description=_("ftl-cmd-reply-param-attachment-description"),
         ),
-        "message": ParamInfo(
+        "message_text": ParamInfo(
             name=_("ftl-cmd-reply-param-message-name"),
             description=_("ftl-cmd-reply-param-message-description"),
         ),
@@ -43,7 +43,7 @@ async def reply_command(
     ctx: Context,
     attachment: discord.Attachment | None,
     *,
-    message: str = "",
+    message_text: str = "",
 ) -> None:
     """Send a reply to the ticket's recipient(s).
 
@@ -53,7 +53,7 @@ async def reply_command(
         cog: The Modmail cog instance.
         ctx: The command context.
         attachment: File to include in the reply.
-        message: Reply text sent to the recipient(s).
+        message_text: Reply text sent to the recipient(s).
 
     Raises:
         RuntimeError: When invoked outside a recognized ticket channel.
@@ -62,7 +62,7 @@ async def reply_command(
         raise RuntimeError("Command invoked in a non-text channel, which should be impossible.")
 
     # TODO: Support sending stickers
-    if not message and not attachment:
+    if not message_text and not attachment:
         await ctx.reply(_("ftl-cmd-reply-message-empty"), ephemeral=True)
         return
 
@@ -73,22 +73,14 @@ async def reply_command(
     if ticket is None:
         raise RuntimeError("Ticket should not be None here.")
 
-    try:
-        failed_recipients = await ticket.process_reply_message(ctx, message)
-        if failed_recipients:
-            # Send a message about the failed recipients
-            failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
-            cog.bot.spawn_task(
-                ctx.send(_("ftl-cmd-reply-message-failed-recipients", recipients=failed_recipients_str)),
-                name=f"send_failed_recipients:{failed_recipients_str}",
-                suppress_errors=True,
-            )
+    ctx.message.content = message_text
 
+    try:
+        await ticket.process_reply_message(ctx.message)
     except Exception:
         logger.exception("Failed to send reply in %s", ctx.channel)
         await ctx.reply(_("ftl-cmd-reply-message-failed"), ephemeral=True)
         return
-
     finally:
         if ctx.interaction is not None:
             cog.bot.spawn_task(

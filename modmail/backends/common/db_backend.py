@@ -83,10 +83,6 @@ class DBBackend(ABC):
         self._instance_id: str = str(uuid.uuid4())
         self._heartbeat_task: asyncio.Task[None] | None = None
 
-    # -------------------------------------------------------------------------
-    # Instance lock — abstract primitives (each backend implements these five)
-    # -------------------------------------------------------------------------
-
     @abstractmethod
     async def _try_insert_lock(self, lock_data: InstanceLockModel) -> bool:
         """Attempt to insert a new lock for this `bot_id`.
@@ -154,10 +150,6 @@ class DBBackend(ABC):
         Raises:
             DatabaseOperationError: If an unexpected database error occurs.
         """
-
-    # -------------------------------------------------------------------------
-    # Instance lock — shared logic
-    # -------------------------------------------------------------------------
 
     def _build_lock_data(self, now: datetime.datetime) -> InstanceLockModel:
         """Build an [InstanceLockModel][]{ data-preview } for the given timestamp.
@@ -259,10 +251,6 @@ class DBBackend(ABC):
             return
         logger.debug("Released instance lock.")
 
-    # -------------------------------------------------------------------------
-    # Connection
-    # -------------------------------------------------------------------------
-
     @abstractmethod
     async def _connect(self) -> None:
         """Connect to the database and perform startup procedures.
@@ -302,10 +290,6 @@ class DBBackend(ABC):
         finally:
             await self._disconnect()
 
-    # -------------------------------------------------------------------------
-    # Settings
-    # -------------------------------------------------------------------------
-
     @abstractmethod
     async def fetch_settings(self) -> SettingsModel:
         """Load the current settings, creating a default row if none exists yet.
@@ -329,10 +313,6 @@ class DBBackend(ABC):
         Raises:
             DatabaseOperationError: If an unexpected database error occurs.
         """
-
-    # -------------------------------------------------------------------------
-    # Profiles
-    # -------------------------------------------------------------------------
 
     @abstractmethod
     async def fetch_all_profiles(self) -> list[ProfileModel]:
@@ -363,10 +343,6 @@ class DBBackend(ABC):
         Raises:
             DatabaseOperationError: If an unexpected database error occurs.
         """
-
-    # -------------------------------------------------------------------------
-    # Tickets
-    # -------------------------------------------------------------------------
 
     @abstractmethod
     async def fetch_open_tickets(self) -> list[TicketModel]:
@@ -484,8 +460,22 @@ class DBBackend(ABC):
     async def persist_message(self, ticket_message: TicketMessageModel) -> None:
         """Save a message to the database.
 
+        The backend should update all user data referenced within the `ticket_message`.
+
         Args:
             ticket_message: The [TicketMessageModel][]{ data-preview } to persist.
+
+        Raises:
+            DatabaseOperationError: If an unexpected database error occurs.
+        """
+
+    @abstractmethod
+    async def set_user_unreachable(self, user_id: int, *, unreachable: bool) -> None:
+        """Set the `unreachable` flag on a ticket user record.
+
+        Args:
+            user_id: Discord snowflake ID of the user.
+            unreachable: The value to set.
 
         Raises:
             DatabaseOperationError: If an unexpected database error occurs.

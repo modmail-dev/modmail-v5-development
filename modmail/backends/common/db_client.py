@@ -9,17 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import datetime
 import logging
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 from modmail.enum import ProfileKey, ProfileType, TicketStatus
-from modmail.errors import (
-    CacheNotReadyError,
-    DatabaseConnectionError,
-    DatabaseOperationError,
-    TicketCreationError,
-    TicketRecipientOccupiedError,
-)
+from modmail.errors import CacheNotReadyError, DatabaseConnectionError, DatabaseOperationError, TicketCreationError
 from modmail.utils import MultiKeyCollection
 
 from .models import ProfileModel, SettingsModel, TicketMessageModel, TicketModel, TicketUserModel
@@ -60,10 +55,6 @@ class DBClient:
         self._resync_task: asyncio.Task[None] | None = None
         self._cache_ready: asyncio.Event = asyncio.Event()
 
-    # -------------------------------------------------------------------------
-    # Connection
-    # -------------------------------------------------------------------------
-
     async def connect(self) -> None:
         """Connect to the database and populate all caches.
 
@@ -94,10 +85,6 @@ class DBClient:
                 await self._resync_task
             self._resync_task = None
         await self._backend.disconnect()
-
-    # -------------------------------------------------------------------------
-    # Cache readiness
-    # -------------------------------------------------------------------------
 
     def _require_cache_ready(self) -> None:
         """Raise [CacheNotReadyError][] if the cache has not been populated yet.
@@ -167,10 +154,6 @@ class DBClient:
             await asyncio.sleep(_RESYNC_INTERVAL)
             await self._sync_all(suppress_errors=True)
 
-    # -------------------------------------------------------------------------
-    # Settings
-    # -------------------------------------------------------------------------
-
     @property
     def settings(self) -> SettingsModel:
         """The cached [SettingsModel][]{ data-preview }.
@@ -220,10 +203,6 @@ class DBClient:
             raise
         self._settings = new_settings
         logger.debug("Updated settings: %s.", kwargs, stacklevel=2)
-
-    # -------------------------------------------------------------------------
-    # Profiles
-    # -------------------------------------------------------------------------
 
     @property
     def profiles(self) -> list[ProfileModel]:
@@ -320,10 +299,6 @@ class DBClient:
         for key in [k for k in self._profiles if k.profile_id == profile_id]:
             del self._profiles[key]
         logger.debug("Deleted profile %d from cache.", profile_id, stacklevel=2)
-
-    # -------------------------------------------------------------------------
-    # Tickets
-    # -------------------------------------------------------------------------
 
     @property
     def open_tickets(self) -> list[TicketModel]:
@@ -475,15 +450,15 @@ class DBClient:
         Raises:
             CacheNotReadyError: If [`connect`][] has not completed its initial sync.
             DatabaseOperationError: If an unexpected database error occurs.
-            TicketCreationError: If another open ticket shares the same channel ID.
-            TicketRecipientOccupiedError: If any recipient already has an open ticket.
+            TicketCreationError: If another open ticket shares the same channel ID or
+                if any recipient already has an open ticket.
         """
         self._require_cache_ready()
         for cached in self._open_tickets:
             if cached.channel_id == ticket.channel_id:
                 raise TicketCreationError("Ticket with this channel ID already exists.")
             if any(new_r.user_id == old_r.user_id for old_r in cached.recipients for new_r in ticket.recipients):
-                raise TicketRecipientOccupiedError("An open ticket with this recipient already exists.")
+                raise TicketCreationError("An open ticket with this recipient already exists.")
 
         await self._backend.persist_ticket(ticket)
 
@@ -514,6 +489,7 @@ class DBClient:
         """Save a [TicketMessageModel][]{ data-preview } to the database.
 
         Messages are not cached and are written straight through to the backend.
+        All user data referenced by the message will be automatically saved into the database.
 
         Args:
             ticket_message: The [TicketMessageModel][]{ data-preview } to persist.
@@ -554,3 +530,31 @@ class DBClient:
         except KeyError:
             logger.debug("Ticket %s not found in cache during close.", ticket_key)
         logger.debug("Closed ticket %s.", ticket_key, stacklevel=2)
+
+    async def set_user_unreachable(self, user_id: int, *, unreachable: bool) -> None:
+        """Set the `unreachable` flag on a ticket user record.
+
+        Also updates any cached [`TicketModel`][] that has this user as a recipient.
+
+        Args:
+            user_id: Discord snowflake ID of the user.
+            unreachable: `True` to mark the user as unreachable, `False` to clear the flag.
+
+        Raises:
+            DatabaseOperationError: If an unexpected database error occurs.
+        """
+        await self._backend.set_user_unreachable(user_id, unreachable=unreachable)
+        unreachable_at = datetime.datetime.now(datetime.UTC) if unreachable else None
+        for ticket in list(self._open_tickets):
+            if not any(r.user_id == user_id for r in ticket.recipients):
+                continue
+            updated_recipients = [
+                r.model_copy(update={"unreachable": unreachable, "unreachable_at": unreachable_at})
+                if r.user_id == user_id
+                else r
+                for r in ticket.recipients
+            ]
+            updated = ticket.model_copy(update={"recipients": updated_recipients})
+            self._open_tickets.remove("key", ticket.key)
+            self._open_tickets.add(updated, key=updated.key, channel_id=updated.channel_id)
+        logger.debug("Set recipient %s unreachable=%s.", user_id, unreachable, stacklevel=2)

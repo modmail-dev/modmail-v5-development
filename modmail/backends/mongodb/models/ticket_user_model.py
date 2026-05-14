@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING, cast
 
 import pymongo.errors
@@ -29,9 +30,15 @@ class MongoDBTicketUserDocument(Document):
     id: int  # pyright: ignore [reportIncompatibleVariableOverride, reportGeneralTypeIssues]
     """Discord snowflake user ID, stored as the MongoDB `_id`."""
     user_name: str
-    """Display name captured at ticket time."""
+    """Username handle captured at interaction time."""
+    display_name: str
+    """Display name (global name or username) captured at interaction time."""
     avatar: str
-    """Display avatar URL captured at ticket time."""
+    """Display avatar URL captured at interaction time."""
+    unreachable: bool = False
+    """Whether the bot has failed to deliver DMs to this user (e.g. DMs disabled or bot blocked)."""
+    unreachable_at: datetime.datetime | None = None
+    """UTC timestamp of when `unreachable` was last set to `True` (`None` when reachable)."""
 
     class Settings:
         """Settings for MongoDB ticket user collection."""
@@ -51,7 +58,14 @@ class MongoDBTicketUserDocument(Document):
         Returns:
             MongoDBTicketUserDocument: An unsaved document constructed from the model.
         """
-        return cls(id=model.user_id, user_name=model.user_name, avatar=model.avatar)
+        return cls(
+            id=model.user_id,
+            user_name=model.user_name,
+            display_name=model.display_name,
+            avatar=model.avatar,
+            unreachable=model.unreachable,
+            unreachable_at=model.unreachable_at,
+        )
 
     def to_model(self) -> TicketUserModel:
         """Convert this document to a common [TicketUserModel][]{ data-preview }.
@@ -59,7 +73,14 @@ class MongoDBTicketUserDocument(Document):
         Returns:
             TicketUserModel: The converted common user model.
         """
-        return TicketUserModel(user_id=self.id, user_name=self.user_name, avatar=self.avatar)
+        return TicketUserModel(
+            user_id=self.id,
+            user_name=self.user_name,
+            display_name=self.display_name,
+            avatar=self.avatar,
+            unreachable=self.unreachable,
+            unreachable_at=self.unreachable_at,
+        )
 
     @classmethod
     async def put_model(cls, model: TicketUserModel) -> MongoDBTicketUserDocument:

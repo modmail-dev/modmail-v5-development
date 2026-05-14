@@ -18,6 +18,7 @@ from ._lock import SQLLockMixin
 from ._profiles import SQLProfilesMixin
 from ._settings import SQLSettingsMixin
 from ._tickets import SQLTicketsMixin
+from ._users import SQLUsersMixin
 from .migration import do_migration
 
 if TYPE_CHECKING:
@@ -41,6 +42,7 @@ class SQLBackend(
     SQLSettingsMixin,
     SQLProfilesMixin,
     SQLTicketsMixin,
+    SQLUsersMixin,
     SQLBackendBase,
     DBBackend,
 ):

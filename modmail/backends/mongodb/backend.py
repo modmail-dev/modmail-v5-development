@@ -18,6 +18,7 @@ from ._lock import MongoDBLockMixin
 from ._profiles import MongoDBProfilesMixin
 from ._settings import MongoDBSettingsMixin
 from ._tickets import MongoDBTicketsMixin
+from ._users import MongoDBUsersMixin
 from .migration import do_migration
 from .models import (
     MongoDBInstanceLockDocument,
@@ -45,6 +46,7 @@ class MongoDBBackend(
     MongoDBSettingsMixin,
     MongoDBProfilesMixin,
     MongoDBTicketsMixin,
+    MongoDBUsersMixin,
     MongoDBBackendBase,
     DBBackend,
 ):

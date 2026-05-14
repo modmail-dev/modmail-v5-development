@@ -86,15 +86,7 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
                 message.author, created_by=message.author, starter_message=message
             )
 
-        failed_recipients = await ticket.process_dm_message(message)
-
-        if failed_recipients:
-            # Send a message to ticket channel about the failed recipients
-            failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
-            await cog.bot.send_message(
-                _("ftl-msg-dm-received-failed-recipients", recipients=failed_recipients_str),
-                channel=await ticket.get_channel(),
-            )
+        await ticket.process_dm_message(message)
 
     except Exception:
         logger.exception("Failed to process DM message from %s", message.author)

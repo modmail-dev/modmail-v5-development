@@ -371,9 +371,6 @@ ftl-cmd-reply-param-message-name = nachricht
 ftl-cmd-reply-param-message-description = Die zu sendende Nachricht.
 ftl-cmd-reply-message-empty = Bitte gib eine Nachricht zum Senden ein.
 ftl-cmd-reply-message-sending = Nachricht wird gesendet...
-# :param $recipients: a comma-separated list of recipients who did not receive the message
-ftl-cmd-reply-message-failed-recipients = Diese Nachricht konnte nicht an folgende Empfänger gesendet werden: { $recipients }.
-                                          Sie haben möglicherweise DMs deaktiviert, mich blockiert oder teilen keinen Server mit mir.
 ftl-cmd-reply-message-failed = Fehler beim Senden der Antwort. Bitte überprüfe die Protokolle für weitere Informationen.
 
 ## Command: Modmail.close
@@ -388,9 +385,6 @@ ftl-cmd-close-param-attachment-description = Der zu sendende Anhang. Kann eine D
 ftl-cmd-close-param-message-name = nachricht
 ftl-cmd-close-param-message-description = Die zu sendende Nachricht.
 ftl-cmd-close-message-sending = Ticket wird geschlossen...
-# :param $recipients: a comma-separated list of recipients who did not receive the message
-ftl-cmd-close-message-failed-recipients = Die Schließnachricht konnte nicht an folgende Empfänger gesendet werden: { $recipients }.
-                                          Sie haben möglicherweise DMs deaktiviert, mich blockiert oder teilen keinen Server mit mir.
 ftl-cmd-close-message-failed = Fehler beim Senden der Schließnachricht. Bitte überprüfe die Protokolle für weitere Informationen.
 ftl-cmd-close-failed = Fehler beim Schließen des Tickets. Bitte überprüfe die Protokolle für weitere Informationen.
 
@@ -435,9 +429,6 @@ ftl-msg-command-invoke-error = Beim Verarbeiten deines Befehls ist ein unbekannt
 ftl-msg-prompt-timeout = Zeitüberschreitung. Bitte führe den Befehl erneut aus.
 
 ftl-msg-dm-received-not-configured = Modmail wurde noch nicht eingerichtet. Bitte wende dich an den Server-Inhaber, um Modmail für den Server einzurichten.
-# :param $recipients: a comma-separated list of recipients who did not receive the message
-ftl-msg-dm-received-failed-recipients = Folgende Empfänger haben diese Nachricht nicht erhalten: { $recipients }.
-                                        Sie haben möglicherweise DMs deaktiviert, mich blockiert oder teilen keinen Server mit mir.
 
 # :param $users: a comma-separated list of usernames
 ftl-msg-new-ticket-reason = Neues Modmail-Ticket für: { $users }
@@ -470,6 +461,12 @@ ftl-msg-ticket-closed-reason-unknown-closer = Modmail-Ticket von unbekanntem Ben
 
 # :param $message_id: the message ID of the message (string)
 ftl-msg-ticket-channel-embed-footer = Nachrichten-ID: { $message_id }
+# :param $count: number of recipients who did not receive this message
+# :param $recipients: space-separated mentions of unreachable recipients
+ftl-msg-ticket-unreachable-recipients = { $count ->
+     [one] { $recipients } hat diese Nachricht nicht erhalten. DMs sind möglicherweise deaktiviert oder der Bot wurde blockiert.
+    *[other] { $recipients } haben diese Nachricht nicht erhalten. DMs sind möglicherweise deaktiviert oder der Bot wurde blockiert.
+}
 
 ftl-msg-log-embed-open-footer = Ticket offen
 # :param $user: the username of the closer

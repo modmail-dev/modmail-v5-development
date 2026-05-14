@@ -223,7 +223,7 @@ class BaseLayoutView(_ViewMixin, discord.ui.LayoutView):
         self._bot = bot
         self._author = author
         self._interaction = interaction
-        self._locale: str = locale_for(interaction)
+        self._locale: str = locale_for(interaction) if using_ephemeral(interaction) else locale_for(None)
         self._message: discord.Message | None = None
         super().__init__(timeout=timeout)
 
@@ -288,6 +288,6 @@ class BaseModal(_ViewMixin, discord.ui.Modal):
         self._bot = bot
         self._author = author
         self._interaction = interaction
-        self._locale: str = locale_for(interaction)
+        self._locale: str = locale_for(interaction) if using_ephemeral(interaction) else locale_for(None)
         self._message: discord.Message | None = None
         super().__init__(title=self._t(title) if isinstance(title, locale_str) else title, timeout=timeout)

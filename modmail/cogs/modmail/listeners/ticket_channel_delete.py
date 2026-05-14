@@ -39,13 +39,15 @@ async def ticket_channel_delete(cog: Modmail, channel: discord.abc.GuildChannel)
     if not ticket_model:
         return
 
+    view = await cog.bot.staff_guild.get_ticket(ticket_model)
+    if view is None:
+        return
+
     if channel.guild.me.guild_permissions.view_audit_log:
-        # Find the closing entry in the audit log
         audit_logs = channel.guild.audit_logs(limit=10, action=discord.AuditLogAction.channel_delete)
         async for entry in audit_logs:
-            if not entry.target:  # if there is no target (should not happen but just in case)
+            if not entry.target:
                 continue
-
             if entry.target.id == channel.id:
                 logger.info(
                     "Ticket channel %s deleted by %s, closing ticket %s",
@@ -53,13 +55,9 @@ async def ticket_channel_delete(cog: Modmail, channel: discord.abc.GuildChannel)
                     entry.user,
                     ticket_model.key,
                 )
-
-                audit_user = None
-                if entry.user:
-                    audit_user = entry.user
-
-                await cog.bot.staff_guild.close_ticket(
-                    ticket_model, closer=audit_user, close_status=TicketStatus.closed_by_deletion
+                await view.close(
+                    closer=entry.user or None,
+                    close_status=TicketStatus.closed_by_deletion,
                 )
                 return
     else:
@@ -69,5 +67,4 @@ async def ticket_channel_delete(cog: Modmail, channel: discord.abc.GuildChannel)
         )
 
     logger.info("Ticket channel %s manually deleted by unknown user, closing ticket %s", channel, ticket_model.key)
-
-    await cog.bot.staff_guild.close_ticket(ticket_model, closer=None, close_status=TicketStatus.closed_by_deletion)
+    await view.close(closer=None, close_status=TicketStatus.closed_by_deletion)

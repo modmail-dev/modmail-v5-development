@@ -371,9 +371,6 @@ ftl-cmd-reply-param-message-name = message
 ftl-cmd-reply-param-message-description = The message to send.
 ftl-cmd-reply-message-empty = Please enter a message to send.
 ftl-cmd-reply-message-sending = Sending the message...
-# :param $recipients: a comma-separated list of recipients who did not receive the message
-ftl-cmd-reply-message-failed-recipients = Failed to send this message to the following recipients: { $recipients }.
-                                          They may have disabled DMs, blocked me, or does not share any servers with me.
 ftl-cmd-reply-message-failed = Failed to send the reply, please check my logs for more information.
 
 ## Command: Modmail.close
@@ -388,9 +385,6 @@ ftl-cmd-close-param-attachment-description = The attachment to send. Can be a fi
 ftl-cmd-close-param-message-name = message
 ftl-cmd-close-param-message-description = The message to send.
 ftl-cmd-close-message-sending = Closing the ticket...
-# :param $recipients: a comma-separated list of recipients who did not receive the message
-ftl-cmd-close-message-failed-recipients = Failed to send the close message to the following recipients: { $recipients }.
-                                          They may have disabled DMs, blocked me, or does not share any servers with me.
 ftl-cmd-close-message-failed = Failed to send the close message, please check my logs for more information.
 ftl-cmd-close-failed = Failed to close the ticket, please check my logs for more information.
 
@@ -437,9 +431,6 @@ ftl-msg-command-invoke-error = An unknown error occurred while processing your c
 ftl-msg-prompt-timeout = Timed out. Please rerun the command to try again.
 
 ftl-msg-dm-received-not-configured = Modmail has not been configured. Please contact the server owner to configure Modmail for the server.
-# :param $recipients: a comma-separated list of recipients who did not receive the message
-ftl-msg-dm-received-failed-recipients = The following recipients did not receive this message: { $recipients }.
-                                        They may have disabled DMs, blocked me, or does not share any servers with me.
 
 # :param $users: a comma-separated list of usernames
 ftl-msg-new-ticket-reason = New Modmail ticket for: { $users }
@@ -472,6 +463,12 @@ ftl-msg-ticket-closed-reason-unknown-closer = Modmail ticket closed by unknown u
 
 # :param $message_id: the message ID of the message (string)
 ftl-msg-ticket-channel-embed-footer = Message ID: { $message_id }
+# :param $count: number of recipients who did not receive this message
+# :param $recipients: space-separated mentions of unreachable recipients
+ftl-msg-ticket-unreachable-recipients = { $count ->
+     [one] { $recipients } didn't receive this message. They may have disabled DMs or blocked the bot.
+    *[other] { $recipients } didn't receive this message. They may have disabled DMs or blocked the bot.
+}
 
 ftl-msg-log-embed-open-footer = Ticket Open
 # :param $user: the username of the closer

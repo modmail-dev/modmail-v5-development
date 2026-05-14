@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
             name=_("ftl-cmd-sclose-param-attachment-name"),
             description=_("ftl-cmd-sclose-param-attachment-description"),
         ),
-        "message": ParamInfo(
+        "message_text": ParamInfo(
             name=_("ftl-cmd-sclose-param-message-name"),
             description=_("ftl-cmd-sclose-param-message-description"),
         ),
@@ -44,7 +44,7 @@ async def sclose_command(
     ctx: Context,
     attachment: discord.Attachment | None,
     *,
-    message: str = "",
+    message_text: str = "",
 ) -> None:
     """Close the current ticket without notifying the recipient(s).
 
@@ -54,7 +54,7 @@ async def sclose_command(
         cog: The Modmail cog instance.
         ctx: The command context.
         attachment: Attachment to log (not sent to recipients).
-        message: Note saved to the ticket log, not delivered to recipients.
+        message_text: Note saved to the ticket log, not delivered to recipients.
 
     Raises:
         RuntimeError: When invoked outside a recognized ticket channel.
@@ -69,11 +69,13 @@ async def sclose_command(
     if ticket is None:
         raise RuntimeError("Ticket should not be None here.")
 
-    if not message and not attachment:
-        message = "Ticket closed."  # TODO: config
+    if not message_text and not attachment:
+        message_text = "Ticket closed."  # TODO: config
+
+    ctx.message.content = message_text
 
     try:
-        await ticket.process_reply_message(ctx, message, TicketMessageType.sclose)
+        await ticket.process_reply_message(ctx.message, TicketMessageType.sclose)
     except Exception:
         logger.exception("Failed to save sclose message in %s", ctx.channel)
 
@@ -82,9 +84,7 @@ async def sclose_command(
             await ctx.interaction.delete_original_response()
 
     try:
-        await cog.bot.staff_guild.close_ticket(
-            ticket.model, closer=ctx.author, close_status=TicketStatus.closed_by_command
-        )
+        await ticket.close(closer=ctx.author, close_status=TicketStatus.closed_by_command)
     except Exception:
         logger.exception("Failed to close ticket in %s", ctx.channel)
         await ctx.reply(_("ftl-cmd-sclose-failed"), ephemeral=True)

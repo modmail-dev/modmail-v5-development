@@ -118,18 +118,6 @@ class Bot(commands.Bot):
         self.add_check(self._user_access_check)
         self.before_invoke(self.on_before_invoke)
 
-    @staticmethod
-    def get_log_url(key: str) -> str:
-        """Build a log URL for the given ticket `key` using the configured `log_url` base.
-
-        Args:
-            key: Ticket key to append to the base log URL.
-
-        Returns:
-            Full URL string for the ticket log.
-        """
-        return f"{CONFIG.log_url}/{key}"
-
     async def setup_hook(self) -> None:
         """Run post-login initialization: public-bot check, slash sync, and override key index setup."""
         app_info = self.application

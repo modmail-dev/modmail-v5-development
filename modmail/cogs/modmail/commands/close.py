@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
             name=_("ftl-cmd-close-param-attachment-name"),
             description=_("ftl-cmd-close-param-attachment-description"),
         ),
-        "message": ParamInfo(
+        "message_text": ParamInfo(
             name=_("ftl-cmd-close-param-message-name"),
             description=_("ftl-cmd-close-param-message-description"),
         ),
@@ -45,7 +45,7 @@ async def close_command(
     ctx: Context,
     attachment: discord.Attachment | None,
     *,
-    message: str = "",
+    message_text: str = "",
 ) -> None:
     """Close the current ticket and send a close message to the recipient(s).
 
@@ -53,7 +53,7 @@ async def close_command(
         cog: The Modmail cog instance.
         ctx: The command context.
         attachment: Attachment to include in the close message.
-        message: Close message sent to the recipient(s).
+        message_text: Close message sent to the recipient(s).
 
     Raises:
         RuntimeError: When invoked outside a recognized ticket channel.
@@ -68,17 +68,13 @@ async def close_command(
     if ticket is None:
         raise RuntimeError("Ticket should not be None here.")
 
-    if not message and not attachment:
-        message = "Ticket closed."  # TODO: config
+    if not message_text and not attachment:
+        message_text = "Ticket closed."  # TODO: config
+
+    ctx.message.content = message_text
 
     try:
-        failed_recipients = await ticket.process_reply_message(ctx, message, TicketMessageType.close)
-
-        if failed_recipients:
-            # Send a message about the failed recipients
-            failed_recipients_str = ", ".join(user.mention for user in failed_recipients)
-            await ctx.send(_("ftl-cmd-close-message-failed-recipients", recipients=failed_recipients_str))
-
+        await ticket.process_reply_message(ctx.message, TicketMessageType.close)
     except Exception:
         logger.exception("Failed to send close message in %s", ctx.channel)
         await ctx.reply(_("ftl-cmd-close-message-failed"), ephemeral=True)
@@ -88,9 +84,7 @@ async def close_command(
             await ctx.interaction.delete_original_response()
 
     try:
-        await cog.bot.staff_guild.close_ticket(
-            ticket.model, closer=ctx.author, close_status=TicketStatus.closed_by_command
-        )
+        await ticket.close(closer=ctx.author, close_status=TicketStatus.closed_by_command)
     except Exception:
         logger.exception("Failed to close ticket in %s", ctx.channel)
         await ctx.reply(_("ftl-cmd-close-failed"), ephemeral=True)
