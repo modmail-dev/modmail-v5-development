@@ -252,7 +252,17 @@ class BaseLayoutView(_ViewMixin, discord.ui.LayoutView):
                         return
             if self.message is not None:
                 with contextlib.suppress(discord.HTTPException):
-                    await self.message.edit(view=self)
+                    # Keep the same allowed_mentions as the original message
+                    # discord API resets allowed mentions to all on edit,
+                    # while discord.py uses none by default (set in Bot.__init__)
+                    allowed_mentions = discord.AllowedMentions.none()
+                    if self.message.mention_everyone:
+                        allowed_mentions.everyone = True
+                    if self.message.mentions:
+                        allowed_mentions.users = self.message.mentions
+                    if self.message.role_mentions:
+                        allowed_mentions.roles = self.message.role_mentions
+                    await self.message.edit(view=self, allowed_mentions=allowed_mentions)
 
         if interaction is not None:
             msg_id = interaction.id

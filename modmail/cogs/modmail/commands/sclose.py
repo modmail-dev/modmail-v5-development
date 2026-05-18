@@ -13,6 +13,7 @@ import discord
 
 from modmail.core import Context, ParamInfo, _, bot_command, in_modmail_ticket, staff_only
 from modmail.enum import TicketMessageType, TicketStatus
+from modmail.errors import ModmailError
 
 if TYPE_CHECKING:
     from .. import Modmail
@@ -70,21 +71,19 @@ async def sclose_command(
         raise RuntimeError("Ticket should not be None here.")
 
     if not message_text and not attachment:
-        message_text = "Ticket closed."  # TODO: config
+        message_text = ctx.t("ftl-cmd-sclose-default-message", closer=str(ctx.author.id))
 
     ctx.message.content = message_text
 
     try:
         await ticket.process_reply_message(ctx.message, TicketMessageType.sclose)
-    except Exception:
+    except ModmailError, discord.HTTPException:
         logger.exception("Failed to save sclose message in %s", ctx.channel)
 
     if ctx.interaction is not None:
         with contextlib.suppress(discord.HTTPException):
             await ctx.interaction.delete_original_response()
 
-    try:
-        await ticket.close(closer=ctx.author, close_status=TicketStatus.closed_by_command)
-    except Exception:
-        logger.exception("Failed to close ticket in %s", ctx.channel)
+    closed = await ticket.close(closer=ctx.author, close_status=TicketStatus.closed_by_command)
+    if not closed:
         await ctx.reply(_("ftl-cmd-sclose-failed"), ephemeral=True)

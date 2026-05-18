@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import datetime
 import logging
 from typing import TYPE_CHECKING, Any, Literal, overload
 
@@ -490,6 +489,8 @@ class DBClient:
 
         Messages are not cached and are written straight through to the backend.
         All user data referenced by the message will be automatically saved into the database.
+        Fresh user models carried by the message (author and DM recipients) are
+        propagated to any cached open tickets that reference the same users.
 
         Args:
             ticket_message: The [TicketMessageModel][]{ data-preview } to persist.
@@ -504,6 +505,24 @@ class DBClient:
             ticket_message.ticket_key,
             stacklevel=2,
         )
+
+        # Collect fresh user models carried by this message.
+        fresh_users: dict[int, TicketUserModel] = {ticket_message.author.user_id: ticket_message.author}
+        for dm in ticket_message.dm_messages:
+            fresh_users[dm.recipient.user_id] = dm.recipient
+
+        # Propagate to every cached open ticket that references these users.
+        for ticket in list(self._open_tickets):
+            update_kwargs: dict[str, Any] = {}
+            new_recipients = [fresh_users.get(r.user_id, r) for r in ticket.recipients]
+            if new_recipients != ticket.recipients:
+                update_kwargs["recipients"] = new_recipients
+            if ticket.created_by.user_id in fresh_users:
+                update_kwargs["created_by"] = fresh_users[ticket.created_by.user_id]
+            if update_kwargs:
+                updated = ticket.model_copy(update=update_kwargs)
+                self._open_tickets.remove("key", ticket.key)
+                self._open_tickets.add(updated, key=updated.key, channel_id=updated.channel_id)
 
     async def close_ticket(
         self,
@@ -530,31 +549,3 @@ class DBClient:
         except KeyError:
             logger.debug("Ticket %s not found in cache during close.", ticket_key)
         logger.debug("Closed ticket %s.", ticket_key, stacklevel=2)
-
-    async def set_user_unreachable(self, user_id: int, *, unreachable: bool) -> None:
-        """Set the `unreachable` flag on a ticket user record.
-
-        Also updates any cached [`TicketModel`][] that has this user as a recipient.
-
-        Args:
-            user_id: Discord snowflake ID of the user.
-            unreachable: `True` to mark the user as unreachable, `False` to clear the flag.
-
-        Raises:
-            DatabaseOperationError: If an unexpected database error occurs.
-        """
-        await self._backend.set_user_unreachable(user_id, unreachable=unreachable)
-        unreachable_at = datetime.datetime.now(datetime.UTC) if unreachable else None
-        for ticket in list(self._open_tickets):
-            if not any(r.user_id == user_id for r in ticket.recipients):
-                continue
-            updated_recipients = [
-                r.model_copy(update={"unreachable": unreachable, "unreachable_at": unreachable_at})
-                if r.user_id == user_id
-                else r
-                for r in ticket.recipients
-            ]
-            updated = ticket.model_copy(update={"recipients": updated_recipients})
-            self._open_tickets.remove("key", ticket.key)
-            self._open_tickets.add(updated, key=updated.key, channel_id=updated.channel_id)
-        logger.debug("Set recipient %s unreachable=%s.", user_id, unreachable, stacklevel=2)

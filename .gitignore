@@ -99,6 +99,9 @@ cython_debug/
 #### VS Code
 .vscode/
 
+#### Zed
+.zed/
+
 ### Windows
 # Windows thumbnail cache files
 Thumbs.db

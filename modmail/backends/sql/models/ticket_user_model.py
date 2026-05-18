@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, String, select, update
+from sqlalchemy import String, select, update
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -39,10 +38,6 @@ class SQLTicketUserTable(SQLBase):
     """Display name (global name or username) captured at interaction time."""
     avatar: Mapped[str] = mapped_column(String(512))
     """Display avatar URL captured at interaction time."""
-    unreachable: Mapped[bool] = mapped_column(Boolean, default=False)
-    """Whether the bot has failed to deliver DMs to this user (e.g. DMs disabled or bot blocked)."""
-    unreachable_at: Mapped[datetime.datetime | None]
-    """UTC timestamp of when `unreachable` was last set to `True` (`None` when reachable)."""
 
     def to_model(self) -> TicketUserModel:
         """Convert this row to a [TicketUserModel][]{ data-preview }.
@@ -55,8 +50,6 @@ class SQLTicketUserTable(SQLBase):
             user_name=self.user_name,
             display_name=self.display_name,
             avatar=self.avatar,
-            unreachable=self.unreachable,
-            unreachable_at=self.unreachable_at,
         )
 
     @classmethod
@@ -92,8 +85,6 @@ class SQLTicketUserTable(SQLBase):
                 "user_name": u.user_name,
                 "display_name": u.display_name,
                 "avatar": u.avatar,
-                "unreachable": u.unreachable,
-                "unreachable_at": u.unreachable_at,
             }
             for u in unique_users.values()
         ]

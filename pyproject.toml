@@ -79,7 +79,7 @@ dev = [
     "pytest-mock==3.15.1",
     "pytest-asyncio==1.3.0",
     "pytest-cov==7.1.0",
-    "pip",  # For IDE detecting installed packages
+    "pip>=26.1",  # For IDE detecting installed packages
 ]
 docs = [
     "zensical==0.0.37",

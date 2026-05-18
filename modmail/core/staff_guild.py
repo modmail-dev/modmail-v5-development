@@ -675,6 +675,18 @@ class StaffGuild:
             logger.debug("No ticket found for %s", lookup)
             return None
 
+        if not ticket_model.recipients:
+            logger.error("Ticket %s has no recipients, auto-closing.", ticket_model.key)
+            try:
+                await self.bot.database_client.close_ticket(
+                    ticket_model.key,
+                    TicketUserModel.from_user(cast("discord.ClientUser", self.bot.user)),
+                    ticket_status=TicketStatus.closed_by_deletion,
+                )
+            except ModmailError as exc:
+                logger.error("Failed to close corrupted ticket %s: %s", ticket_model.key, exc)
+            return None
+
         view = TicketView(self, ticket_model)
         try:
             # Skip permission check here — bad permissions surface as an error on first use

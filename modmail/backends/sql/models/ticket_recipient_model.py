@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, ForeignKeyConstraint, PrimaryKeyConstraint, String
+from sqlalchemy import ForeignKey, ForeignKeyConstraint, Index, PrimaryKeyConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import TABLE_OPTS, Snowflake, SQLBase
@@ -46,6 +46,7 @@ class SQLTicketRecipientTable(SQLBase):
             ondelete="CASCADE",
             onupdate="CASCADE",
         ),
+        Index("ix_ticket_recipient_user_id", "user_id"),
         TABLE_OPTS,
     )
 

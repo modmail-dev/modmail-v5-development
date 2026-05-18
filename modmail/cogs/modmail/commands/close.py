@@ -14,6 +14,7 @@ import discord
 
 from modmail.core import Context, ParamInfo, _, bot_command, in_modmail_ticket, staff_only
 from modmail.enum import TicketMessageType, TicketStatus
+from modmail.errors import ModmailError
 
 if TYPE_CHECKING:
     from .. import Modmail
@@ -69,13 +70,13 @@ async def close_command(
         raise RuntimeError("Ticket should not be None here.")
 
     if not message_text and not attachment:
-        message_text = "Ticket closed."  # TODO: config
+        message_text = ctx.t("ftl-cmd-close-default-message", closer=str(ctx.author.id))
 
     ctx.message.content = message_text
 
     try:
         await ticket.process_reply_message(ctx.message, TicketMessageType.close)
-    except Exception:
+    except ModmailError, discord.HTTPException:
         logger.exception("Failed to send close message in %s", ctx.channel)
         await ctx.reply(_("ftl-cmd-close-message-failed"), ephemeral=True)
 
@@ -83,8 +84,7 @@ async def close_command(
         with contextlib.suppress(discord.HTTPException):
             await ctx.interaction.delete_original_response()
 
-    try:
-        await ticket.close(closer=ctx.author, close_status=TicketStatus.closed_by_command)
-    except Exception:
-        logger.exception("Failed to close ticket in %s", ctx.channel)
+    closed = await ticket.close(closer=ctx.author, close_status=TicketStatus.closed_by_command)
+    if not closed:
         await ctx.reply(_("ftl-cmd-close-failed"), ephemeral=True)
+        # TODO: delete the close message that was sent, since the ticket is still open

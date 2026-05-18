@@ -73,8 +73,6 @@ def upgrade() -> None:
         sa.Column("user_name", sa.String(length=128), nullable=False),
         sa.Column("display_name", sa.String(length=128), nullable=False),
         sa.Column("avatar", sa.String(length=512), nullable=False),
-        sa.Column("unreachable", sa.Boolean(), nullable=False),
-        sa.Column("unreachable_at", modmail.backends.sql.models.base.UTCTimestamp(), nullable=True),
         sa.PrimaryKeyConstraint("user_id", name=op.f("pk_ticket_user")),
         mariadb_charset="utf8mb4",
         mariadb_collate="utf8mb4_unicode_ci",
@@ -325,6 +323,7 @@ def upgrade() -> None:
         mysql_engine="InnoDB",
         mysql_row_format="DYNAMIC",
     )
+    op.create_index("ix_ticket_recipient_user_id", "ticket_recipient", ["user_id"], unique=False)
     op.create_table(
         "ticket_dm_message",
         sa.Column("message_id", sa.BigInteger(), autoincrement=False, nullable=False),
@@ -360,6 +359,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     op.drop_table("ticket_dm_message")
+    op.drop_index("ix_ticket_recipient_user_id", table_name="ticket_recipient")
     op.drop_table("ticket_recipient")
     op.drop_index("ix_ticket_message_type", table_name="ticket_message")
     op.drop_index("ix_ticket_message_author", table_name="ticket_message")

@@ -468,15 +468,3 @@ class DBBackend(ABC):
         Raises:
             DatabaseOperationError: If an unexpected database error occurs.
         """
-
-    @abstractmethod
-    async def set_user_unreachable(self, user_id: int, *, unreachable: bool) -> None:
-        """Set the `unreachable` flag on a ticket user record.
-
-        Args:
-            user_id: Discord snowflake ID of the user.
-            unreachable: The value to set.
-
-        Raises:
-            DatabaseOperationError: If an unexpected database error occurs.
-        """

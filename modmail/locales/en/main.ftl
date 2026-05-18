@@ -148,8 +148,9 @@ ftl-modal-profile-add-override-already-deny = `{ $command }` is already denied o
 
 # :param $profile: the mention of the user or role
 # :param $type: "User" or "Role"
-ftl-view-profile-editor-header = ### Profile: { $profile }
-    **Type**: { $type }
+ftl-view-profile-editor-header =
+    ### Profile: { $profile }
+    { "**" }Type{ "**" }: { $type }
 ftl-view-profile-editor-type-user = User
 ftl-view-profile-editor-type-role = Role
 # :param $level: the access level label or "None"
@@ -387,6 +388,8 @@ ftl-cmd-close-param-message-description = The message to send.
 ftl-cmd-close-message-sending = Closing the ticket...
 ftl-cmd-close-message-failed = Failed to send the close message, please check my logs for more information.
 ftl-cmd-close-failed = Failed to close the ticket, please check my logs for more information.
+# :param $closer: staff member ID
+ftl-cmd-close-default-message = Thank you for reaching out. Your ticket has been closed by <@{ $closer }>. If you have any further questions, feel free to send us a message at any time.
 
 ## Command: Modmail.sclose
 
@@ -401,6 +404,8 @@ ftl-cmd-sclose-param-message-name = message
 ftl-cmd-sclose-param-message-description = The message to store as the close message.
 ftl-cmd-sclose-message-sending = Closing the ticket...
 ftl-cmd-sclose-failed = Failed to close the ticket, please check my logs for more information.
+# :param $closer: staff member ID
+ftl-cmd-sclose-default-message = Ticket closed by <@{ $closer }>.
 
 ### ========================
 ###         Messages
@@ -436,45 +441,122 @@ ftl-msg-dm-received-not-configured = Modmail has not been configured. Please con
 ftl-msg-new-ticket-reason = New Modmail ticket for: { $users }
 # :param $users: a space-separated list of user mentions
 ftl-msg-new-ticket-default-thread-opening-message = { $users } started a new Modmail ticket.
-# :param $created: the date the account was created
-ftl-msg-new-ticket-initial-embed-description = Account created { $created }.
-# :param $user_id: the user ID of the user (string)
-ftl-msg-new-ticket-initial-embed-footer = User ID: { $user_id }
-# :param $joined: the date the user joined the server
-# :param $roles: a comma-separated list of roles
-# :param $has_role: whether the user has a role in the server (true) or not (false)
-ftl-msg-new-ticket-initial-embed-guild-field-value = Joined { $joined }.
-                                                     Roles: { $has_role ->
-    *[true]  { $roles }
-     [false] None
-}
-ftl-msg-new-ticket-initial-embed-guild-field-value-no-join-date = [Unknown]
-ftl-msg-new-ticket-initial-embed-past-tickets-field-name = Past Tickets
-# :param $count: the number of past tickets
-ftl-msg-new-ticket-initial-embed-past-tickets-field-value = { $count ->
-     [one] 1 past ticket
-    *[other] { $count } past tickets
-}
 ftl-msg-create-ticket-failed = Something went wrong while creating this Modmail ticket. Please check my logs for more information.
 
 # :param $user: the name of the closer
 ftl-msg-ticket-closed-reason = Modmail ticket closed by { $user }.
 ftl-msg-ticket-closed-reason-unknown-closer = Modmail ticket closed by unknown user.
 
-# :param $message_id: the message ID of the message (string)
-ftl-msg-ticket-channel-embed-footer = Message ID: { $message_id }
-# :param $count: number of recipients who did not receive this message
-# :param $recipients: space-separated mentions of unreachable recipients
-ftl-msg-ticket-unreachable-recipients = { $count ->
-     [one] { $recipients } didn't receive this message. They may have disabled DMs or blocked the bot.
-    *[other] { $recipients } didn't receive this message. They may have disabled DMs or blocked the bot.
-}
+## Ticket view — log channel
 
-ftl-msg-log-embed-open-footer = Ticket Open
-# :param $user: the username of the closer
-ftl-msg-log-embed-closed-footer = Ticket Closed by @{ $user }
-ftl-msg-log-embed-closed-footer-unknown-closer = Ticket Closed
-ftl-msg-log-embed-no-content-description = *No content*
+# Shared params for `ftl-msg-ticket-log-{title,body,footer}`:
+# :param $users: recipient mentions string
+# :param $key: 12-char ticket key
+# :param $log_url: log viewer URL
+# :param $created_ts: ticket-open unix timestamp (string), :param $created_by: creator ID
+# :param $closed_ts: ticket-close unix timestamp (string, "0" if open)
+# :param $closed_by: closer ID
+# :param $status: lifecycle marker
+ftl-msg-ticket-log-title = ### **{ $users }**
+ftl-msg-ticket-log-body =
+    { $status ->
+        [open] Ticket opened <t:{ $created_ts }:R> in <#{ $channel_id }>
+       *[other] Ticket opened <t:{ $created_ts }:R>
+    }
+    by <@{ $created_by }> with key **`{ $key }`**
+
+    Click [here]({ $log_url }) for the full log
+ftl-msg-ticket-log-footer =
+    { $status ->
+        [open] 📧 This ticket is currently open
+        [closed_by] 🔒 Closed by <@{ $closed_by }> on <t:{ $closed_ts }:f>
+       *[closed] 🔒 Closed on <t:{ $closed_ts }:f>
+    }
+
+## Ticket view — staff channel
+
+# Shared params for `ftl-msg-ticket-staff-{title,footer,body}-*`:
+# :param $author_id: author's Discord ID (string)
+# :param $author_name: author's display name (markdown-escaped)
+# :param $message_id: Discord message ID (string)
+# :param $created_ts: message creation unix timestamp (string)
+# :param $key: 12-char ticket key (string)
+# :param $log_url: log viewer URL (string)
+
+ftl-msg-ticket-staff-title-dm = <@{ $author_id }>
+ftl-msg-ticket-staff-title-reply = <@{ $author_id }>
+ftl-msg-ticket-staff-title-internal =
+    <@{ $author_id }>
+    -# Internal note
+ftl-msg-ticket-staff-title-close = ### This ticket is now closed
+ftl-msg-ticket-staff-title-sclose = ### This ticket is now closed
+
+ftl-msg-ticket-staff-footer-dm = -# 📨 DM  ·  ID: `{ $message_id }`  ·  <t:{ $created_ts }:f>
+ftl-msg-ticket-staff-footer-reply = -# 💬 Reply  ·  ID: `{ $message_id }`  ·  <t:{ $created_ts }:f>
+ftl-msg-ticket-staff-footer-internal = -# 🔒 Staff only  ·  ID: `{ $message_id }`  ·  <t:{ $created_ts }:f>
+ftl-msg-ticket-staff-footer-close = -# 🚫 Closed by <@{ $author_id }>  ·  <t:{ $created_ts }:R>  ·  [`{ $key }`]({ $log_url })
+ftl-msg-ticket-staff-footer-sclose = -# 🚫 Closed silently by <@{ $author_id }>  ·  <t:{ $created_ts }:R>  ·  [`{ $key }`]({ $log_url })
+
+# :param $count: number of unreachable recipients (integer), :param $recipients: comma-separated user mentions
+ftl-msg-ticket-staff-unreachable = -# ⚠️ { $recipients } didn't receive this message. They may have disabled DMs or blocked the bot.
+
+## Ticket view — user DM
+
+# Shared params for `ftl-msg-ticket-user-{title,footer}-*`:
+# :param $author_id: author's Discord ID (string)
+# :param $author_name: author's display name (markdown-escaped)
+# :param $message_id: Discord message ID (string)
+# :param $created_ts: message creation unix timestamp (string)
+# :param $key: 12-char ticket key (string)
+# :param $log_url: log viewer URL (string)
+
+ftl-msg-ticket-user-title-dm = **{ $author_name }**
+ftl-msg-ticket-user-title-reply = **{ $author_name }**
+ftl-msg-ticket-user-title-close = **Your ticket has been closed**
+
+ftl-msg-ticket-user-footer-dm = -# This message is from another user  ·  <t:{ $created_ts }:f>
+ftl-msg-ticket-user-footer-reply = -# Support Staff  ·  <t:{ $created_ts }:f>
+ftl-msg-ticket-user-footer-close = -# You can DM us again to open a new ticket.
+# :param $user_id: recipient Discord ID (string), :param $user_name: recipient display name (markdown-escaped)
+ftl-msg-dm-welcome-title = ### We've received your message
+ftl-msg-dm-welcome-body = A support ticket has been opened and our team will assist you as soon as possible. A `✅` on your message means it has been forwarded successfully.
+ftl-msg-dm-welcome-footer = -# You may reply to this message at any time.
+
+## Ticket view — recipient info card
+
+# Shared params for `ftl-msg-ticket-info-{title,body,footer}`:
+# :param $user_name: recipient display name (markdown-escaped)
+# :param $user_id: recipient Discord ID (string)
+# :param $account_created_ts: account creation unix timestamp (string)
+# :param $log_url: log viewer URL, :param $key: ticket / logviewer key
+# :param $created_ts: ticket-open unix timestamp (string)
+# :param $past_ticket_count: number of past closed tickets (integer)
+ftl-msg-ticket-info-title = <@{ $user_id }>
+ftl-msg-ticket-info-body =
+    -# Account created <t:{ $account_created_ts }:R> · User ID `{ $user_id }`
+ftl-msg-ticket-info-footer =
+    -# Ticket [`{ $key }`]({ $log_url }) opened <t:{ $created_ts }:R>
+    -# { $past_ticket_count ->
+        [0] No past tickets
+        [one] 1 past ticket
+       *[other] { $past_ticket_count } past tickets
+    }
+
+# Per-guild membership entry.
+# :param $guild_name: guild display name (markdown-escaped), :param $guild_id: guild ID (string)
+# :param $joined_ts: member-join unix timestamp (string)
+# :param $roles: comma-separated role mentions ("none" if member has no non-default roles)
+ftl-msg-ticket-info-guild-name = { "**" }{ $guild_name }{ "**" }
+ftl-msg-ticket-info-guild-entry =
+    { $joined_ts ->
+        [0] -# Joined: unknown
+       *[other] -# Joined <t:{ $joined_ts }:f>
+    }
+    { $roles ->
+        [none] -# No roles
+       *[other] -# Roles: { $roles }
+    }
+ftl-msg-ticket-info-no-shared-servers = No shared servers found
 
 ### ========================
 ###    Converter errors

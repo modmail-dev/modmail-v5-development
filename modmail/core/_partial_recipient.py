@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import datetime
 from typing import TYPE_CHECKING, Any
 
 import discord
 
 if TYPE_CHECKING:
+    import datetime
+
     from ..backends.common import TicketUserModel
     from .bot import Bot
 
@@ -21,12 +22,6 @@ class PartialRecipient:
     ever calling `fetch_user()`.  DM delivery goes through [`bot.create_dm`][] with a
     [`discord.Object`][] (which only requires the user's ID), so no live user object is
     needed.
-
-    Display data (name, avatar) is refreshed automatically whenever a message is saved via
-    [`DBClient.save_message`][], which upserts the author and every DM recipient as part of
-    the same write.  The [`unreachable`][] flag is set by
-    [`TicketView._mark_recipient_unreachable`][] when a DM delivery fails and cleared the
-    next time the user is included in a successful `save_message` call.
     """
 
     __slots__ = ("_bot", "_model")
@@ -79,46 +74,50 @@ class PartialRecipient:
     def is_reachable(self) -> bool:
         """Whether the bot should attempt to DM this user.
 
-        Delegates to [`TicketUserModel.is_reachable`][], which returns `True` when
-        the user is not marked unreachable, or when the unreachable timeout has expired.
+        Delegates to [`ReachabilityRegistry.is_reachable`][], which returns `True`
+        when the user is not marked unreachable, or when the unreachable timeout
+        has expired.
 
         Returns:
             bool: `True` if a DM delivery should be attempted.
         """
-        return self._model.is_reachable()
+        return self._bot.reachability.is_reachable(self.id)
 
     def mark_unreachable(self) -> None:
-        """Mark this recipient as unreachable and persist the state.
+        """Mark this recipient as unreachable in the in-memory registry.
 
-        Updates `unreachable` and `unreachable_at` on the internal model, then fires a
-        DB write as a fire-and-forget task.  The expiry logic in
-        [`TicketUserModel.is_reachable`][] will automatically clear the flag after the
-        configured timeout.
+        The expiry logic in [`ReachabilityRegistry.is_reachable`][] will
+        automatically clear the flag after the configured timeout.
         """
-        now = datetime.datetime.now(datetime.UTC)
-        self._model = self._model.model_copy(update={"unreachable": True, "unreachable_at": now})
-        self._bot.spawn_task(
-            self._bot.database_client.set_user_unreachable(self.id, unreachable=True),
-            name=f"mark_unreachable:{self.id}",
-        )
+        self._bot.reachability.mark_unreachable(self.id)
+
+    def mark_reachable(self) -> None:
+        """Clear any unreachable record for this recipient.
+
+        Called when the user proves reachability by sending a DM.
+        """
+        self._bot.reachability.mark_reachable(self.id)
 
     async def send(self, *args: Any, **kwargs: Any) -> discord.Message:
         """Open or reuse the user's DM channel and send a message.
 
         Uses [`bot.create_dm`][] with a [`discord.Object`][] so that no `fetch_user()`
-        API call is required.  Raises [`discord.Forbidden`][] if the user has DMs
-        disabled or has blocked the bot.
+        API call is required.
 
         Args:
-            *args: Positional arguments forwarded to [`discord.DMChannel.send`][].
-            **kwargs: Keyword arguments forwarded to [`discord.DMChannel.send`][].
+            *args: Positional arguments forwarded to `.send()`.
+            **kwargs: Keyword arguments forwarded to `.send()`.
 
         Returns:
             discord.Message: The sent message.
+
+        Raises:
+            discord.Forbidden: If the user has DMs disabled or has blocked the bot.
+            discord.HttpException: If an error occurs sending the message or creating the DM channel.
         """
         # create_dm() uses LRU to cache the dm channels
         channel = await self._bot.create_dm(discord.Object(id=self.id))
-        return await channel.send(*args, **kwargs)
+        return await self._bot.send_message(*args, channel=channel, **kwargs)
 
     def __str__(self) -> str:
         """Return the display name.
@@ -151,6 +150,6 @@ class PartialRecipient:
         """Return a debug representation.
 
         Returns:
-            str: A string showing the user ID, username, and unreachable flag.
+            str: A string showing the user ID, username, and reachability.
         """
         return f"<PartialRecipient id={self.id} name={self.name!r} unreachable={not self.is_reachable()}>"

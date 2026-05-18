@@ -71,6 +71,10 @@ class MongoDBTicketDocument(Document):
                 unique=True,
                 name="ticket_channel_unique",
             ),
+            IndexModel(
+                [("bot_id", ASCENDING), ("recipients.$id", ASCENDING)],
+                name="ticket_recipient_lookup",
+            ),
         ]
 
     def to_model(self) -> TicketModel:

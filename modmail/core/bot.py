@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import signal
 import sys
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast, overload
 
@@ -32,6 +33,7 @@ from ..errors import (
     NoStaffGuildError,
     UserAccessError,
 )
+from ._reachability import ReachabilityRegistry
 from .context import Context, UserAccessResult
 from .embed import EmbedProxy
 from .permission import PermissionCommandIndex
@@ -110,6 +112,9 @@ class Bot(commands.Bot):
         self.version: str = __version__
         """Semver string for this Modmail instance."""
         logger.debug("[bold green]Bot version: %s", self.version, extra={"markup": True, "highlighter": None})
+
+        self.reachability: ReachabilityRegistry = ReachabilityRegistry()
+        """In-memory tracker for recipient DM reachability."""
 
         self.database_client: DBClient = create_db_client(CONFIG)
         """Primary interface to the configured backend database."""
@@ -329,14 +334,21 @@ class Bot(commands.Bot):
         task.add_done_callback(functools.partial(self._task_done_callback, suppress_errors=suppress_errors))
         return task
 
-    async def _cleanup(self) -> None:
+    async def close(self) -> None:
         """Cancel all in-flight background tasks and wait for them to stop.
 
         Sends [`asyncio.Task.cancel`][] to every tracked task, then waits up to 5 seconds
         for them to acknowledge cancellation. Each task times out independently — an exception
         in one does not affect the others. Tasks still running after the timeout are logged
         as a warning and dropped from tracking.
+
+        Note:
+            The disconnect step is shielded from cancellation so that cleanup always
+            completes even when this coroutine is called from within a cancelled task
+            (e.g. during `async with` exit after SIGTERM / SIGINT).
         """
+        await asyncio.shield(self.database_client.disconnect())
+        await super().close()
         if self._pending_tasks:
             logger.debug("Cancelling %d pending background task(s).", len(self._pending_tasks))
             for task in list(self._pending_tasks):
@@ -372,15 +384,14 @@ class Bot(commands.Bot):
                 logger.warning("[red]Loading extension jishaku (this may be unsafe)", extra={"markup": True})
                 await self.load_extension("jishaku")
 
-            try:
-                async with self:
-                    logger.info("[bold green]Modmail is starting.", extra={"markup": True})
-                    await self.start(CONFIG.bot.token.get_secret_value(), reconnect=True)
-            finally:
-                try:
-                    await self.database_client.disconnect()
-                finally:
-                    await self._cleanup()
+            async with self:
+                logger.info("[bold green]Modmail is starting.", extra={"markup": True})
+                await self.start(CONFIG.bot.token.get_secret_value(), reconnect=True)
+
+        # Route SIGTERM through KeyboardInterrupt so it follows the same graceful
+        # path as Ctrl+C — asyncio.run() cancels the main task, __aexit__ calls
+        # close() once, and the except KeyboardInterrupt below handles it.
+        signal.signal(signal.SIGTERM, signal.default_int_handler)
 
         try:
             if not TYPE_CHECKING:
