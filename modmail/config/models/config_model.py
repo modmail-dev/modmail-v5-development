@@ -30,12 +30,16 @@ LOCALES_ROOT = Path(__file__).resolve().parent.parent.parent / "locales"
 
 
 def _discover_locale_dirs() -> set[str]:
-    """Return locale directory names found under `modmail/locales/`."""
+    """Return locale directory names found under `modmail/locales/`.
+
+    Directories ending with `-custom` are excluded — they are handled
+    separately by the [`Translator`][modmail.i18n.Translator] at startup.
+    """
     found: set[str] = set()
     if not LOCALES_ROOT.is_dir():
         return found
     for child in sorted(LOCALES_ROOT.iterdir()):
-        if child.is_dir() and (child / "LC_MESSAGES" / "messages.po").is_file():
+        if child.is_dir() and (child / "LC_MESSAGES").is_dir() and not child.name.endswith("-custom"):
             found.add(child.name)
     return found
 
@@ -172,7 +176,7 @@ class Config(BaseSettings):
 
         ensure_compiled()
         try:
-            Translator.load_bundles(str(LOCALES_ROOT), sorted(resolved), "messages")
+            Translator.load_bundles(sorted(resolved))
         except Exception as e:
             raise ValueError(f"Failed to load translation bundles for {resolved}: {e}") from e
 

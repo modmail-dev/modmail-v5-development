@@ -5,6 +5,7 @@ Usage:
     python -m modmail.locales check    [-l LANG]   Report issues (no writes)
     python -m modmail.locales compile  [-l LANG]   Compile PO to MO
     python -m modmail.locales add      LANG         Create a new locale
+    python -m modmail.locales custom   [BASE]       Create a custom locale override
 """
 
 from __future__ import annotations
@@ -14,7 +15,14 @@ import logging
 import sys
 from typing import TYPE_CHECKING, Any
 
-from modmail.locales import add_locale, check_locales, compile_locales, extract_locales
+from modmail.locales import (
+    LocaleError,
+    add_locale,
+    check_locales,
+    compile_locales,
+    create_custom_locale,
+    extract_locales,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -50,6 +58,10 @@ def _wrap_add(args: argparse.Namespace) -> None:
     add_locale(args.locale)
 
 
+def _wrap_custom(args: argparse.Namespace) -> None:
+    create_custom_locale(args.base)
+
+
 def main(argv: list[str] | None = None) -> None:
     """Entry point for `python -m modmail.locales`."""
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
@@ -67,8 +79,16 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("locale", help="BCP-47 locale tag (e.g. de, de-DE)")
     p.set_defaults(func=_wrap_add)
 
+    p = sub.add_parser("custom", help="Create a custom locale override")
+    p.add_argument("base", nargs="?", default="en-US", help="Base BCP-47 locale (default: en-US)")
+    p.set_defaults(func=_wrap_custom)
+
     args = parser.parse_args(argv)
-    args.func(args)
+    try:
+        args.func(args)
+    except (LocaleError, FileNotFoundError, KeyError, IndexError, ValueError) as exc:
+        logger.error("%s: %s", type(exc).__name__, exc)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

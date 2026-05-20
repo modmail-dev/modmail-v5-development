@@ -9,6 +9,7 @@ import logging
 import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 import babel.dates as _babel_dates
@@ -39,6 +40,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 TranslationTypes = str | int | float | Decimal | datetime | date | time | timedelta | None
+LOCALES_ROOT = Path(__file__).resolve().parent / "locales"
 
 
 class HasLocaleStr(Protocol):
@@ -52,7 +54,7 @@ class HasLocaleStr(Protocol):
 class Translator(app_commands.Translator):
     """Translation engine wrapping babel `.mo` files.
 
-    All locale identifiers are BCP-47 strings (e.g. ``"en-US"``, ``"de-DE"``).
+    All locale identifiers are BCP-47 strings (e.g. `"en-US"`, `"de-DE"`).
     [`load_bundles`][] must be called once before any translation is requested
     (driven by the config validator).
 
@@ -62,8 +64,11 @@ class Translator(app_commands.Translator):
 
     _RESERVED = frozenset({"_string", "_escape", "_string_plural", "_count", "_context"})
     _PLACEHOLDER_RE = re.compile(r"\{\s*([a-zA-Z0-9_-]+)\s*\}")
+    _DOMAIN = "messages"
 
     _bundles: dict[str, _NullTranslations] = {}
+    _custom_bundle: _NullTranslations | None = None
+    _custom_locale: str | None = None
     _fallback_locale: str = "en-US"
 
     async def translate(
@@ -80,34 +85,48 @@ class Translator(app_commands.Translator):
         return self.translate_sync(string, locale)
 
     @classmethod
-    def load_bundles(cls, dir_path: str, locales: list[str], domain: str) -> None:
+    def load_bundles(cls, locales: list[str]) -> None:
         """Load `.mo` files from *dir_path* for every locale in *locales*.
 
-        ``"en-US"`` is always loaded as the ultimate fallback.  Call this
+        `"en-US"` is always loaded as the ultimate fallback.  Call this
         once during configuration validation.
 
         Args:
-            dir_path: Absolute path to the ``locales/`` directory.
             locales: BCP-47 locale strings to load.
-            domain: The `.po` / `.mo` domain name (e.g. ``"messages"``).
         """
-        en_bundle = _BabelTranslations.load(dir_path, locales=[cls._fallback_locale], domain=domain)
+        fallback_bundle = _BabelTranslations.load(LOCALES_ROOT, locales=[cls._fallback_locale], domain=cls._DOMAIN)
 
         for bcp47_locale in sorted(locales):
             if bcp47_locale == cls._fallback_locale:
-                cls._bundles[cls._fallback_locale] = en_bundle
+                cls._bundles[cls._fallback_locale] = fallback_bundle
                 continue
-            t = _BabelTranslations.load(dir_path, locales=[bcp47_locale], domain=domain)
-            t.add_fallback(en_bundle)
+            t = _BabelTranslations.load(LOCALES_ROOT, locales=[bcp47_locale], domain=cls._DOMAIN)
+            t.add_fallback(fallback_bundle)
             cls._bundles[bcp47_locale] = t
+
+        cls.load_custom_bundle()
+
+    @classmethod
+    def load_custom_bundle(cls) -> None:
+        """Load the custom translation bundle from a `*-custom` directory."""
+        cls._custom_bundle = cls._custom_locale = None
+        for child in LOCALES_ROOT.iterdir():
+            if child.is_dir() and child.name.endswith("-custom"):
+                mo = child / "LC_MESSAGES" / f"{cls._DOMAIN}.mo"
+                if mo.is_file():
+                    with mo.open("rb") as f:
+                        cls._custom_bundle = _BabelTranslations(fp=f, domain=cls._DOMAIN)
+                    cls._custom_locale = child.name.replace("-custom", "@custom")
+                    logger.info("Loaded custom translations from %s", child.name)
+                return
 
     @classmethod
     def _get_bundle(cls, locale: str) -> _NullTranslations:
         """Return the translation bundle most appropriate for *locale*.
 
         Uses `babel.core.negotiate_locale` to find the best match from
-        the available ``_bundles``, falling back to ``cls._fallback_locale``
-        (``"en-US"``) when none matches.
+        the available `_bundles`, falling back to `cls._fallback_locale`
+        (`"en-US"`) when none matches.
         """
         available = list(cls._bundles)
         match = negotiate_locale([locale], available, sep="-")
@@ -118,97 +137,47 @@ class Translator(app_commands.Translator):
 
         return cls._bundles[CONFIG.default_locale]
 
-    @staticmethod
-    def _format_value(value: object, locale: str) -> str:
-        """Format a single substitution value for the target locale.
-
-        Returns:
-            The formatted string.
-        """
-        loc = _BabelLocale.parse(locale, sep="-")
-        if value is None:
-            return ""
-        if isinstance(value, datetime):
-            return _babel_dates.format_datetime(value, locale=loc)
-        if isinstance(value, date):
-            return _babel_dates.format_date(value, locale=loc)
-        if isinstance(value, time):
-            return _babel_dates.format_time(value, locale=loc)
-        if isinstance(value, timedelta):
-            return _babel_dates.format_timedelta(value, locale=loc)
-        if isinstance(value, Decimal):
-            return _babel_numbers.format_decimal(value, locale=loc)
-        if isinstance(value, int) and not isinstance(value, bool):
-            return _babel_numbers.format_number(value, locale=loc)
-        if isinstance(value, float):
-            return _babel_numbers.format_decimal(value, locale=loc)
-        return str(value)
-
     @classmethod
-    def format_template(cls, template: str, locale: str, **kwargs: object) -> str:
+    def format_template(cls, template: str, bcp47_locale: str, **kwargs: Any) -> str:
         """Substitute `{name}` placeholders using *kwargs*.
 
         * `{{` and `}}` escape literal braces.
-        * ``{ name }`` is replaced by the value of *name*, where *name* is
-          ``[a-zA-Z0-9_-]+`` (whitespace inside braces is ignored).
+        * `{ name }` is replaced by the value of *name*, where *name* is
+          `[a-zA-Z0-9_-]+` (whitespace inside braces is ignored).
         * Missing keys produce the empty string.
         * Date, time, and number types are formatted locale-aware.
-        * Unmatched or malformed ``{...}`` tokens are left as-is.
+        * Unmatched or malformed `{...}` tokens are left as-is.
 
         Returns:
             The rendered string.
         """
+        locale = _BabelLocale.parse(bcp47_locale, sep="-")
+
+        def _format_value(value: Any) -> str:
+            """Format a single substitution value for the target locale.
+
+            Returns:
+                The formatted string.
+            """
+            if value is None:
+                return ""
+            if isinstance(value, datetime):
+                return _babel_dates.format_datetime(value, locale=locale)
+            if isinstance(value, date):
+                return _babel_dates.format_date(value, locale=locale)
+            if isinstance(value, time):
+                return _babel_dates.format_time(value, locale=locale)
+            if isinstance(value, timedelta):
+                return _babel_dates.format_timedelta(value, locale=locale)
+            if isinstance(value, Decimal):
+                return _babel_numbers.format_decimal(value, locale=locale)
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                return _babel_numbers.format_decimal(value, locale=locale)
+            return str(value)
+
         text = template.replace("{{", "\x00").replace("}}", "\x01")
-        text = cls._PLACEHOLDER_RE.sub(lambda m: cls._format_value(kwargs.get(m.group(1)), locale), text)
+        text = cls._PLACEHOLDER_RE.sub(lambda m: _format_value(kwargs.get(m.group(1))), text)
         return text.replace("\x00", "{").replace("\x01", "}")
-
-    @classmethod
-    def _resolve_kwargs(
-        cls, kwargs: dict[str, object], locale: str, escape: bool, *, recursive: bool = False
-    ) -> dict[str, object]:
-        """Resolve kwargs for formatting.
-
-        Calls `__locale_str__()` on enums, recursively translates nested
-        `locale_str` values (when *recursive*), and escapes markdown.
-
-        Returns:
-            Resolved kwargs ready for `format_template`.
-        """
-        resolved: dict[str, object] = {}
-        for key, value in kwargs.items():
-            if key in cls._RESERVED:
-                continue
-            v: Any = value
-
-            if hasattr(v, "__locale_str__"):
-                v = v.__locale_str__()
-
-            if isinstance(v, locale_str):
-                new_v = cls.translate_sync(v, locale) if recursive else v.message
-                if new_v is None:
-                    logger.warning(
-                        "Failed to translate nested locale_str for key %r"
-                        "(msgid %r, locale %r); using pre-rendered message",
-                        key,
-                        v,
-                        locale,
-                    )
-                    v = v.message
-                else:
-                    v = new_v
-
-            if isinstance(v, str) and escape:
-                v = discord.utils.escape_markdown(v)
-
-            if isinstance(v, TranslationTypes):
-                resolved[key] = v
-            else:
-                logger.warning("Formatting key %r has non-primitive value %r; coercing to string", key, v)
-                v = str(v)
-                if escape:
-                    v = discord.utils.escape_markdown(v)
-                resolved[key] = v
-        return resolved
 
     @classmethod
     def translate_sync(
@@ -230,49 +199,69 @@ class Translator(app_commands.Translator):
         Returns:
             Translated string, or `None` when not a Modmail key.
         """
-        if "_string" not in string.extras:
+        msgid: str | None = string.extras.get("_string")
+        if msgid is None:
             return None
-
-        if isinstance(locale, discord.Locale):
-            bcp47_locale = locale.value
-        else:
-            bcp47_locale = locale
-
-        bundle = cls._get_bundle(bcp47_locale)
-        should_escape = escape if escape is not None else bool(string.extras.get("_escape", True))
-
-        if "_count" in string.extras and "count" not in override_kwargs and "count" not in string.extras:
-            override_kwargs["count"] = string.extras["_count"]
-
-        msgid: str = string.extras["_string"]
 
         if msgid.startswith("internal."):
-            if msgid == "internal.blank":
-                return ""
-            if msgid == "internal.error":
-                return "!Error!"
-            logger.warning("Unknown internal msgid %r", msgid)
-            return None
+            match msgid:
+                case "internal.blank":
+                    return ""
+                case "internal.error":
+                    return "!Error!"
+                case _:
+                    logger.warning("Unknown internal msgid %r", msgid)
+                    return None
 
-        if "_context" in string.extras and "_string_plural" in string.extras and "_count" in string.extras:
-            translated = bundle.unpgettext(
-                string.extras["_context"],
-                msgid,
-                string.extras["_string_plural"],
-                string.extras["_count"],
-            )
-        elif "_context" in string.extras:
-            translated = bundle.upgettext(string.extras["_context"], msgid)
-        elif "_string_plural" in string.extras and "_count" in string.extras:
-            translated = bundle.ngettext(msgid, string.extras["_string_plural"], string.extras["_count"])
-        else:
-            translated = bundle.gettext(msgid)
+        ctx: str | None = string.extras.get("_context")
+        plural_msgid: str | None = string.extras.get("_string_plural")
+        count: int | None = string.extras.get("_count")
+        escape = escape if escape is not None else bool(string.extras.get("_escape", True))
+        bcp47_locale = locale.value if isinstance(locale, discord.Locale) else locale
 
-        extras_kwargs = {k: v for k, v in string.extras.items() if k not in cls._RESERVED}
-        kwargs = {**extras_kwargs, **override_kwargs}
+        if count is not None and "count" not in override_kwargs:
+            override_kwargs["count"] = count
+        kwargs: dict[str, Any] = {k: v for k, v in string.extras.items() if k not in cls._RESERVED}
+        kwargs |= override_kwargs
 
-        resolved = cls._resolve_kwargs(kwargs, bcp47_locale, should_escape, recursive=True)
-        return cls.format_template(str(translated), locale=bcp47_locale, **resolved)
+        for key, value in list(kwargs.items()):
+            if hasattr(value, "__locale_str__"):
+                value = value.__locale_str__()
+            if isinstance(value, locale_str):
+                if (new_v := cls.translate_sync(value, locale)) is not None:
+                    value = new_v
+                else:
+                    logger.warning(
+                        "Failed to translate nested locale_str for key %r (msgid %r, locale %r); "
+                        "using pre-rendered message",
+                        key,
+                        value,
+                        locale,
+                    )
+                    value = value.message
+            if not isinstance(value, TranslationTypes):
+                logger.warning("Formatting key %r has non-primitive value %r; coercing to string", key, value)
+                value = str(value)
+            if isinstance(value, str) and escape:
+                value = discord.utils.escape_markdown(value)
+            kwargs[key] = value
+
+        def _lookup(bundle: _NullTranslations) -> str:
+            if ctx and plural_msgid and count is not None:
+                return bundle.unpgettext(ctx, msgid, plural_msgid, count)
+            if ctx:
+                return bundle.upgettext(ctx, msgid)
+            if plural_msgid and count is not None:
+                return bundle.ngettext(msgid, plural_msgid, count)
+            return bundle.gettext(msgid)
+
+        if cls._custom_bundle and cls._custom_locale:
+            translated = _lookup(cls._custom_bundle)
+            if translated != msgid and (not plural_msgid or translated != plural_msgid):
+                return cls.format_template(translated, bcp47_locale=cls._custom_locale, **kwargs)
+
+        translated = _lookup(cls._get_bundle(bcp47_locale))
+        return cls.format_template(translated, bcp47_locale=bcp47_locale, **kwargs)
 
     @classmethod
     def gettext(cls, msgid: str, /, *, escape: bool = True, **kwargs: object) -> locale_str:
@@ -283,14 +272,9 @@ class Translator(app_commands.Translator):
             `.extras` carries the msgid plus all kwargs for re-rendering.
         """
         if msgid.startswith("internal."):
-            if msgid == "internal.blank":
-                return locale_str("", _string=msgid, _escape=escape)
-            if msgid == "internal.error":
-                return locale_str("!Error!", _string=msgid, _escape=escape)
-            logger.warning("Unknown internal msgid %r", msgid)
-            return locale_str(msgid, _string=msgid, _escape=escape)
-
-        default_message = cls._bundles[cls._fallback_locale].gettext(msgid)
+            default_message = msgid
+        else:
+            default_message = cls._bundles[cls._fallback_locale].gettext(msgid)
 
         kwargs["_string"] = msgid
         kwargs["_escape"] = escape
@@ -309,7 +293,10 @@ class Translator(app_commands.Translator):
             A `locale_str` with the pre-rendered plural form.
         """
         plural_msgid = msgid + ".plural"
-        default_message = cls._bundles[cls._fallback_locale].ngettext(msgid, plural_msgid, n)
+        if msgid.startswith("internal."):
+            default_message = msgid
+        else:
+            default_message = cls._bundles[cls._fallback_locale].ngettext(msgid, plural_msgid, n)
 
         kwargs["_string"] = msgid
         kwargs["_string_plural"] = plural_msgid
@@ -327,7 +314,10 @@ class Translator(app_commands.Translator):
         Returns:
             A `locale_str` with the pre-rendered contextual form.
         """
-        default_message = cls._bundles[cls._fallback_locale].upgettext(context, msgid)
+        if msgid.startswith("internal."):
+            default_message = msgid
+        else:
+            default_message = cls._bundles[cls._fallback_locale].upgettext(context, msgid)
 
         kwargs["_context"] = context
         kwargs["_string"] = msgid
@@ -347,7 +337,10 @@ class Translator(app_commands.Translator):
             A `locale_str` with the pre-rendered contextual plural form.
         """
         plural_msgid = msgid + ".plural"
-        default_message = cls._bundles[cls._fallback_locale].unpgettext(context, msgid, plural_msgid, n)
+        if msgid.startswith("internal."):
+            default_message = msgid
+        else:
+            default_message = cls._bundles[cls._fallback_locale].unpgettext(context, msgid, plural_msgid, n)
 
         kwargs["_context"] = context
         kwargs["_string"] = msgid

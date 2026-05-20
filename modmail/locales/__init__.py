@@ -9,18 +9,20 @@ from __future__ import annotations
 import ast
 import logging
 import re
-import sys
+import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from babel.core import Locale as _BabelLocale
 from babel.messages import Catalog, Message, mofile, pofile
 
 __all__ = [
+    "LocaleError",
     "add_locale",
     "check_locales",
     "compile_locales",
+    "create_custom_locale",
     "ensure_compiled",
     "extract_locales",
 ]
@@ -45,20 +47,24 @@ _Directives = dict[str, list[str]]
 _SeeSources = dict[str, list[tuple[str, str, int]]]
 
 
+class LocaleError(Exception):
+    """Raised when a locale operation cannot complete."""
+
+
 def _to_babel_locale(locale: str) -> str:
     """Convert BCP-47 `en-US` to babel underscore form `en_US`.
 
+    A trailing `-custom` suffix becomes `@custom` so
+    `en-US-custom` produces `en_US@custom` and
+    `en-custom` produces `en@custom`.
+
     Returns:
-        Babel locale string with underscore separator.
+        Babel locale string with underscore and optional `@modifier`.
     """
+    if locale.endswith("-custom"):
+        base = locale.removesuffix("-custom")
+        return base.replace("-", "_") + "@custom"
     return locale.replace("-", "_")
-
-
-def _require(value: object, label: str) -> None:
-    """Exit if *value* is falsy, logging the missing *label*."""
-    if not value:
-        logger.error("pyproject.toml is missing %s.", label)
-        sys.exit(1)
 
 
 def _read_pyproject() -> dict[str, str]:
@@ -68,55 +74,19 @@ def _read_pyproject() -> dict[str, str]:
         Dict with project metadata.
 
     Raises:
-        SystemExit: If any required key is missing or the file is unreadable.
+        FileNotFoundError: If pyproject.toml is missing.
+        KeyError: If a required key is missing from the `[project]` table.
+        IndexError: If `[project].authors` is empty.
+        tomllib.TOMLDecodeError: If the file is not valid TOML.
     """
-    import tomllib
-
-    try:
-        raw: Any = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())
-    except FileNotFoundError, OSError:
-        logger.error("Cannot read pyproject.toml at %s", PROJECT_ROOT)
-        sys.exit(1)
-
-    project: Any = raw.get("project")
-    if not isinstance(project, dict):
-        logger.error("pyproject.toml is missing the [project] table.")
-        sys.exit(1)
-    project = cast("dict[str, Any]", project)
-
-    _require(project.get("name"), "[project].name")
-    _require(project.get("version"), "[project].version")
-
-    authors: Any = project.get("authors", [])
-    if not isinstance(authors, list) or not authors:
-        logger.error("pyproject.toml is missing [project].authors.")
-        sys.exit(1)
-    first = cast("dict[str, Any]", cast("list[Any]", authors)[0])
-    author_name = first.get("name", "")
-    author_email = first.get("email", "")
-
-    lic: Any = project.get("license")
-    _require(lic, "[project].license")
-    license_text = (
-        str(cast("dict[str, Any]", lic).get("text", "AGPL-3.0-or-later")) if isinstance(lic, dict) else str(lic)
-    )
-
+    project: dict[str, Any] = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())["project"]
     return {
         "name": str(project["name"]),
         "version": str(project["version"]),
-        "author": str(author_name),
-        "email": str(author_email),
-        "license": license_text,
+        "author": str(project["authors"][0]["name"]),
+        "email": str(project["authors"][0]["email"]),
+        "license": str(lic if isinstance(lic := project["license"], str) else lic["text"]),
     }
-
-
-def _has_brace_format(text: str) -> bool:
-    """Return `True` when *text* contains `{name}` placeholders.
-
-    Returns:
-        `True` if at least one placeholder was found.
-    """
-    return bool(_FORMAT_RE.search(text))
 
 
 def _resolve_constant(node: ast.expr) -> object | None:
@@ -149,15 +119,6 @@ def _resolve_constant(node: ast.expr) -> object | None:
         return "".join(parts)
 
     return None
-
-
-def _func_name(node: ast.expr) -> str | None:
-    """Bare function name of *node*, or `None`.
-
-    Returns:
-        The function name string, or `None`.
-    """
-    return node.id if isinstance(node, ast.Name) else None
 
 
 def _extract_comments(source: str, call_lineno: int) -> list[str]:
@@ -201,23 +162,67 @@ def _create_locale(locale: str) -> str:
         The canonical locale tag.
 
     Raises:
-        SystemExit: On invalid input or existing directory.
+        LocaleError: On invalid input or existing directory.
     """
     try:
         parsed = _BabelLocale.parse(locale, sep="-")
     except ValueError, TypeError, AttributeError:
-        logger.error("Invalid BCP-47 locale: %r", locale)
-        sys.exit(1)
+        raise LocaleError(f"Invalid BCP-47 locale: {locale!r}") from None
 
     canonical = f"{parsed.language}-{parsed.territory}" if parsed.territory else parsed.language
     locale_dir = LOCALES_DIR / canonical
     if locale_dir.exists():
-        logger.error("Locale directory already exists: %s", locale_dir)
-        sys.exit(1)
+        raise LocaleError(f"Locale directory already exists: {locale_dir}")
 
     (locale_dir / "LC_MESSAGES").mkdir(parents=True, exist_ok=True)
     logger.info("Created locale directory: %s", locale_dir)
     return canonical
+
+
+def create_custom_locale(base: str = "en-US") -> str:
+    """Create a custom locale override based on *base*.
+
+    Only one `*-custom` directory may exist.  The custom locale is
+    loaded at startup by [`Translator.load_bundles`][] and checked before
+    every translation lookup.
+
+    Args:
+        base: BCP-47 locale to inherit plural rules and formatting from.
+
+    Returns:
+        The custom directory name (e.g. `"en-US-custom"`).
+
+    Raises:
+        LocaleError: If *base* is invalid or a custom locale already exists.
+    """
+    try:
+        _BabelLocale.parse(base, sep="-")
+    except ValueError, TypeError, AttributeError:
+        raise LocaleError(f"Invalid base locale for custom: {base!r}") from None
+
+    for d in LOCALES_DIR.iterdir():
+        if d.is_dir() and d.name.endswith("-custom"):
+            raise LocaleError(f"A custom locale already exists: {d.name}")
+
+    dirname = f"{base}-custom"
+    locale_dir = LOCALES_DIR / dirname
+    (locale_dir / "LC_MESSAGES").mkdir(parents=True, exist_ok=True)
+    logger.info("Created custom locale directory: %s", locale_dir)
+
+    meta = _read_pyproject()
+    extracted = _SourceScanner().scan()
+    logger.info("Scanned sources — %d unique msgids found.", len(extracted))
+    eng = _CatalogEngine(dirname, meta)
+    catalog = eng.build(extracted)
+    eng.write_po(catalog)
+    eng.write_mo(catalog)
+    logger.info(
+        "[%s] Generated PO and MO (%d entries, %d untranslated)",
+        dirname,
+        len(catalog),
+        _count_untranslated(catalog),
+    )
+    return dirname
 
 
 def _count_untranslated(catalog: Catalog) -> int:
@@ -371,7 +376,7 @@ class _SourceScanner:
             self.entries: list[dict[str, Any]] = []
 
         def visit_Call(self, node: ast.Call) -> None:
-            fid = _func_name(node.func)
+            fid = node.func.id if isinstance(node.func, ast.Name) else None
             if fid not in _ALL_FUNCS:
                 self.generic_visit(node)
                 return
@@ -472,7 +477,7 @@ class _CatalogEngine:
                 auto_comments=auto,
                 context=ctx,
             )
-            if _has_brace_format(msgid):
+            if _FORMAT_RE.search(msgid):
                 msg.flags.add("python-brace-format")
             catalog[msg.id] = msg
 
@@ -517,7 +522,8 @@ class _CatalogEngine:
             else:
                 result.append(line)
                 i += 1
-        self.po_path.write_text("".join(result), encoding="utf-8")
+        text = "".join(result).rstrip("\n") + "\n"
+        self.po_path.write_text(text, encoding="utf-8")
 
     def write_mo(self, catalog: Catalog) -> Path:
         self._po_dir.mkdir(parents=True, exist_ok=True)
@@ -609,14 +615,6 @@ def _check_locale(extracted: _Extracted, engine: _CatalogEngine) -> bool:
     return clean
 
 
-def _check_all(extracted: _Extracted, locales: list[str], meta: dict[str, str]) -> int:
-    failures = 0
-    for loc in locales:
-        if not _check_locale(extracted, _CatalogEngine(loc, meta)):
-            failures += 1
-    return failures
-
-
 def extract_locales(locale: str | None = None) -> None:
     """Scan sources, update PO files, and compile MO files.
 
@@ -654,7 +652,12 @@ def check_locales(locale: str | None = None) -> bool:
     extracted = _SourceScanner().scan()
     logger.info("Scanned sources — %d unique msgids found.", len(extracted))
     locales = [locale] if locale else _discover_locales()
-    failures = _check_all(extracted, locales, meta)
+
+    failures = 0
+    for loc in locales:
+        if not _check_locale(extracted, _CatalogEngine(loc, meta)):
+            failures += 1
+
     if failures:
         logger.info("\n%d locale(s) have issues.", failures)
         return False
@@ -681,7 +684,7 @@ def add_locale(locale: str) -> str:
     """Create a new locale directory, scan sources, and generate PO+MO.
 
     Args:
-        locale: BCP-47 locale tag (e.g. ``"de"``, ``"de-DE"``).
+        locale: BCP-47 locale tag (e.g. `"de"`, `"de-DE"`).
 
     Returns:
         The canonical locale tag that was created.

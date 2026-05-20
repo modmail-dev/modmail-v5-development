@@ -27,7 +27,7 @@ uv run pyright
 - Docstrings: **Google style**. Cross-refs: `[Name][]`. Unrecognized section headers become admonition boxes (`Note:`, `Warning:`, etc.).
 - Attribute descriptions: for the user, no implementation details, no semicolons.
 - Use US spelling (`color`, not `colour`).
-- **Single backticks only** in docstrings and docs (``` `code` ```, never ``` ``code`` ```).
+- **Single backticks only** (``` `code` ```, never ``` ``code`` ```) — in docstrings.
 - **No section divider comments** (no `# ----` banners, separator blocks, or partitioning markers in code).
 
 ## Startup order
@@ -94,15 +94,17 @@ Gettext (`.po`/`.mo`) via **Babel**. Source files in `modmail/locales/<locale>/L
 
 `modmail/core/locale.py` — `locale_for()` resolves locale against config. `modmail/core/ephemeral.py` — per-interaction locale routing.
 
-**CLI:** `python -m modmail.locales {extract,check,compile,add}` (`extract` scans sources → updates `.po` → compiles `.mo`).
+**CLI:** `python -m modmail.locales {extract,check,compile,add,custom}` (`extract` scans sources → updates `.po` → compiles `.mo`).
 
 - Msgids use dotted paths (`cmd.reply.name`, `msg.ticket.log.body.open`). Placeholders: `{name}`.
 - Context (`msgctxt`) via `upgettext("ctx", "key")` when same key needs different translations.
-- `_("internal.blank")` → `""`, `_("internal.error")` → `"!Error!"`.
+- `_("internal.blank")` → `""`, `_("internal.error")` → `"!Error!"`.  `internal.*` msgids are rejected by the extractor (known set); unknown ones emit a warning.
 - Comments above `_()` with `@param`/`@info`/`@see` become translator notes in `.po`.
+- **Custom locale**: `python -m modmail.locales custom [BASE]` creates `locales/<BASE>-custom/`.  The directory name uses `-custom` suffix; babel sees `xx_YY@custom` (first `-` → `_`, suffix `-custom` → `@custom`).  At startup `Translator.load_bundles()` loads the custom `.mo` (if present) and checks it before every translation lookup — any translated `msgstr` overrides the default locale.  `config_model._discover_locale_dirs()` excludes `*-custom` so it never appears in `allowed_locales` / `default_locale`.
 
 ## Other gotchas
 
 - SQL migrations: `uv run alembic revision --autogenerate -m "description"`. Post-write hooks auto-format via ruff.
 - `Bot.run()` raises `NotImplementedError` — always use `Bot.run_bot()`.
 - Callback function names should end with `_command` — `Bot.add_command()` logs a debug warning if not.
+- Custom locale: directory name uses `-custom` suffix; babel locale uses `@custom` modifier. `_to_babel_locale()` handles the conversion. Only one `*-custom` directory may exist.
