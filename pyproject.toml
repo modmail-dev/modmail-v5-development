@@ -38,7 +38,7 @@ dependencies = [
     "python-dotenv~=1.2.2",
     "packaging",  # For version parsing, should be installed by default but just in case
     "pyyaml~=6.0.3",
-    "fluent-runtime~=0.4.0",
+    "babel==2.18",
 ]
 
 [project.optional-dependencies]
@@ -119,6 +119,7 @@ module-root = ""  # default expects src/, we have everything in the root
 line-length = 115
 preview = true
 namespace-packages = ["modmail", "modmail/cogs"]
+exclude = ["modmail/locales.bak"]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -202,6 +203,7 @@ runtime-evaluated-base-classes = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F403"]  # F403: 'from module import *' used; unable to detect undefined names
 "ftl_finder.py" = ["T201"]  # T201: Use of print
+"modmail/locales/__main__.py" = ["T201"]  # T201: Use of print — CLI tool output
 "tests/*" = ["D107", "D101", "D100", "D105", "D202", "D102", "D104", "D103", "PLR2004", "PLR0917", "PLC2701"]  # D*: Missing doc strings, PLR2004: Compare magic number, PLC2701: Private name import from external module
 "modmail/backends/sql/migrations/versions/*" = ["D415", "UP"]  # D415:  First line should end with a period, question mark, or exclamation point
 "modmail/cogs/*/commands/*.py" = ["TC002"]  # discord and commands are always kept as runtime imports in cogs
@@ -233,6 +235,7 @@ exclude = [
     "dist",
     "docs",
     "tests",  # Tests are disabled for now
+    "**/locales.bak",  # Backup of old Fluent locales
 ]
 reportUnnecessaryTypeIgnoreComment = "warning"
 reportPropertyTypeMismatch = "error"

@@ -24,9 +24,11 @@ uv run pyright
 
 - **Every `.py` file starts with** `from __future__ import annotations` (enforced via ruff isort `required-imports`).
 - **Never add suppression comments** (`# noqa`, `# type: ignore`, `# pyright: ignore`).
-- Docstrings: **Google style**. Cross-refs: `[Name][]`. Use single backtick for inline code. Unrecognized section headers become admonition boxes (`Note:`, `Warning:`, etc.).
+- Docstrings: **Google style**. Cross-refs: `[Name][]`. Unrecognized section headers become admonition boxes (`Note:`, `Warning:`, etc.).
 - Attribute descriptions: for the user, no implementation details, no semicolons.
 - Use US spelling (`color`, not `colour`).
+- **Single backticks only** in docstrings and docs (``` `code` ```, never ``` ``code`` ```).
+- **No section divider comments** (no `# ----` banners, separator blocks, or partitioning markers in code).
 
 ## Startup order
 
@@ -86,7 +88,18 @@ Shared Pydantic models in `common/models/`: `TicketModel`, `TicketMessageModel`,
 
 ## Localization
 
-Fluent (FTL) in `modmail/locales/<lang>/main.ftl` (`en`, `de`). `modmail/core/translator.py` — `Translator` (implements `discord.app_commands.Translator`), `_()` helper, `locale_for()`. Translator is set on `bot.tree` in `setup_hook()`.
+Gettext (`.po`/`.mo`) via **Babel**. Source files in `modmail/locales/<locale>/LC_MESSAGES/messages.po`, auto-compiled on startup.
+
+`modmail/i18n.py` — `_()` / `_n()` / `_c()` / `_cn()` helpers, plus `cgettext`/`upgettext`/`ngettext`/`unpgettext` aliases. Translator set on `bot.tree` in `setup_hook()`.
+
+`modmail/core/locale.py` — `locale_for()` resolves locale against config. `modmail/core/ephemeral.py` — per-interaction locale routing.
+
+**CLI:** `python -m modmail.locales {extract,check,compile,add}` (`extract` scans sources → updates `.po` → compiles `.mo`).
+
+- Msgids use dotted paths (`cmd.reply.name`, `msg.ticket.log.body.open`). Placeholders: `{name}`.
+- Context (`msgctxt`) via `upgettext("ctx", "key")` when same key needs different translations.
+- `_("internal.blank")` → `""`, `_("internal.error")` → `"!Error!"`.
+- Comments above `_()` with `@param`/`@info`/`@see` become translator notes in `.po`.
 
 ## Other gotchas
 

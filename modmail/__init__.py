@@ -86,10 +86,9 @@ def run_bot() -> NoReturn:
     current_time_text = datetime.datetime.now(tz=datetime.UTC).astimezone().strftime("%B %d, %Y %H:%M:%S %Z")
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     config = _state["config"]
-    allowed_locale = config.allowed_locales
-    enabled_locales = ", ".join(
-        [config.default_locale] + [locale for locale in allowed_locale if locale != config.default_locale]
-    )
+    locale_names = [config.default_locale]
+    locale_names += [loc for loc in config.allowed_locales if loc != config.default_locale]
+    enabled_locales = ", ".join(locale_names)
 
     modmail_text_lines: list[str] = []
     modmail_text_lines += modmail_ascii_art.split("\n")

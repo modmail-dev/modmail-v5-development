@@ -13,12 +13,11 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
-from modmail.core import _
 from modmail.errors import ModmailError
+from modmail.i18n import _
 
 if TYPE_CHECKING:
     from .. import Modmail
-
 
 __all__ = ["dm_receive"]
 
@@ -57,7 +56,8 @@ async def dm_receive(cog: Modmail, message: discord.Message) -> None:
             logger.warning("Received a DM from %s, but Modmail is not configured.", message.author)
             logger.warning("Message content: %s", message.content)
 
-            msg = cog.bot.translate(_("ftl-msg-dm-received-not-configured", guild_name=staff_guild.guild.name))
+            # @param guild_name: Staff guild name
+            msg = cog.bot.translate(_("msg.dm.not_configured", guild_name=staff_guild.guild.name))
             try:
                 await message.reply(msg)
             except discord.HTTPException, TypeError:

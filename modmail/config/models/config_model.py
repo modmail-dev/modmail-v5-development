@@ -8,10 +8,12 @@ that the configuration is correctly loaded and validated from various sources.
 from __future__ import annotations
 
 import os
-from typing import Literal, TypeVar
+from pathlib import Path
+from typing import Literal
 
+from babel.core import negotiate_locale
 from packaging.version import Version
-from pydantic import Field, ValidationInfo, field_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from .bot_model import BotConfig
@@ -22,8 +24,20 @@ from .sql_database_model import SQLDatabaseConfig
 
 __all__ = ["Config"]
 
-type SupportedLocales = Literal["en", "de"]
 type SupportedDatabases = Literal["sql", "mongodb"]
+
+LOCALES_ROOT = Path(__file__).resolve().parent.parent.parent / "locales"
+
+
+def _discover_locale_dirs() -> set[str]:
+    """Return locale directory names found under `modmail/locales/`."""
+    found: set[str] = set()
+    if not LOCALES_ROOT.is_dir():
+        return found
+    for child in sorted(LOCALES_ROOT.iterdir()):
+        if child.is_dir() and (child / "LC_MESSAGES" / "messages.po").is_file():
+            found.add(child.name)
+    return found
 
 
 class Config(BaseSettings):
@@ -47,8 +61,8 @@ class Config(BaseSettings):
 
     version: str = "1.0"  # the config version
     bot: BotConfig
-    allowed_locales: set[SupportedLocales] = Field({"en", "de"}, min_length=1)
-    default_locale: SupportedLocales = Field("en", validate_default=True)
+    allowed_locales: set[str] = Field(default_factory=set)
+    default_locale: str = ""
     log_url: str
     database_type: SupportedDatabases
     sql_config: SQLDatabaseConfig | None = Field(None, validate_default=True)
@@ -121,30 +135,65 @@ class Config(BaseSettings):
 
         return version
 
-    @field_validator("default_locale")
-    @classmethod
-    def check_default_locale_in_allowed(cls, v: str, info: ValidationInfo) -> str:
-        """Ensures the default locale is in the set of allowed locales.
+    @model_validator(mode="after")
+    def _validate_locales(self) -> Config:
+        """Validate allowed_locales and default_locale, then compile and load bundles.
 
-        Args:
-            v: The default locale to validate.
-            info: Validation context containing other field values.
+        If allowed_locales is empty the available locale directories are
+        auto-discovered.  Each entry is matched against the available
+        directories via `babel.core.negotiate_locale`.  `.mo` files are
+        compiled on demand and then loaded into the `Translator`.
 
         Returns:
-            The validated default locale.
+            The validated config instance with resolved locale fields.
 
         Raises:
-            ValueError: If the default locale is not in the allowed_locales set.
+            ValueError: If a locale does not match any available directory
+                or bundle loading fails.
         """
-        if v not in info.data.get("allowed_locales", set()):
-            raise ValueError("The default locale must be in allowed_locales.")
-        return v
+        from modmail.i18n import Translator
+        from modmail.locales import ensure_compiled
 
-    _T = TypeVar("_T")
+        available = _discover_locale_dirs()
+        raw = self.allowed_locales
+
+        if raw:
+            resolved: set[str] = set()
+            for entry in raw:
+                entry_str = str(entry)
+                match = negotiate_locale([entry_str.replace("_", "-")], list(available), sep="-")
+                if match is None:
+                    raise ValueError(
+                        f"Locale {entry_str!r} does not match any available locale directory ({sorted(available)})"
+                    )
+                resolved.add(match)
+        else:
+            resolved = available
+
+        ensure_compiled()
+        try:
+            Translator.load_bundles(str(LOCALES_ROOT), sorted(resolved), "messages")
+        except Exception as e:
+            raise ValueError(f"Failed to load translation bundles for {resolved}: {e}") from e
+
+        self.allowed_locales = resolved
+
+        if not self.default_locale:
+            self.default_locale = next(iter(resolved))
+        else:
+            match = negotiate_locale([self.default_locale.replace("_", "-")], list(resolved), sep="-")
+            if match is None:
+                raise ValueError(
+                    f"Default locale {self.default_locale!r} does not match "
+                    f"any allowed locale ({sorted(resolved)})"
+                )
+            self.default_locale = match
+
+        return self
 
     @field_validator("sql_config", mode="before")
     @classmethod
-    def check_using_sql_database_config(cls, v: _T, info: ValidationInfo) -> _T | None:
+    def check_using_sql_database_config[T](cls, v: T, info: ValidationInfo) -> T | None:
         """Sets up SQL database configuration when SQL is selected.
 
         Args:
@@ -163,7 +212,7 @@ class Config(BaseSettings):
 
     @field_validator("mongodb_config", mode="before")
     @classmethod
-    def check_using_mongodb_database_config(cls, v: _T, info: ValidationInfo) -> _T | None:
+    def check_using_mongodb_database_config[T](cls, v: T, info: ValidationInfo) -> T | None:
         """Sets up MongoDB configuration when MongoDB is selected.
 
         Args:

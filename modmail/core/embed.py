@@ -11,7 +11,7 @@ from discord.app_commands import locale_str
 __all__ = ["EmbedProxy"]
 
 if TYPE_CHECKING:
-    from .translator import Translator
+    from ..i18n import Translator
 
 type AnyStr = str | locale_str
 

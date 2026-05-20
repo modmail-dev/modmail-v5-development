@@ -20,13 +20,11 @@ asyncmy==0.2.11
 asyncpg==0.31.0
     # via sqlalchemy
 attrs==25.4.0
-    # via
-    #   aiohttp
-    #   fluent-runtime
+    # via aiohttp
 audioop-lts==0.2.2
     # via discord-py
-babel==2.17.0
-    # via fluent-runtime
+babel==2.18.0
+    # via modmail-py
 beanie==2.0.1
     # via modmail-py
 brotli==1.2.0
@@ -41,10 +39,6 @@ discord-py==2.7.1
     # via modmail-py
 dnspython==2.8.0
     # via pymongo
-fluent-runtime==0.4.0
-    # via modmail-py
-fluent-syntax==0.19.0
-    # via fluent-runtime
 frozenlist==1.8.0
     # via
     #   aiohttp
@@ -97,8 +91,6 @@ python-dotenv==1.2.2
     # via
     #   modmail-py
     #   pydantic-settings
-pytz==2025.2
-    # via fluent-runtime
 pyyaml==6.0.3
     # via modmail-py
 rich==15.0.0
@@ -111,8 +103,6 @@ typing-extensions==4.15.0
     # via
     #   alembic
     #   beanie
-    #   fluent-runtime
-    #   fluent-syntax
     #   pydantic
     #   pydantic-core
     #   sqlalchemy

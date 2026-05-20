@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from modmail.core import Context, _, bot_group
+from modmail.core import Context, bot_group
+from modmail.i18n import _
 
 if TYPE_CHECKING:
     from .. import Utility
@@ -17,9 +18,9 @@ __all__ = ["about_command"]
 
 
 @bot_group(
-    name=_("ftl-cmd-about-name"),
-    fallback=_("ftl-cmd-about-fallback-name"),
-    description=_("ftl-cmd-about-description"),
+    name=_("cmd.about.name"),
+    fallback=_("cmd.about.fallback"),
+    description=_("cmd.about.description"),
 )
 async def about_command(cog: Utility, ctx: Context) -> None:
     """Show information about the Modmail bot.
@@ -32,8 +33,8 @@ async def about_command(cog: Utility, ctx: Context) -> None:
 
 
 @about_command.command(
-    name=_("ftl-cmd-about-version-name"),
-    description=_("ftl-cmd-about-version-description"),
+    name=_("cmd.about.version.name"),
+    description=_("cmd.about.version.description"),
     with_app_command=False,
 )
 async def about_version_command(cog: Utility, ctx: Context) -> None:
@@ -43,4 +44,5 @@ async def about_version_command(cog: Utility, ctx: Context) -> None:
         cog: The Utility cog instance.
         ctx: The command context.
     """
-    await ctx.reply(_("ftl-cmd-about-version-message", version=cog.bot.version))
+    # @param version: Bot version string
+    await ctx.reply(_("msg.about.version", version=cog.bot.version))

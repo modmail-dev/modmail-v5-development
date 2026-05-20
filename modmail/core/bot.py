@@ -33,12 +33,14 @@ from ..errors import (
     NoStaffGuildError,
     UserAccessError,
 )
+from ..i18n import Translator, _
 from ._reachability import ReachabilityRegistry
 from .context import Context, UserAccessResult
 from .embed import EmbedProxy
+from .ephemeral import using_ephemeral
+from .locale import locale_for
 from .permission import PermissionCommandIndex
 from .staff_guild import StaffGuild
-from .translator import Translator, _, locale_for, using_ephemeral
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine
@@ -183,14 +185,15 @@ class Bot(commands.Bot):
 
         # Update the last ran locale in the database.
         last_ran_locale = self.database_client.settings.last_ran_locale
-        if last_ran_locale != CONFIG.default_locale:
+        default_locale_str = CONFIG.default_locale
+        if last_ran_locale != default_locale_str:
             if last_ran_locale is not None:  # The locale was changed, need to resync the commands.
-                logger.info("Locale changed from %s to %s", last_ran_locale, CONFIG.default_locale)
+                logger.info("Locale changed from %s to %s", last_ran_locale, default_locale_str)
                 if CONFIG.bot.use_slash_commands and not slash_synced:
                     slash_synced = True
                     await self._sync_slash_commands()
 
-            await self.database_client.update_settings(last_ran_locale=CONFIG.default_locale)
+            await self.database_client.update_settings(last_ran_locale=default_locale_str)
 
         last_slash_minimum_permission_int = self.database_client.settings.last_slash_minimum_permission_int
         if last_slash_minimum_permission_int != CONFIG.permission.slash_minimum_permission_int:
@@ -639,7 +642,8 @@ class Bot(commands.Bot):
                 )
                 if missing_names:
                     await self.send_message(
-                        _("ftl-msg-bad-permissions", permissions=", ".join(missing_names)),
+                        # @param permissions: Comma-separated list of missing permission names
+                        _("msg.permission.bad", permissions=", ".join(missing_names)),
                         channel=context,
                         ephemeral=True,
                         reference=context.message,
@@ -657,7 +661,7 @@ class Bot(commands.Bot):
                 )
                 if context.interaction is not None and not context.interaction.is_expired():
                     await self.send_message(
-                        _("ftl-msg-permission-denied"), channel=context, ephemeral=True, reference=context.message
+                        _("msg.permission.denied"), channel=context, ephemeral=True, reference=context.message
                     )
             return
 
@@ -682,7 +686,7 @@ class Bot(commands.Bot):
             )
 
             await self.send_message(
-                _("ftl-msg-command-invoke-error"),
+                _("msg.permission.command_error"),
                 channel=context,
                 ephemeral=True,
                 reference=context.message,
@@ -1028,12 +1032,16 @@ class Bot(commands.Bot):
         """
         return True  # TODO: Implement this check? is this still necessary?
 
-    def translate(self, string: locale_str, *, locale: str | None = None) -> str:
+    def translate(
+        self, string: locale_str, *, locale: str | None = None, escape: bool | None = None, **kwargs: Any
+    ) -> str:
         """Translate `string` to `locale` (`CONFIG.default_locale` when `None`).
 
         Args:
             string: The [`locale_str`][] to translate.
-            locale: Target BCP-47 locale.
+            locale: Target BCP-47 locale string, or `None`.
+            escape: When not `None`, overrides the construction-time escape flag.
+            **kwargs: Additional formatting kwargs merged on top of construction-time kwargs.
 
         Returns:
             Translated string, or `string.message` if not found.
@@ -1041,7 +1049,7 @@ class Bot(commands.Bot):
         if locale is None:
             locale = locale_for(None)
 
-        message = self.translator.translate_sync(string, locale)
+        message = self.translator.translate_sync(string, locale, escape=escape, **kwargs)
         if message is None:
             logger.warning("Failed to translate message: %s", string)
             return string.message

@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from modmail.core import Bot, Cog, _, create_cog
+from modmail.core import Bot, Cog, create_cog
+from modmail.i18n import _
 
 from .commands import all_commands
 
@@ -24,11 +25,10 @@ else:
     Utility = create_cog(
         "Utility",
         all_commands=all_commands,
-        help_name=_("ftl-view-help-category-utility-name"),
-        help_description=_("ftl-view-help-category-utility-description"),
+        help_name=_("view.help.category.utility.name"),
+        help_description=_("view.help.category.utility.description"),
         help_color=discord.Color.teal(),
     )
-
 
 __all__ = ["Utility", "setup"]
 

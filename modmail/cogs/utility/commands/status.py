@@ -10,8 +10,9 @@ import re
 from typing import TYPE_CHECKING
 
 from modmail.backends.common import ActivityModel
-from modmail.core import Context, ParamInfo, Str, _, admin_only, bot_group, ephemeral_scope, locale_for
+from modmail.core import Context, ParamInfo, Str, admin_only, bot_group, ephemeral_scope, locale_for
 from modmail.enum import ActivityType, StatusType
+from modmail.i18n import _
 
 if TYPE_CHECKING:
     from .. import Utility
@@ -21,14 +22,14 @@ __all__ = ["status_command"]
 
 @admin_only
 @bot_group(
-    name=_("ftl-cmd-status-name"),
-    fallback=_("ftl-cmd-status-fallback-name"),
-    description=_("ftl-cmd-status-description"),
-    help=_("ftl-cmd-status-help"),
+    name=_("cmd.status.name"),
+    fallback=_("cmd.status.fallback"),
+    description=_("cmd.status.description"),
+    help=_("cmd.status.help"),
     param_info={
         "status": ParamInfo(
-            name=_("ftl-cmd-status-param-status-name"),
-            description=_("ftl-cmd-status-param-status-description"),
+            name=_("cmd.status.param.status.name"),
+            description=_("cmd.status.param.status.description"),
         )
     },
 )
@@ -51,47 +52,50 @@ async def status_command(cog: Utility, ctx: Context, *, status: Str | None = Non
             current_status = cog.bot.database_client.settings.status
             current_activity = cog.bot.database_client.settings.activity
             if current_status is not None and current_activity is not None:
-                status_part = ctx.t("ftl-msg-status-current-status", status=current_status)
-                activity_part = ctx.t("ftl-msg-status-current-activity", activity=current_activity)
+                # @param status: Human-readable status description (e.g. "Online")
+                status_part = ctx.t(_("msg.status.current", status=current_status))
+                # @see msg.status.set_activity
+                activity_part = ctx.t(_("msg.status.current_activity", activity=current_activity))
                 await ctx.reply(f"{status_part}\n{activity_part}")
             elif current_status is not None:
-                await ctx.reply(_("ftl-msg-status-current-status", status=current_status))
+                await ctx.reply(_("msg.status.current", status=current_status))
             elif current_activity is not None:
-                await ctx.reply(_("ftl-msg-status-current-activity", activity=current_activity))
+                await ctx.reply(_("msg.status.current_activity", activity=current_activity))
             else:
-                await ctx.reply(_("ftl-msg-status-no-status"))
+                await ctx.reply(_("msg.status.no_status"))
             return
 
     locales = list(dict.fromkeys([locale_for(ctx.interaction), locale_for(None)]))
 
     status_name_mapping: dict[str, StatusType] = {
-        cog.bot.translate(_(key), locale=loc).casefold(): value
+        cog.bot.translate(key, locale=loc).casefold(): value
         for loc in locales
         for key, value in [
-            ("ftl-model-status-online-name", StatusType.online),
-            ("ftl-model-status-idle-name", StatusType.idle),
-            ("ftl-model-status-dnd-name", StatusType.dnd),
-            ("ftl-model-status-dnd-full-name", StatusType.dnd),
-            ("ftl-model-status-offline-name", StatusType.offline),
-            ("ftl-model-status-invisible-name", StatusType.offline),
+            (_("label.status.online"), StatusType.online),
+            (_("label.status.idle"), StatusType.idle),
+            (_("label.status.dnd"), StatusType.dnd),
+            (_("label.status.dnd_full"), StatusType.dnd),
+            (_("label.status.offline"), StatusType.offline),
+            (_("label.status.invisible"), StatusType.offline),
         ]
     }
 
     if status.casefold() in status_name_mapping:
         status_type = status_name_mapping[status.casefold()]
         await cog.bot.set_bot_presence(status=status_type)
-        await ctx.reply(_("ftl-msg-status-set-status", status=status_type))
+        # @param status: Human-readable status description (e.g. "Online")
+        await ctx.reply(_("msg.status.set", status=status_type))
         return
 
     activity_name_mapping: dict[str, ActivityType] = {
-        cog.bot.translate(_(key), locale=loc).casefold() + " ": value
+        cog.bot.translate(key, locale=loc).casefold() + " ": value
         for loc in locales
         for key, value in [
-            ("ftl-model-activity-playing-name", ActivityType.playing),
-            ("ftl-model-activity-streaming-name", ActivityType.streaming),
-            ("ftl-model-activity-listening-name", ActivityType.listening),
-            ("ftl-model-activity-watching-name", ActivityType.watching),
-            ("ftl-model-activity-competing-name", ActivityType.competing),
+            (_("label.activity.playing"), ActivityType.playing),
+            (_("label.activity.streaming"), ActivityType.streaming),
+            (_("label.activity.listening"), ActivityType.listening),
+            (_("label.activity.watching"), ActivityType.watching),
+            (_("label.activity.competing"), ActivityType.competing),
         ]
     }
 
@@ -121,19 +125,20 @@ async def status_command(cog: Utility, ctx: Context, *, status: Str | None = Non
 
                 activity = ActivityModel(name=status, type=ActivityType.streaming, url=url)
             await cog.bot.set_bot_presence(activity=activity)
-            await ctx.reply(_("ftl-msg-status-set-activity", activity=activity))
+            # @param activity: Human-readable activity description (e.g. "Playing Minecraft")
+            await ctx.reply(_("msg.status.set_activity", activity=activity))
             return
 
     # Setting custom activity
     activity = ActivityModel(name=status, type=ActivityType.custom)
     await cog.bot.set_bot_presence(activity=activity)
-    await ctx.reply(_("ftl-msg-status-set-activity", activity=activity))
+    await ctx.reply(_("msg.status.set_activity", activity=activity))
 
 
 @status_command.command(
-    name=_("ftl-cmd-status-clear-name"),
-    description=_("ftl-cmd-status-clear-description"),
-    help=_("ftl-cmd-status-clear-help"),
+    name=_("cmd.status.clear.name"),
+    description=_("cmd.status.clear.description"),
+    help=_("cmd.status.clear.help"),
 )
 async def status_clear_command(cog: Utility, ctx: Context) -> None:
     """Clear the bot's status and activity.
@@ -143,4 +148,4 @@ async def status_clear_command(cog: Utility, ctx: Context) -> None:
         ctx: The command context.
     """
     await cog.bot.clear_bot_presence()
-    await ctx.reply(_("ftl-msg-status-clear-status"))
+    await ctx.reply(_("msg.status.clear"))

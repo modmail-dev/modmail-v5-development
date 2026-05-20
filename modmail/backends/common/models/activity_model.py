@@ -47,9 +47,26 @@ class ActivityModel(BaseModel):
                 return f"Competing in {self.name}"
 
     def __locale_str__(self) -> app_commands.locale_str:
-        """Return the localized string representation of the activity via the Fluent translator."""
-        from modmail.core import _
+        """Return the localized string representation of the activity."""
+        from modmail.i18n import _
 
-        return _(
-            "ftl-model-activity-text", activity_type=self.type, activity_name=self.name, activity_url=self.url
-        )
+        match self.type:
+            case ActivityType.playing:
+                # @param activity_name: The name of the activity (e.g. game title)
+                return _("label.activity.desc.playing", activity_name=self.name)
+            case ActivityType.streaming:
+                # @param activity_name: The name of the activity (e.g. stream title)
+                # @param activity_url: The Twitch stream URL
+                return _("label.activity.desc.streaming", activity_name=self.name, activity_url=self.url)
+            case ActivityType.listening:
+                # @see label.activity.desc.playing
+                return _("label.activity.desc.listening", activity_name=self.name)
+            case ActivityType.watching:
+                # @see label.activity.desc.playing
+                return _("label.activity.desc.watching", activity_name=self.name)
+            case ActivityType.competing:
+                # @see label.activity.desc.playing
+                return _("label.activity.desc.competing", activity_name=self.name)
+            case ActivityType.custom:
+                # @see label.activity.desc.playing
+                return _("label.activity.desc.custom", activity_name=self.name)

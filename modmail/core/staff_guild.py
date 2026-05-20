@@ -21,8 +21,8 @@ from ..errors import (
     NoTicketChannelError,
     TicketCreationError,
 )
+from ..i18n import _
 from ._ticket_view import TicketView
-from .translator import _
 
 if TYPE_CHECKING:
     from ._partial_recipient import PartialRecipient
@@ -350,13 +350,13 @@ class StaffGuild:
             await category_or_forum.set_permissions(
                 self._get_bot_role_or_member(),
                 overwrite=self.MIN_PERMISSIONS_OVERWRITE,
-                reason=self.bot.translate(_("ftl-msg-setup-category-or-forum-permissions-reason")),
+                reason=self.bot.translate(_("msg.setup.category_forum.permissions_reason")),
             )
             # TODO: alert the user they need to grant staff access manually to the existing channel
         else:
             overwrites = self._build_category_overwrites()
-            channel_name = self.bot.translate(_("ftl-msg-setup-category-or-forum-name"))
-            create_reason = self.bot.translate(_("ftl-msg-setup-category-or-forum-create-reason"))
+            channel_name = self.bot.translate(_("msg.setup.category_forum.name"))
+            create_reason = self.bot.translate(_("msg.setup.category_forum.create_reason"))
             if setup_type == "category":
                 category_or_forum = await self.guild.create_category(
                     name=channel_name,
@@ -374,8 +374,8 @@ class StaffGuild:
                 )
             await category_or_forum.edit(position=0)
 
-        log_reason = self.bot.translate(_("ftl-msg-setup-log-channel-create-reason"))
-        storage_reason = self.bot.translate(_("ftl-msg-setup-storage-channel-create-reason"))
+        log_reason = self.bot.translate(_("msg.setup.log_channel.create_reason"))
+        storage_reason = self.bot.translate(_("msg.setup.storage_channel.create_reason"))
 
         storage_overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
             self.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
@@ -385,13 +385,13 @@ class StaffGuild:
         if isinstance(category_or_forum, discord.CategoryChannel):
             log_channel, storage_channel = await asyncio.gather(
                 category_or_forum.create_text_channel(
-                    name=self.bot.translate(_("ftl-msg-setup-log-channel-name")),
-                    topic=self.bot.translate(_("ftl-msg-setup-log-channel-topic")),
+                    name=self.bot.translate(_("msg.setup.log_channel.name")),
+                    topic=self.bot.translate(_("msg.setup.log_channel.topic")),
                     reason=log_reason,
                 ),
                 category_or_forum.create_text_channel(
-                    name=self.bot.translate(_("ftl-msg-setup-storage-channel-name")),
-                    topic=self.bot.translate(_("ftl-msg-setup-storage-channel-topic")),
+                    name=self.bot.translate(_("msg.setup.storage_channel.name")),
+                    topic=self.bot.translate(_("msg.setup.storage_channel.topic")),
                     overwrites=storage_overwrites,
                     reason=storage_reason,
                 ),
@@ -405,19 +405,19 @@ class StaffGuild:
                 if thread.flags.pinned:
                     await thread.edit(
                         pinned=False,
-                        reason=self.bot.translate(_("ftl-msg-setup-forum-thread-unpin-reason")),
+                        reason=self.bot.translate(_("msg.setup.forum_thread.unpin_reason")),
                     )
                     break
 
             log_thread_msg, storage_channel = await asyncio.gather(
                 category_or_forum.create_thread(
-                    name=self.bot.translate(_("ftl-msg-setup-log-channel-name")),
-                    content=self.bot.translate(_("ftl-msg-setup-log-channel-topic")),
+                    name=self.bot.translate(_("msg.setup.log_channel.name")),
+                    content=self.bot.translate(_("msg.setup.log_channel.topic")),
                     reason=log_reason,
                 ),
                 self.guild.create_text_channel(
-                    name=self.bot.translate(_("ftl-msg-setup-storage-channel-name")),
-                    topic=self.bot.translate(_("ftl-msg-setup-storage-channel-topic")),
+                    name=self.bot.translate(_("msg.setup.storage_channel.name")),
+                    topic=self.bot.translate(_("msg.setup.storage_channel.topic")),
                     reason=storage_reason,
                     overwrites=storage_overwrites,
                 ),
@@ -489,7 +489,8 @@ class StaffGuild:
             # Grant access to the category/forum
             overwrite.read_messages = True
             overwrite.send_messages = True
-            reason = self.bot.translate(_("ftl-msg-grant-access-reason", user_or_role=user_or_role.mention))
+            # @param user_or_role: Mention string of the user or role being granted access
+            reason = self.bot.translate(_("msg.access.grant", user_or_role=user_or_role.mention))
             await self.category_or_forum.set_permissions(user_or_role, overwrite=overwrite, reason=reason)
         else:
             logger.info("Not granting access to %s, already has an overwrite in the channel", user_or_role)
@@ -525,7 +526,8 @@ class StaffGuild:
             logger.info("Not revoking access to %s for category, overwrites were not found", profile_id)
             return
 
-        reason = self.bot.translate(_("ftl-msg-revoke-access-reason", user_or_role=str(user_or_role)))
+        # @param user_or_role: String of the user or role being revoked
+        reason = self.bot.translate(_("msg.access.revoke", user_or_role=str(user_or_role)))
         await self.category_or_forum.edit(overwrites=all_overwrites, reason=reason)
 
     @staticmethod
@@ -565,9 +567,8 @@ class StaffGuild:
         if not self.is_setup():
             raise NoStaffGuildError("Staff guild is not configured")
 
-        reason = self.bot.translate(
-            _("ftl-msg-new-ticket-reason", users=", ".join(str(user) for user in recipients))
-        )
+        # @param users: Comma-separated list of recipient mentions
+        reason = self.bot.translate(_("msg.ticket.new_reason", users=", ".join(str(user) for user in recipients)))
         try:
             if isinstance(self.category_or_forum, discord.CategoryChannel):
                 channel = await self.category_or_forum.create_text_channel(
@@ -585,8 +586,9 @@ class StaffGuild:
                     ticket_summary = discord.utils.escape_markdown(ticket_summary)
                 else:
                     ticket_summary = self.bot.translate(
+                        # @param users: Comma-separated list of recipient mentions
                         _(
-                            "ftl-msg-new-ticket-default-thread-opening-message",
+                            "msg.ticket.opening_message",
                             users=" ".join(user.mention for user in recipients),
                         )
                     )
@@ -613,7 +615,7 @@ class StaffGuild:
             logger.error("Failed to create ticket channel for %s", recipients, exc_info=exc_info)
             # TODO: handle this better, tell the user if created by dm
             await self.bot.send_message(
-                self.bot.translate(_("ftl-msg-create-ticket-failed")),
+                self.bot.translate(_("msg.ticket.create_failed")),
                 channel=channel,
                 ephemeral=True,
                 fail_silently=True,

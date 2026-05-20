@@ -11,9 +11,10 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from modmail.core import Context, ParamInfo, _, bot_command, in_modmail_ticket, staff_only
+from modmail.core import Context, ParamInfo, bot_command, in_modmail_ticket, staff_only
 from modmail.enum import TicketMessageType, TicketStatus
 from modmail.errors import ModmailError
+from modmail.i18n import _
 
 if TYPE_CHECKING:
     from .. import Modmail
@@ -25,17 +26,17 @@ logger = logging.getLogger(__name__)
 
 @staff_only
 @bot_command(
-    name=_("ftl-cmd-sclose-name"),
-    description=_("ftl-cmd-sclose-description"),
-    help=_("ftl-cmd-sclose-help"),
+    name=_("cmd.sclose.name"),
+    description=_("cmd.sclose.description"),
+    help=_("cmd.sclose.help"),
     param_info={
         "attachment": ParamInfo(
-            name=_("ftl-cmd-sclose-param-attachment-name"),
-            description=_("ftl-cmd-sclose-param-attachment-description"),
+            name=_("cmd.sclose.param.attachment.name"),
+            description=_("cmd.sclose.param.attachment.description"),
         ),
         "message_text": ParamInfo(
-            name=_("ftl-cmd-sclose-param-message-name"),
-            description=_("ftl-cmd-sclose-param-message-description"),
+            name=_("cmd.sclose.param.message.name"),
+            description=_("cmd.sclose.param.message.description"),
         ),
     },
 )
@@ -64,14 +65,15 @@ async def sclose_command(
         raise RuntimeError("Command invoked in a non-text channel, which should be impossible.")
 
     if ctx.interaction is not None:
-        await ctx.reply(_("ftl-cmd-sclose-message-sending"), delete_after=2, ephemeral=True)
+        await ctx.reply(_("msg.sclose.sending"), delete_after=2, ephemeral=True)
 
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
     if ticket is None:
         raise RuntimeError("Ticket should not be None here.")
 
     if not message_text and not attachment:
-        message_text = ctx.t("ftl-cmd-sclose-default-message", closer=str(ctx.author.id))
+        # @param closer: Discord user ID of the user closing the ticket
+        message_text = ctx.t(_("msg.sclose.default_message", closer=str(ctx.author.id)))
 
     ctx.message.content = message_text
 
@@ -86,4 +88,4 @@ async def sclose_command(
 
     closed = await ticket.close(closer=ctx.author, close_status=TicketStatus.closed_by_command)
     if not closed:
-        await ctx.reply(_("ftl-cmd-sclose-failed"), ephemeral=True)
+        await ctx.reply(_("msg.sclose.failed"), ephemeral=True)

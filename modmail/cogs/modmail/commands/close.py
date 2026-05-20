@@ -12,9 +12,10 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from modmail.core import Context, ParamInfo, _, bot_command, in_modmail_ticket, staff_only
+from modmail.core import Context, ParamInfo, bot_command, in_modmail_ticket, staff_only
 from modmail.enum import TicketMessageType, TicketStatus
 from modmail.errors import ModmailError
+from modmail.i18n import _
 
 if TYPE_CHECKING:
     from .. import Modmail
@@ -26,17 +27,17 @@ logger = logging.getLogger(__name__)
 
 @staff_only
 @bot_command(
-    name=_("ftl-cmd-close-name"),
-    description=_("ftl-cmd-close-description"),
-    help=_("ftl-cmd-close-help"),
+    name=_("cmd.close.name"),
+    description=_("cmd.close.description"),
+    help=_("cmd.close.help"),
     param_info={
         "attachment": ParamInfo(
-            name=_("ftl-cmd-close-param-attachment-name"),
-            description=_("ftl-cmd-close-param-attachment-description"),
+            name=_("cmd.close.param.attachment.name"),
+            description=_("cmd.close.param.attachment.description"),
         ),
         "message_text": ParamInfo(
-            name=_("ftl-cmd-close-param-message-name"),
-            description=_("ftl-cmd-close-param-message-description"),
+            name=_("cmd.close.param.message.name"),
+            description=_("cmd.close.param.message.description"),
         ),
     },
 )
@@ -63,14 +64,15 @@ async def close_command(
         raise RuntimeError("Command invoked in a non-text channel, which should be impossible.")
 
     if ctx.interaction is not None:
-        await ctx.reply(_("ftl-cmd-close-message-sending"), delete_after=2, ephemeral=True)
+        await ctx.reply(_("msg.close.sending"), delete_after=2, ephemeral=True)
 
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
     if ticket is None:
         raise RuntimeError("Ticket should not be None here.")
 
     if not message_text and not attachment:
-        message_text = ctx.t("ftl-cmd-close-default-message", closer=str(ctx.author.id))
+        # @param closer: Discord user ID of the user closing the ticket
+        message_text = ctx.t(_("msg.close.default_message", closer=str(ctx.author.id)))
 
     ctx.message.content = message_text
 
@@ -78,7 +80,7 @@ async def close_command(
         await ticket.process_reply_message(ctx.message, TicketMessageType.close)
     except ModmailError, discord.HTTPException:
         logger.exception("Failed to send close message in %s", ctx.channel)
-        await ctx.reply(_("ftl-cmd-close-message-failed"), ephemeral=True)
+        await ctx.reply(_("msg.close.message_failed"), ephemeral=True)
 
     if ctx.interaction is not None:
         with contextlib.suppress(discord.HTTPException):
@@ -86,5 +88,5 @@ async def close_command(
 
     closed = await ticket.close(closer=ctx.author, close_status=TicketStatus.closed_by_command)
     if not closed:
-        await ctx.reply(_("ftl-cmd-close-failed"), ephemeral=True)
+        await ctx.reply(_("msg.close.failed"), ephemeral=True)
         # TODO: delete the close message that was sent, since the ticket is still open

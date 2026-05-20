@@ -19,7 +19,8 @@ from .commands import *
 from .context import *
 from .converters import *
 from .embed import *
+from .ephemeral import *
+from .locale import *
 from .permission import *
 from .staff_guild import *
-from .translator import *
 from .ui import *

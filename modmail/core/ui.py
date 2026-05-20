@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import discord
 from discord.app_commands import locale_str
 
-from .translator import _, locale_for, using_ephemeral
+from .ephemeral import using_ephemeral
+from .locale import locale_for
 
 if TYPE_CHECKING:
     from .bot import Bot
@@ -54,27 +55,24 @@ class _ViewMixin:
 
     def _t(
         self,
-        string: str | locale_str,
+        string: locale_str,
         interaction: discord.Interaction[Any] | None = None,
+        *,
+        escape: bool | None = None,
         **kwargs: Any,
     ) -> str:
         """Translate `string` using the construction-time locale, or an interaction's locale.
 
         Args:
-            string: FTL message ID or a [`locale_str`][] from [`_`][].
+            string: The [`locale_str`][] from [`_`][], [`_n`][], or [`_c`][].
             interaction: When given and registered via [`ephemeral_scope`][], uses its locale
                 instead of the construction-time locale.
-            **kwargs: FTL variables (when `string` is a bare key).
+            escape: When not `None`, overrides the construction-time escape flag.
+            **kwargs: Additional formatting kwargs merged on top of construction-time kwargs.
 
         Returns:
             Translated string.
         """
-        if isinstance(string, str):
-            if not string.startswith("ftl-"):  # ftl: ignore
-                logger.debug("View._t called with a non-locale string: %r", string)
-                return string
-            string = _(string, **kwargs)
-
         if interaction is None:
             locale = self._locale
         elif using_ephemeral(interaction):
@@ -82,7 +80,7 @@ class _ViewMixin:
         else:
             locale = locale_for(None)
 
-        return self._bot.translate(string, locale=locale)
+        return self._bot.translate(string, locale=locale, escape=escape, **kwargs)
 
     def _response_lock_for(self, interaction: discord.Interaction) -> asyncio.Lock:
         """Return the per-interaction response lock, creating it on first use."""

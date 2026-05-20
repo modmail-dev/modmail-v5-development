@@ -15,7 +15,7 @@ from discord.ext import commands
 from .. import utils
 from ..enum import ProfileType
 from ..errors import LocalizedBadArgumentError
-from .translator import _
+from ..i18n import _
 
 if TYPE_CHECKING:
     from discord import Interaction
@@ -116,10 +116,11 @@ class _ProfileResultTransformer(discord.app_commands.Transformer, commands.Conve
                 continue
 
         if entity is None:
-            raise LocalizedBadArgumentError(_("ftl-error-converter-profile-not-found", argument=argument))
+            # @param argument: The search term provided by the user
+            raise LocalizedBadArgumentError(_("error.profile.not_found", argument=argument))
 
         if utils.is_bot(entity):
-            raise LocalizedBadArgumentError(_("ftl-error-converter-profile-is-bot"))
+            raise LocalizedBadArgumentError(_("error.profile.is_bot"))
 
         profile_type = ProfileType.role if isinstance(entity, discord.Role) else ProfileType.user
         profile = ctx.bot.database_client.get_profile(entity.id, profile_type)
@@ -141,7 +142,7 @@ class _ProfileResultTransformer(discord.app_commands.Transformer, commands.Conve
             LocalizedBadArgumentError: When the target is a bot or bot-managed role.
         """
         if utils.is_bot(value):
-            raise LocalizedBadArgumentError(_("ftl-error-converter-profile-is-bot"))
+            raise LocalizedBadArgumentError(_("error.profile.is_bot"))
 
         profile_type = ProfileType.role if isinstance(value, discord.Role) else ProfileType.user
         profile = interaction.client.database_client.get_profile(value.id, profile_type)

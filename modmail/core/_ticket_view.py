@@ -21,8 +21,8 @@ from ..errors import (
     NoTicketChannelError,
     TicketNotFoundError,
 )
+from ..i18n import _, ngettext, upgettext
 from ._partial_recipient import PartialRecipient
-from .translator import _
 
 if TYPE_CHECKING:
     from .staff_guild import StaffGuild
@@ -393,15 +393,13 @@ class TicketView:
         if not self._recipients:
             logger.error("Ticket %s has no recipients, cannot build log view.", self._model.key)
             layout = discord.ui.LayoutView(timeout=None)
-            layout.add_item(discord.ui.Container(discord.ui.TextDisplay(self._bot.translate(_("ftl-error")))))
+            # @info Fallback error display when ticket data cannot be rendered
+            layout.add_item(discord.ui.Container(discord.ui.TextDisplay(self._bot.translate(_("internal.error")))))
             return layout
 
-        is_open = self._model.status.is_open()
         closer = self._model.closed_by
-        has_real_closer = (not is_open) and closer is not None and closer.user_id != CONFIG.bot.bot_id
-        status = "open" if is_open else ("closed_by" if has_real_closer else "closed")
-
         first_recipient = self._recipients[0]
+        is_open = self._model.status.is_open()
 
         params: dict[str, str] = {
             "users": "  ".join(f"<@{r.user_id}>" for r in self._model.recipients),
@@ -412,11 +410,34 @@ class TicketView:
             "closed_ts": str(int(self._model.closed_at.timestamp())) if self._model.closed_at else "0",
             "closed_by": str(closer.user_id) if closer else "",
             "channel_id": str(self._model.channel_id),
-            "status": status,
         }
-        title = self._bot.translate(_("ftl-msg-ticket-log-title", escape=True, **params)).strip()
-        body = self._bot.translate(_("ftl-msg-ticket-log-body", escape=True, **params)).strip()
-        footer = self._bot.translate(_("ftl-msg-ticket-log-footer", escape=True, **params)).strip()
+
+        if is_open:
+            # @param users: Space-separated list of recipient mentions
+            # @param key: Ticket short key (12 characters)
+            # @param log_url: URL to the ticket log message
+            # @param created_ts: Unix timestamp of ticket creation
+            # @param created_by: Discord user ID who created the ticket
+            # @param closed_ts: Unix timestamp of ticket closure
+            # @param closed_by: Discord user ID who closed the ticket
+            # @param channel_id: Discord channel ID of the ticket
+            body_loc = _("msg.ticket.log.body.open")
+            # @see msg.ticket.log.body.open
+            footer_loc = _("msg.ticket.log.footer.open")
+        elif closer is not None and closer.user_id != CONFIG.bot.bot_id:
+            # @see msg.ticket.log.body.open
+            body_loc = _("msg.ticket.log.body.closed")
+            # @see msg.ticket.log.body.open
+            footer_loc = _("msg.ticket.log.footer.closed_by")
+        else:
+            body_loc = _("msg.ticket.log.body.closed")
+            # @see msg.ticket.log.body.open
+            footer_loc = _("msg.ticket.log.footer.closed")
+
+        # @see msg.ticket.log.body.open
+        title = self._bot.translate(_("msg.ticket.log.title", escape=True, **params)).strip()
+        body = self._bot.translate(body_loc, escape=True, **params).strip()
+        footer = self._bot.translate(footer_loc, escape=True, **params).strip()
 
         items: list[discord.ui.Item[discord.ui.LayoutView]] = []
 
@@ -439,7 +460,7 @@ class TicketView:
             items.append(discord.ui.TextDisplay(footer))
 
         if not items:
-            items = [discord.ui.TextDisplay(self._bot.translate(_("ftl-error")))]
+            items = [discord.ui.TextDisplay(self._bot.translate(_("internal.error")))]
 
         layout = discord.ui.LayoutView(timeout=None)
         layout.add_item(
@@ -483,8 +504,16 @@ class TicketView:
         }
 
         section = discord.ui.Section(
-            discord.ui.TextDisplay(self._bot.translate(_("ftl-msg-ticket-info-title", escape=True, **params))),
-            discord.ui.TextDisplay(self._bot.translate(_("ftl-msg-ticket-info-body", escape=True, **params))),
+            # @param user_name: Recipient display name
+            # @param user_id: Recipient Discord user ID
+            # @param account_created_ts: Unix timestamp of recipient account creation
+            # @param log_url: URL to the ticket log message
+            # @param key: Ticket short key (12 characters)
+            # @param created_ts: Unix timestamp of ticket creation
+            # @param past_ticket_count: Number of past closed tickets for this recipient
+            discord.ui.TextDisplay(self._bot.translate(_("msg.ticket.info.title", escape=True, **params))),
+            # @see msg.ticket.info.title
+            discord.ui.TextDisplay(self._bot.translate(_("msg.ticket.info.body", escape=True, **params))),
             accessory=discord.ui.Thumbnail[discord.ui.LayoutView](media=recipient.display_avatar),
         )
 
@@ -496,8 +525,10 @@ class TicketView:
                 )
             role_mentions = [r.mention for r in member.roles if not r.is_default()]
             guild_name = self._bot.translate(
+                # @param guild_name: Name of the shared guild
+                # @param guild_id: Discord guild ID
                 _(
-                    "ftl-msg-ticket-info-guild-name",
+                    "msg.ticket.info.guild_name",
                     escape=True,
                     guild_name=member.guild.name,
                     guild_id=str(member.guild.id),
@@ -507,27 +538,48 @@ class TicketView:
                 discord.ui.TextDisplay(guild_name),
                 discord.ui.Separator[discord.ui.LayoutView](visible=False),
             ])
-            guild_details = self._bot.translate(
-                _(
-                    "ftl-msg-ticket-info-guild-entry",
-                    escape=True,
-                    joined_ts=str(int(member.joined_at.timestamp())) if member.joined_at else "0",
-                    roles=", ".join(role_mentions) if role_mentions else "none",
+            if member.joined_at:
+                guild_joined = self._bot.translate(
+                    # @param joined_ts: Unix timestamp of member join date
+                    _(
+                        "msg.ticket.info.guild_entry.joined",
+                        escape=True,
+                        joined_ts=str(int(member.joined_at.timestamp())),
+                    )
                 )
-            )
-            guild_items.append(discord.ui.TextDisplay(guild_details))
+            else:
+                guild_joined = self._bot.translate(_("msg.ticket.info.guild_entry.joined_unknown"))
+            guild_items.append(discord.ui.TextDisplay(guild_joined))
+            if role_mentions:
+                guild_roles = self._bot.translate(
+                    # @param roles: Comma-separated list of role mentions
+                    _(
+                        "msg.ticket.info.guild_entry.roles",
+                        escape=True,
+                        roles=", ".join(role_mentions),
+                    )
+                )
+            else:
+                guild_roles = self._bot.translate(_("msg.ticket.info.guild_entry.no_roles"))
+            guild_items.append(discord.ui.TextDisplay(guild_roles))
 
         if not guild_items:
-            guild_items.append(
-                discord.ui.TextDisplay(self._bot.translate(_("ftl-msg-ticket-info-no-shared-servers")))
-            )
+            guild_items.append(discord.ui.TextDisplay(self._bot.translate(_("msg.ticket.info.no_shared_servers"))))
+
+        # @see msg.ticket.info.title
+        ticket_line = self._bot.translate(_("msg.ticket.info.footer.ticket_line", escape=True, **params))
+        if past_ticket_count == 0:
+            past_line = self._bot.translate(_("msg.ticket.info.footer.no_tickets"))
+        else:
+            past_line = self._bot.translate(ngettext("msg.ticket.info.footer.past_tickets", past_ticket_count))
+        info_footer = ticket_line + "\n" + past_line
 
         return discord.ui.Container(
             section,
             discord.ui.Separator[discord.ui.LayoutView](visible=True),
             *guild_items,
             discord.ui.Separator[discord.ui.LayoutView](visible=True),
-            discord.ui.TextDisplay(self._bot.translate(_("ftl-msg-ticket-info-footer", escape=True, **params))),
+            discord.ui.TextDisplay(info_footer),
             accent_color=discord.Color.blurple(),
         )
 
@@ -569,30 +621,42 @@ class TicketView:
         match message_type:
             case TicketMessageType.dm:
                 accent_color = discord.Color.blurple()
-                title = self._bot.translate(_("ftl-msg-ticket-staff-title-dm", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-staff-footer-dm", escape=True, **params))
+                # @param author_id: Discord user ID of the message author
+                # @param author_name: Display name of the message author
+                # @param message_id: Discord message ID
+                # @param created_ts: Unix timestamp of message creation
+                # @param key: Ticket short key (12 characters)
+                # @param log_url: URL to the ticket log message
+                title = self._bot.translate(upgettext("dm", "msg.ticket.staff.title"), escape=True, **params)
+                # @see msg.ticket.staff.title
+                footer = self._bot.translate(upgettext("dm", "msg.ticket.staff.footer"), escape=True, **params)
             case TicketMessageType.reply:
                 accent_color = discord.Color.brand_green()
-                title = self._bot.translate(_("ftl-msg-ticket-staff-title-reply", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-staff-footer-reply", escape=True, **params))
+                title = self._bot.translate(upgettext("reply", "msg.ticket.staff.title"), escape=True, **params)
+                # @see msg.ticket.staff.title
+                footer = self._bot.translate(upgettext("reply", "msg.ticket.staff.footer"), escape=True, **params)
             case TicketMessageType.internal:
                 accent_color = discord.Color.yellow()
-                title = self._bot.translate(_("ftl-msg-ticket-staff-title-internal", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-staff-footer-internal", escape=True, **params))
+                title = self._bot.translate(upgettext("internal", "msg.ticket.staff.title"), escape=True, **params)
+                # @see msg.ticket.staff.title
+                footer = self._bot.translate(
+                    upgettext("internal", "msg.ticket.staff.footer"), escape=True, **params
+                )
             case TicketMessageType.close:
                 accent_color = discord.Color.red()
-                title = self._bot.translate(_("ftl-msg-ticket-staff-title-close", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-staff-footer-close", escape=True, **params))
+                title = self._bot.translate(upgettext("close", "msg.ticket.staff.title"), escape=True, **params)
+                # @see msg.ticket.staff.title
+                footer = self._bot.translate(upgettext("close", "msg.ticket.staff.footer"), escape=True, **params)
             case TicketMessageType.sclose:
                 accent_color = discord.Color.red()
-                title = self._bot.translate(_("ftl-msg-ticket-staff-title-sclose", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-staff-footer-sclose", escape=True, **params))
-            case _:  # pyright: ignore [reportUnnecessaryComparison]
+                title = self._bot.translate(upgettext("sclose", "msg.ticket.staff.title"), escape=True, **params)
+                # @see msg.ticket.staff.title
+                footer = self._bot.translate(upgettext("sclose", "msg.ticket.staff.footer"), escape=True, **params)
+            case _:
                 logger.warning("Unexpected message type %s in staff view, using fallback.", message_type)
                 accent_color = discord.Color.greyple()
-                title = self._bot.translate(_("ftl-msg-ticket-staff-title-dm", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-staff-footer-dm", escape=True, **params))
-
+                title = self._bot.translate(upgettext("dm", "msg.ticket.staff.title"), escape=True, **params)
+                footer = self._bot.translate(upgettext("dm", "msg.ticket.staff.footer"), escape=True, **params)
         display_thumbnail = message_type not in {TicketMessageType.close, TicketMessageType.sclose}
         section_children: list[discord.ui.TextDisplay[discord.ui.LayoutView]] = [discord.ui.TextDisplay(title)]
 
@@ -620,10 +684,11 @@ class TicketView:
         if unreachable:
             container_items.append(
                 discord.ui.TextDisplay(
+                    # @param recipients: Comma-separated list of unreachable recipient mentions
                     self._bot.translate(
-                        _(
-                            "ftl-msg-ticket-staff-unreachable",
-                            count=len(unreachable),
+                        ngettext(
+                            "msg.ticket.staff.unreachable",
+                            len(unreachable),
                             recipients=", ".join(r.mention for r in unreachable),
                         )
                     )
@@ -668,21 +733,25 @@ class TicketView:
         match message_type:
             case TicketMessageType.dm:
                 accent_color = discord.Color.orange()
-                title = self._bot.translate(_("ftl-msg-ticket-user-title-dm", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-user-footer-dm", escape=True, **params))
+                # @see msg.ticket.staff.title
+                title = self._bot.translate(upgettext("dm", "msg.ticket.user.title"), escape=True, **params)
+                # @see msg.ticket.staff.title
+                footer = self._bot.translate(upgettext("dm", "msg.ticket.user.footer"), escape=True, **params)
             case TicketMessageType.reply:
                 accent_color = discord.Color.brand_green()
-                title = self._bot.translate(_("ftl-msg-ticket-user-title-reply", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-user-footer-reply", escape=True, **params))
+                title = self._bot.translate(upgettext("reply", "msg.ticket.user.title"), escape=True, **params)
+                # @see msg.ticket.staff.title
+                footer = self._bot.translate(upgettext("reply", "msg.ticket.user.footer"), escape=True, **params)
             case TicketMessageType.close:
                 accent_color = discord.Color.red()
-                title = self._bot.translate(_("ftl-msg-ticket-user-title-close", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-user-footer-close", escape=True, **params))
+                title = self._bot.translate(upgettext("close", "msg.ticket.user.title"), escape=True, **params)
+                # @see msg.ticket.staff.title
+                footer = self._bot.translate(upgettext("close", "msg.ticket.user.footer"), escape=True, **params)
             case _:  # internal and sclose messages are not sent to recipients, use dm as fallback
                 accent_color = discord.Color.greyple()
-                title = self._bot.translate(_("ftl-msg-ticket-user-title-dm", escape=True, **params))
-                footer = self._bot.translate(_("ftl-msg-ticket-user-footer-dm", escape=True, **params))
-
+                title = self._bot.translate(upgettext("dm", "msg.ticket.user.title"), escape=True, **params)
+                # @see msg.ticket.staff.title
+                footer = self._bot.translate(upgettext("dm", "msg.ticket.user.footer"), escape=True, **params)
         display_thumbnail = message_type not in {TicketMessageType.close, TicketMessageType.sclose}
         section_children: list[discord.ui.TextDisplay[discord.ui.LayoutView]] = [discord.ui.TextDisplay(title)]
 
@@ -729,10 +798,15 @@ class TicketView:
         layout = discord.ui.LayoutView(timeout=None)
         layout.add_item(
             discord.ui.Container(
-                discord.ui.TextDisplay(self._bot.translate(_("ftl-msg-dm-welcome-title", escape=True, **params))),
-                discord.ui.TextDisplay(self._bot.translate(_("ftl-msg-dm-welcome-body", escape=True, **params))),
+                # @param user_id: Discord user ID of the recipient
+                # @param user_name: Display name of the recipient
+                discord.ui.TextDisplay(self._bot.translate(_("msg.dm.welcome.title", escape=True, **params))),
+                # @see msg.dm.welcome.title
+                discord.ui.TextDisplay(self._bot.translate(_("msg.dm.welcome.body", escape=True, **params))),
+                # @see msg.dm.welcome.title
                 discord.ui.Separator[discord.ui.LayoutView](visible=True),
-                discord.ui.TextDisplay(self._bot.translate(_("ftl-msg-dm-welcome-footer", escape=True, **params))),
+                # @see msg.dm.welcome.title
+                discord.ui.TextDisplay(self._bot.translate(_("msg.dm.welcome.footer", escape=True, **params))),
                 accent_color=discord.Color.brand_green(),
             )
         )
@@ -903,9 +977,10 @@ class TicketView:
             return False
 
         if self._model.closed_by is None:
-            reason = self._bot.translate(_("ftl-msg-ticket-closed-reason-unknown-closer"))
+            reason = self._bot.translate(_("msg.ticket.closed_reason_unknown"))
         else:
-            reason = self._bot.translate(_("ftl-msg-ticket-closed-reason", user=self._model.closed_by.user_name))
+            # @param user: Display name of the user who closed the ticket
+            reason = self._bot.translate(_("msg.ticket.closed_reason", user=self._model.closed_by.user_name))
 
         try:
             if isinstance(channel, discord.Thread):

@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from modmail.core import Bot, Cog, _, create_cog
+from modmail.core import Bot, Cog, create_cog
+from modmail.i18n import _
 
 from .commands import all_commands
 from .listeners import all_listeners
@@ -26,11 +27,10 @@ else:
         "Modmail",
         all_commands=all_commands,
         other_methods=all_listeners,
-        help_name=_("ftl-view-help-category-modmail-name"),
-        help_description=_("ftl-view-help-category-modmail-description"),
+        help_name=_("view.help.category.modmail.name"),
+        help_description=_("view.help.category.modmail.description"),
         help_color=discord.Color.blurple(),
     )
-
 
 __all__ = ["Modmail", "setup"]
 

@@ -12,7 +12,9 @@ from discord.app_commands import locale_str
 from discord.ext import commands
 
 from ..enum import RequiredAccessLevel, UserAccessAllowReason, UserAccessDenyReason
-from .translator import _, locale_for, using_ephemeral
+from ..i18n import _
+from .ephemeral import using_ephemeral
+from .locale import locale_for
 from .ui import BaseLayoutView
 
 if TYPE_CHECKING:
@@ -20,7 +22,6 @@ if TYPE_CHECKING:
 
     from ..enum import AccessLevel
     from .bot import Bot
-    from .translator import FluentTypes, HasLocaleStr
 
 __all__ = ["Context", "UserAccessResult"]
 
@@ -196,7 +197,7 @@ class Context(commands.Context[Any]):
 
         timed_out = await view.wait()
         if timed_out:
-            await self.reply(_("ftl-msg-prompt-timeout"), ephemeral=True)
+            await self.reply(_("msg.prompt.timeout"), ephemeral=True)
 
         return prompt_message, view.result
 
@@ -239,38 +240,33 @@ class Context(commands.Context[Any]):
 
         timed_out = await view.wait()
         if timed_out:
-            await self.reply(_("ftl-msg-prompt-timeout"), ephemeral=True)
+            await self.reply(_("msg.prompt.timeout"), ephemeral=True)
 
         return prompt_message, view.result
 
     def t(
         self,
-        string: str | locale_str,
+        string: locale_str,
         /,
-        escape: bool = True,
-        **kwargs: FluentTypes | HasLocaleStr | locale_str,
+        *,
+        escape: bool | None = None,
+        **kwargs: Any,
     ) -> str:
         """Translate `string` — user's locale inside [`ephemeral_scope`][], default locale otherwise.
 
         Args:
-            string: FTL message ID or a [`locale_str`][] from [`_`][].
-            escape: Escape Discord markdown in substituted variables.
-            **kwargs: FTL variables (when `string` is a bare key).
+            string: The [`locale_str`][] from [`_`][], [`_n`][], or [`_c`][].
+            escape: When not `None`, overrides the construction-time escape flag.
+            **kwargs: Additional formatting kwargs merged on top of construction-time kwargs.
 
         Returns:
             Translated string.
         """
-        if isinstance(string, str):
-            if not string.startswith("ftl-"):  # ftl: ignore
-                logger.debug("Context.t called with a non-locale string: %r", string)
-                return string
-            string = _(string, escape=escape, **kwargs)
-
         if using_ephemeral(self.interaction):
             locale = locale_for(self.interaction)
         else:
             locale = locale_for(None)
-        return self.bot.translate(string, locale=locale)
+        return self.bot.translate(string, locale=locale, escape=escape, **kwargs)
 
 
 class PromptView(BaseLayoutView):
@@ -312,7 +308,7 @@ class PromptView(BaseLayoutView):
             content = self._t(content)
 
         cancel_btn: discord.ui.Button[PromptView] = discord.ui.Button(
-            label=self._t("ftl-view-prompt-cancel-label"),
+            label=self._t(_("view.prompt.cancel")),
             style=discord.ButtonStyle.danger,
         )
         cancel_btn.callback = self._on_cancel
@@ -428,7 +424,7 @@ class PromptChoicesView(BaseLayoutView):
             self._buttons.append(btn)
 
         cancel: discord.ui.Button[PromptChoicesView] = discord.ui.Button(
-            label=self._t("ftl-view-prompt-cancel-label"), style=discord.ButtonStyle.danger
+            label=self._t(_("view.prompt.cancel")), style=discord.ButtonStyle.danger
         )
         cancel.callback = self._on_cancel
         action_row.add_item(cancel)

@@ -13,9 +13,19 @@ from discord.app_commands import locale_str
 from discord.ext import commands as _commands
 
 from modmail import CONFIG
-from modmail.core import BaseLayoutView, Cog, Context, ParamInfo, Str, _, bot_command
-from modmail.core.translator import ephemeral_scope, locale_for, using_ephemeral
+from modmail.core import (
+    BaseLayoutView,
+    Cog,
+    Context,
+    ParamInfo,
+    Str,
+    bot_command,
+    ephemeral_scope,
+    locale_for,
+    using_ephemeral,
+)
 from modmail.enum import RequiredAccessLevel
+from modmail.i18n import _, ngettext
 
 if TYPE_CHECKING:
     from .. import Utility
@@ -181,7 +191,7 @@ def _build_cat_info(ctx: Context, cog_key: str, commands: list[_CommandEntry]) -
     if cog_key == _OTHER_COG_KEY:
         return _CategoryInfo(
             category_key=cog_key,
-            display_name=ctx.t("ftl-view-help-category-other-name"),
+            display_name=ctx.t(_("view.help.category.other.name")),
             description="",
             color=discord.Color.greyple(),
             commands=commands,
@@ -190,8 +200,8 @@ def _build_cat_info(ctx: Context, cog_key: str, commands: list[_CommandEntry]) -
     if CONFIG.bot.enable_jishaku and cog_key == _JISHAKU_COG_NAME:
         return _CategoryInfo(
             category_key=cog_key,
-            display_name=ctx.t("ftl-view-help-category-jishaku-name"),
-            description=ctx.t("ftl-view-help-category-jishaku-description"),
+            display_name=ctx.t(_("view.help.category.jishaku.name")),
+            description=ctx.t(_("view.help.category.jishaku.description")),
             color=_JISHAKU_COLOR,
             commands=commands,
         )
@@ -379,7 +389,7 @@ class HelpView(BaseLayoutView):
         if command.fallback_name:
             annotation = f" *({command.fallback_name})*"
         elif command.is_prefix_only:
-            annotation = f" *({self._t('ftl-view-help-prefix-only')})*"
+            annotation = f" *({self._t(_('view.help.prefix_only'))})*"
         else:
             annotation = ""
 
@@ -395,7 +405,7 @@ class HelpView(BaseLayoutView):
 
         # Back always comes first (primary style to distinguish from nav buttons)
         back_btn: discord.ui.Button[HelpView] = discord.ui.Button(
-            label=self._t("ftl-view-help-btn-back"),
+            label=self._t(_("view.help.btn.back")),
             style=discord.ButtonStyle.primary,
         )
 
@@ -409,7 +419,7 @@ class HelpView(BaseLayoutView):
 
         if total_pages > 1:
             prev_btn: discord.ui.Button[HelpView] = discord.ui.Button(
-                label=self._t("ftl-view-help-btn-prev"),
+                label=self._t(_("view.help.btn.prev")),
                 style=discord.ButtonStyle.secondary,
                 disabled=page == 0,
             )
@@ -423,7 +433,7 @@ class HelpView(BaseLayoutView):
             nav_row.add_item(prev_btn)
 
             next_btn: discord.ui.Button[HelpView] = discord.ui.Button(
-                label=self._t("ftl-view-help-btn-next"),
+                label=self._t(_("view.help.btn.next")),
                 style=discord.ButtonStyle.secondary,
                 disabled=page >= total_pages - 1,
             )
@@ -445,16 +455,18 @@ class HelpView(BaseLayoutView):
 
         if not self._categories:
             no_access_items: list[discord.ui.Item[HelpView]] = [
-                discord.ui.TextDisplay(self._t("ftl-view-help-title")),
+                discord.ui.TextDisplay(self._t(_("view.help.title"))),
                 discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                discord.ui.TextDisplay(self._t("ftl-view-help-no-access")),
+                discord.ui.TextDisplay(self._t(_("view.help.no_access"))),
             ]
             self.add_item(discord.ui.Container(*no_access_items, accent_color=discord.Color.blurple()))
             return
 
         total_cmds = sum(len(c.commands) for c in self._categories.values())
         total_cats = len(self._categories)
-        stats = self._t("ftl-view-help-overview-stats", categories=total_cats, commands=total_cmds)
+        cat_word = self._t(ngettext("view.help.stats.category", total_cats))
+        cmd_word = self._t(ngettext("view.help.stats.command", total_cmds))
+        stats = self._t(_("view.help.stats.template", categories_word=cat_word, commands_word=cmd_word))
 
         cat_lines = "\n".join(
             f"**{info.display_name}** — {info.description}" if info.description else f"**{info.display_name}**"
@@ -472,7 +484,7 @@ class HelpView(BaseLayoutView):
         ]
 
         cat_select: discord.ui.Select[HelpView] = discord.ui.Select(
-            placeholder=self._t("ftl-view-help-select-category-placeholder"),
+            placeholder=self._t(_("view.help.category.placeholder")),
             options=options,
         )
 
@@ -488,13 +500,13 @@ class HelpView(BaseLayoutView):
 
         self.add_item(
             discord.ui.Container(
-                discord.ui.TextDisplay(self._t("ftl-view-help-title")),
+                discord.ui.TextDisplay(self._t(_("view.help.title"))),
                 discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
                 discord.ui.TextDisplay(stats),
                 discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small),
                 discord.ui.TextDisplay(cat_lines),
                 discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                discord.ui.TextDisplay(self._t("ftl-view-help-subtitle")),
+                discord.ui.TextDisplay(self._t(_("view.help.subtitle"))),
                 discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small),
                 action_row,
                 accent_color=discord.Color.blurple(),
@@ -530,11 +542,13 @@ class HelpView(BaseLayoutView):
 
         header = f"### {cat_info.display_name}"
         if total_pages > 1:
-            indicator = self._t("ftl-view-help-page-indicator", page=page + 1, total=total_pages)
+            # @param page: Current page number (1-indexed)
+            # @param total: Total number of pages
+            indicator = self._t(_("view.help.page_indicator", page=page + 1, total=total_pages))
             header = f"{header}  ·  *{indicator}*"
 
         cmd_select: discord.ui.Select[HelpView] = discord.ui.Select(
-            placeholder=self._t("ftl-view-help-select-command-placeholder"),
+            placeholder=self._t(_("view.help.command.placeholder")),
             options=[self._make_cmd_select_option(e) for e in page_commands],
         )
 
@@ -568,8 +582,9 @@ class HelpView(BaseLayoutView):
         )
 
     def _show_category_empty(self, *, cog_key: str, cat_info: _CategoryInfo) -> None:
-        empty_title = self._t("ftl-view-help-category-empty-title", category=cat_info.display_name)
-        empty_body = self._t("ftl-view-help-category-empty-body")
+        # @param category: Category display name
+        empty_title = self._t(_("view.help.category.empty_title", category=cat_info.display_name))
+        empty_body = self._t(_("view.help.category.empty_body"))
         nav_row = self._build_nav_row(cog_key, 0, 1)
 
         self.add_item(
@@ -614,11 +629,15 @@ class HelpView(BaseLayoutView):
         if command.help_text:
             detail_parts.extend(["", command.help_text])
 
-        detail_parts.extend(["", self._t("ftl-view-help-detail-access", level=command.access_level)])
+        detail_parts.extend([
+            "",
+            # @param level: Localized access level name
+            self._t(_("view.help.detail.access", level=command.access_level.__locale_str__())),
+        ])
 
         if command.params:
-            detail_parts.extend(["", self._t("ftl-view-help-detail-param-header")])
-            optional_label = self._t("ftl-view-help-detail-param-optional-label")
+            detail_parts.extend(["", self._t(_("view.help.detail.param_header"))])
+            optional_label = self._t(_("view.help.detail.param_optional"))
             for param in command.params:
                 line = f"- `{param.name}`"
                 if param.description:
@@ -628,7 +647,7 @@ class HelpView(BaseLayoutView):
                 detail_parts.append(line)
 
         if command.is_prefix_only:
-            detail_parts.extend(["", f"-# {self._t('ftl-view-help-detail-prefix-note')}"])
+            detail_parts.extend(["", f"-# {self._t(_('view.help.detail.prefix_note'))}"])
 
         back_btn: discord.ui.Button[HelpView] = discord.ui.Button(
             label=f"← {back_label}",
@@ -663,12 +682,12 @@ class HelpView(BaseLayoutView):
 
 
 @bot_command(
-    name=_("ftl-cmd-help-name"),
-    description=_("ftl-cmd-help-description"),
+    name=_("cmd.help.name"),
+    description=_("cmd.help.description"),
     param_info={
         "command": ParamInfo(
-            name=_("ftl-cmd-help-param-command-name"),
-            description=_("ftl-cmd-help-param-command-description"),
+            name=_("cmd.help.param.command.name"),
+            description=_("cmd.help.param.command.description"),
         )
     },
 )
@@ -682,10 +701,11 @@ async def help_command(cog: Utility, ctx: Context, *, command: Str | None = None
     """
     with ephemeral_scope(ctx.interaction):
         categories = await _build_categories(ctx)
+        user_locale = locale_for(ctx.interaction)
 
         if command is not None:
             # Check if the command matches any canonical command keys in the permission index
-            canonical = cog.bot.permission_command_index(locale_for(ctx.interaction)).resolve(command)
+            canonical = cog.bot.permission_command_index(user_locale).resolve(command)
             if canonical:
                 for cat_info in categories.values():
                     found = next((e for e in cat_info.commands if e.canonical_key == canonical), None)
@@ -697,22 +717,12 @@ async def help_command(cog: Utility, ctx: Context, *, command: Str | None = None
 
             # Check if the command matches a cog name
             normalized = command.casefold().replace("_", " ")
-            locales: list[str] = []
-            if ctx.interaction is not None:
-                locales.append(str(ctx.interaction.locale))
-            if CONFIG.default_locale not in locales:
-                locales.append(CONFIG.default_locale)
-
-            for match_locale in locales:
+            for match_locale in {user_locale, CONFIG.default_locale}:
                 for cat_info in categories.values():
                     if cat_info.category_key == _OTHER_COG_KEY:
-                        display_name = cog.bot.translate(
-                            _("ftl-view-help-category-other-name"), locale=match_locale
-                        )
+                        display_name = cog.bot.translate(_("view.help.category.other.name"), locale=match_locale)
                     elif CONFIG.bot.enable_jishaku and cat_info.category_key == _JISHAKU_COG_NAME:
-                        display_name = cog.bot.translate(
-                            _("ftl-view-help-category-jishaku-name"), locale=match_locale
-                        )
+                        display_name = cog.bot.translate(_("view.help.category.jishaku.name"), locale=match_locale)
                     else:
                         category_cog = cog.bot.cogs.get(cat_info.category_key)
                         if category_cog is None:
@@ -732,7 +742,8 @@ async def help_command(cog: Utility, ctx: Context, *, command: Str | None = None
                         view.message = msg
                         return
 
-            await ctx.reply(_("ftl-view-help-not-found", command=command))
+            # @param command: The user-typed command name
+            await ctx.reply(_("view.help.not_found", command=command))
             return
 
         view = HelpView(ctx, categories)

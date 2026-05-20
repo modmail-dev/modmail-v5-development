@@ -76,18 +76,17 @@ class AccessLevel(enum.IntEnum):
         Returns:
             locale_str: the localized name.
         """
-        # noinspection PyProtectedMember
-        from .core import _
+        from modmail.i18n import _
 
         match self:
             case AccessLevel.everyone:
-                return _("ftl-access-level-everyone")
+                return _("label.level.everyone")
             case AccessLevel.staff:
-                return _("ftl-access-level-staff")
+                return _("label.level.staff")
             case AccessLevel.manager:
-                return _("ftl-access-level-manager")
+                return _("label.level.manager")
             case AccessLevel.admin:
-                return _("ftl-access-level-admin")
+                return _("label.level.admin")
 
 
 class RequiredAccessLevel(enum.IntEnum):
@@ -116,20 +115,19 @@ class RequiredAccessLevel(enum.IntEnum):
         Returns:
             locale_str: the localized name.
         """
-        # noinspection PyProtectedMember
-        from .core import _
+        from modmail.i18n import _
 
         match self:
             case RequiredAccessLevel.everyone:
-                return _("ftl-access-level-everyone")
+                return _("label.level.everyone")
             case RequiredAccessLevel.staff:
-                return _("ftl-access-level-staff")
+                return _("label.level.staff")
             case RequiredAccessLevel.manager:
-                return _("ftl-access-level-manager")
+                return _("label.level.manager")
             case RequiredAccessLevel.admin:
-                return _("ftl-access-level-admin")
+                return _("label.level.admin")
             case RequiredAccessLevel.owner:
-                return _("ftl-access-level-owner")
+                return _("label.level.owner")
 
 
 class ProfileType(enum.Enum):
@@ -236,22 +234,22 @@ class ActivityType(enum.Enum):
         Returns:
             locale_str: the localized prefix (e.g. "Playing", "Listening to").
         """
-        # noinspection PyProtectedMember
-        from .core import _
+        from modmail.i18n import _
 
         match self:
             case ActivityType.playing:
-                return _("ftl-model-activity-playing-name")
+                return _("label.activity.playing")
             case ActivityType.streaming:
-                return _("ftl-model-activity-streaming-name")
+                return _("label.activity.streaming")
             case ActivityType.listening:
-                return _("ftl-model-activity-listening-name")
+                return _("label.activity.listening")
             case ActivityType.watching:
-                return _("ftl-model-activity-watching-name")
+                return _("label.activity.watching")
             case ActivityType.competing:
-                return _("ftl-model-activity-competing-name")
+                return _("label.activity.competing")
             case ActivityType.custom:
-                return _("ftl-blank")
+                # @info Used as the label for custom status activities (intentionally blank)
+                return _("internal.blank")
 
 
 class StatusType(enum.Enum):
@@ -291,7 +289,14 @@ class StatusType(enum.Enum):
         Returns:
             locale_str: the localized status name.
         """
-        # noinspection PyProtectedMember
-        from .core import _
+        from modmail.i18n import _
 
-        return _("ftl-model-status-text", status=self.name)
+        match self:
+            case StatusType.online:
+                return _("label.status.text.online")
+            case StatusType.idle:
+                return _("label.status.text.idle")
+            case StatusType.dnd:
+                return _("label.status.text.dnd")
+            case StatusType.offline:
+                return _("label.status.text.offline")

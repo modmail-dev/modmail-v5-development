@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from modmail.core import Context, ParamInfo, _, bot_command, in_modmail_ticket, staff_only
+from modmail.core import Context, ParamInfo, bot_command, in_modmail_ticket, staff_only
+from modmail.i18n import _
 
 if TYPE_CHECKING:
     from .. import Modmail
@@ -23,17 +24,17 @@ logger = logging.getLogger(__name__)
 
 @staff_only
 @bot_command(
-    name=_("ftl-cmd-reply-name"),
-    description=_("ftl-cmd-reply-description"),
-    help=_("ftl-cmd-reply-help"),
+    name=_("cmd.reply.name"),
+    description=_("cmd.reply.description"),
+    help=_("cmd.reply.help"),
     param_info={
         "attachment": ParamInfo(
-            name=_("ftl-cmd-reply-param-attachment-name"),
-            description=_("ftl-cmd-reply-param-attachment-description"),
+            name=_("cmd.reply.param.attachment.name"),
+            description=_("cmd.reply.param.attachment.description"),
         ),
         "message_text": ParamInfo(
-            name=_("ftl-cmd-reply-param-message-name"),
-            description=_("ftl-cmd-reply-param-message-description"),
+            name=_("cmd.reply.param.message.name"),
+            description=_("cmd.reply.param.message.description"),
         ),
     },
 )
@@ -63,11 +64,11 @@ async def reply_command(
 
     # TODO: Support sending stickers
     if not message_text and not attachment:
-        await ctx.reply(_("ftl-cmd-reply-message-empty"), ephemeral=True)
+        await ctx.reply(_("msg.reply.message_empty"), ephemeral=True)
         return
 
     if ctx.interaction is not None:
-        await ctx.reply(_("ftl-cmd-reply-message-sending"), delete_after=2, ephemeral=True)
+        await ctx.reply(_("msg.reply.sending"), delete_after=2, ephemeral=True)
 
     ticket = await cog.bot.staff_guild.get_ticket(ctx.channel)
     if ticket is None:
@@ -79,7 +80,7 @@ async def reply_command(
         await ticket.process_reply_message(ctx.message)
     except Exception:
         logger.exception("Failed to send reply in %s", ctx.channel)
-        await ctx.reply(_("ftl-cmd-reply-message-failed"), ephemeral=True)
+        await ctx.reply(_("msg.reply.message_failed"), ephemeral=True)
         return
     finally:
         if ctx.interaction is not None:

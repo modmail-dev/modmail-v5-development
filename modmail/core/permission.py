@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, cast
 
+from babel.core import negotiate_locale
 from discord.app_commands import locale_str
 from discord.ext import commands
 
 from .. import CONFIG
 from ..enum import RequiredAccessLevel
 from .commands import CommandBuilder
-from .translator import supported_locales
 
 if TYPE_CHECKING:
     from .bot import Bot
@@ -26,13 +26,6 @@ __all__ = [
     "owner_only",
     "staff_only",
 ]
-
-
-def _locale_candidates(locale: str) -> list[str]:
-    """Return locale lookup candidates: full tag, language-only, then `CONFIG.default_locale`."""
-    if locale == CONFIG.default_locale:
-        return [CONFIG.default_locale]
-    return list(dict.fromkeys([locale, locale.partition("-")[0], CONFIG.default_locale]))
 
 
 def _set_access_level[T: AnyCo](func: T, access_level: RequiredAccessLevel) -> T:
@@ -121,7 +114,7 @@ class PermissionCommandView:
         return PermissionCommandIndex.sanitize(name)
 
     def label(self, canonical_key: str) -> str:
-        """Return the display name for `canonical_key` in `locale`.
+        """Return the display name for `canonical_key` in the bound locale.
 
         Args:
             canonical_key: Canonical command key.
@@ -193,7 +186,7 @@ class PermissionCommandIndex:
         """Return a locale-bound [`PermissionCommandView`][] for this index.
 
         Args:
-            locale: BCP-47 locale code of the user.
+            locale: Target BCP 47 locale string.
 
         Returns:
             A view whose `label` and `resolve` methods operate in `locale`.
@@ -230,10 +223,9 @@ class PermissionCommandIndex:
         for cmd in bot.walk_commands():
             canonical = bot.get_canonical_command_name(cmd)
             locale_map: dict[str, str] = {}
-            for loc in supported_locales():
+            for loc in CONFIG.allowed_locales:
                 localized = _qualified_name(cmd, loc)
                 locale_map[loc] = localized
-                # setdefault so the first registered command wins on name collisions
                 input_map.setdefault((loc, localized.casefold()), canonical)
             display[canonical] = locale_map
 
@@ -244,7 +236,7 @@ class PermissionCommandIndex:
 
         Args:
             canonical_key: Canonical command key.
-            locale: BCP-47 locale code of the user. Falls back to `CONFIG.default_locale`
+            locale: Target BCP 47 locale string. Falls back to `CONFIG.default_locale`
                 if no translation is found.
 
         Returns:
@@ -256,9 +248,10 @@ class PermissionCommandIndex:
         locale_map = self._display.get(base)
         if locale_map is None:
             return canonical_key
-        for loc in _locale_candidates(locale):
-            if name := locale_map.get(loc):
-                return name + suffix
+        matched = negotiate_locale([locale.replace("_", "-")], list(CONFIG.allowed_locales), sep="-")
+        lookup = matched if matched is not None else CONFIG.default_locale
+        if name := locale_map.get(lookup):
+            return name + suffix
         return canonical_key
 
     def resolve(self, raw: str, locale: str, *, allow_raw_key: bool = False) -> str | None:
@@ -266,8 +259,8 @@ class PermissionCommandIndex:
 
         Args:
             raw: Raw user input (sanitized internally).
-            locale: BCP-47 locale code of the submitting user. Falls back to
-                `CONFIG.default_locale` if no match is found.
+            locale: Target BCP 47 locale string. Falls back to `CONFIG.default_locale`
+                if no match is found.
             allow_raw_key: When `True`, also accept a bare canonical key as input,
                 useful for deleting orphaned overrides.
 
@@ -278,10 +271,11 @@ class PermissionCommandIndex:
         suffix = "+" if raw.endswith("+") else ""
         base = raw.removesuffix("+")
 
+        matched = negotiate_locale([locale.replace("_", "-")], list(CONFIG.allowed_locales), sep="-")
+        lookup = matched if matched is not None else CONFIG.default_locale
         key = base.casefold()
-        for loc in _locale_candidates(locale):
-            if result := self._input_map.get((loc, key)):
-                return result + suffix
+        if result := self._input_map.get((lookup, key)):
+            return result + suffix
         if allow_raw_key and base in self.keys:
             return base + suffix
         return None
