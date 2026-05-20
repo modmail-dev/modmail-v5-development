@@ -501,7 +501,39 @@ class _CatalogEngine:
         with self.po_path.open("wb") as f:
             pofile.write_po(f, catalog, sort_output=True, include_previous=True)
         self._normalize_locations()
+        if self.locale == "en-US":
+            self._inject_crowdin_header()
         return self.po_path
+
+    def _inject_crowdin_header(self) -> None:
+        """Inject `X-Crowdin-SourceKey: msgstr` into the en-US PO header."""
+        if "X-Crowdin-SourceKey" in (content := self.po_path.read_text(encoding="utf-8")):
+            return
+
+        # babel does not provide a way to inject custom header fields, so we have to do it manually.
+        # We look for the header section, then inject the custom header below the marker
+        # Other code here is used to ensure the marker is within the header section
+        if (header_begin := content.find('\nmsgid ""\nmsgstr ""\n')) == -1:
+            logger.warning(
+                "[%s] Could not inject X-Crowdin-SourceKey — header stanza not found.",
+                self.locale,
+            )
+            return
+        header_body = header_begin + len('\nmsgid ""\nmsgstr ""\n')
+        if (next_msgid := content.find('\nmsgid "', header_body)) == -1:
+            next_msgid = len(content)
+
+        if (marker := '"Content-Transfer-Encoding: 8bit\\n"\n') not in content[header_body:next_msgid]:
+            logger.warning(
+                "[%s] Could not inject X-Crowdin-SourceKey — header marker not found.",
+                self.locale,
+            )
+            return
+
+        injection = '"X-Crowdin-SourceKey: msgstr\\n"\n'
+        start = content.index(marker, header_body, next_msgid)
+        content = content[:start] + marker + injection + content[start + len(marker) :]
+        self.po_path.write_text(content, encoding="utf-8")
 
     def _normalize_locations(self) -> None:
         """Combine consecutive `#:` lines into one per entry."""
