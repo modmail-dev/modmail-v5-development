@@ -10,7 +10,7 @@ from modmail.errors import DatabaseConnectionError
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-    from modmail.config.models import Config, SQLDatabaseConfig
+    from modmail.config.models import Config, DatabaseConfig
 
 __all__ = ["SQLBackendBase"]
 
@@ -29,8 +29,13 @@ class SQLBackendBase:
     _async_sessionmaker: async_sessionmaker[AsyncSession] | None
 
     # Inherited from DBBackend via SQLBackend's MRO
-    _config: Config
-    _instance_id: str
+    if TYPE_CHECKING:
+        _config: Config
+        _instance_id: str
+
+        @property
+        def _db_config(self) -> DatabaseConfig:
+            return NotImplemented
 
     @property
     def engine(self) -> AsyncEngine:
@@ -57,14 +62,3 @@ class SQLBackendBase:
         if self._async_sessionmaker is None:
             raise DatabaseConnectionError("SQL session factory accessed before connect() was called.")
         return self._async_sessionmaker
-
-    @property
-    def _sql_config(self) -> SQLDatabaseConfig:
-        """The [SQLDatabaseConfig][]{ data-preview } for this `bot_id`.
-
-        Raises:
-            AttributeError: If the SQL config was not provided.
-        """
-        if self._config.sql_config is None:
-            raise AttributeError("_sql_config accessed but not provided in config.")
-        return self._config.sql_config

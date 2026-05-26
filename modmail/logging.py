@@ -1,12 +1,8 @@
-"""Configuration for the bot's logging system.
-
-This module sets up the logging infrastructure for both the Modmail bot and
-discord.py internals. It configures log handlers, formatters, log rotation,
-and establishes appropriate log levels based on the application configuration.
-"""
+"""Configuration for the bot's logging system."""
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from logging.handlers import RotatingFileHandler
 from typing import TYPE_CHECKING
@@ -17,124 +13,219 @@ from rich.text import Text
 if TYPE_CHECKING:
     from types import ModuleType
 
-try:
-    from . import CONFIG
-except ImportError as e:  # pragma: no cover
-    raise RuntimeError("Did you forget to first run modmail.init()?") from e
+    from .config.models import LoggingConfig
 
 __all__ = ["setup_logging"]
 
-_LOGGING_IS_SETUP = False
+_LOGFILE_DEFAULT_LEVEL = logging.WARNING
+_LOGFILE_LEVELS: dict[str, int] = {
+    "modmail": logging.DEBUG,
+    "discord": logging.INFO,
+    "discord.state": logging.DEBUG,
+    "discord.http": logging.INFO,
+    "discord.gateway": logging.INFO,
+    "sqlalchemy.engine": logging.INFO,
+    "pymongo": logging.INFO,
+}
+_LOGFILE_MIN_LEVEL = min(
+    [*_LOGFILE_LEVELS.values(), _LOGFILE_DEFAULT_LEVEL],
+    key=lambda x: _LOGFILE_DEFAULT_LEVEL if x == logging.NOTSET else x,
+)
 
 
 class FileFormatter(logging.Formatter):
-    """Custom formatter for log files.
+    """Formats log records for file output, stripping rich markup."""
 
-    Removes rich markup syntax from log messages when writing to files.
-    """
+    default_time_format = "%Y-%m-%dT%H:%M:%S"
+    default_msec_format = "%s.%03d"
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format a log record by removing rich markup if present.
+        """Format a log record, stripping Rich markup if present.
 
         Args:
             record: The log record to format.
 
         Returns:
-            The formatted log string with markup removed if applicable.
+            The formatted log string.
         """
-        formatted_str = super().format(record)
+        formatted = super().format(record)
         if record.__dict__.get("markup", False):
-            # Remove the "[some markup] text [/some markup]" markup for rich.
-            formatted_str = Text.from_markup(formatted_str).plain
-        return formatted_str
+            formatted = Text.from_markup(formatted).plain
+        return formatted
 
 
-def setup_logging() -> None:
-    """Set up logging for the bot and discord.py library.
+class PerLoggerFilter(logging.Filter):
+    """Pass or reject a log record based on per-logger minimum levels.
 
-    Configures both console and file logging with appropriate formatters and handlers.
-    Log levels, rotation settings, and formatting are based on the application config.
-    Console output uses rich formatting with traceback support, while file output
-    uses a plain text format with configurable rotation.
+    Each logger name in *logger_levels* maps to a minimum level.
+    The most specific matching name determines the threshold for the
+    record.  Loggers that don't match any entry use *default_level*.
+    Entries set to `NOTSET` inherit *default_level* rather than applying
+    their own threshold.
     """
-    global _LOGGING_IS_SETUP  # noqa: PLW0603
 
-    if _LOGGING_IS_SETUP:  # Don't set up logging again if it's already done.
+    def __init__(self, logger_levels: dict[str, int], default_level: int = logging.NOTSET) -> None:
+        """Initialize the per-logger filter.
+
+        Args:
+            logger_levels: Mapping of logger names to minimum levels.
+            default_level: Fallback level for unlisted loggers.
+        """
+        super().__init__()
+        self._default_level = default_level
+        self._logger_levels = sorted(logger_levels.items(), key=lambda x: -len(x[0]))
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Determine if a log record passes the per-logger threshold.
+
+        Args:
+            record: The log record to check.
+
+        Returns:
+            True if the record's level meets the threshold, False otherwise.
+        """
+        for name, level in self._logger_levels:
+            if record.name == name or record.name.startswith(name + "."):
+                if level == logging.NOTSET:  # not set will inherit root level
+                    break
+                return record.levelno >= level
+        return record.levelno >= self._default_level
+
+
+def _load_suppress_targets() -> list[ModuleType]:
+    """Import optional modules for Rich traceback suppression.
+
+    Returns:
+        Module objects to suppress in Rich tracebacks.
+    """
+    targets: list[ModuleType] = []
+    for mod_name in (
+        "discord",
+        "sqlalchemy",
+        "pymongo",
+        "uvloop",
+        "aiohttp",
+        "beanie",
+        "alembic",
+        "asyncio",
+    ):
+        with contextlib.suppress(ImportError):
+            targets.append(__import__(mod_name))
+    return targets
+
+
+def setup_logging(logging_config: LoggingConfig) -> None:
+    """Configure logging from *logging_config*.
+
+    In **managed** mode removes all existing handlers from every
+    managed logger, resets their levels to `NOTSET`, then attaches a
+    console (`RichHandler`) and optional file (`RotatingFileHandler`)
+    handler to the root logger.  Per-logger minimum levels are enforced
+    by a `PerLoggerFilter` on each handler:
+
+    * Console handler uses the user-configurable `*_level` fields
+      (`discord_level`, `sqlalchemy_level`, etc.).
+    * File handler uses a fixed scheme defined in `_LOGFILE_LEVELS`
+      (modmail=DEBUG, discord.state=DEBUG, others=INFO,
+      unconfigured=WARNING).
+
+    In **unmanaged** mode only the file handler is attached (with the
+    same fixed scheme).  No logger levels are touched, and the caller
+    is responsible for console output.
+
+    Args:
+        logging_config: The logging sub-config to apply.
+    """
+    root = logging.getLogger()
+
+    # Remove old logfile handler if exists
+    for h in list(root.handlers):
+        if isinstance(h, RotatingFileHandler):
+            root.removeHandler(h)
+            h.close()
+
+    def attach_logfile_handler() -> None:
+        """Attach a rotating file handler to the root logger."""
+        if logging_config.logfile is not None:
+            file_handler = RotatingFileHandler(
+                logging_config.logfile,
+                mode="a",
+                maxBytes=logging_config.logfile_max_size,
+                backupCount=logging_config.logfile_backup_count,
+                encoding="utf-8",
+            )
+            file_handler.setFormatter(FileFormatter(logging_config.logfile_format))
+            file_handler.setLevel(_LOGFILE_MIN_LEVEL)
+            file_handler.addFilter(PerLoggerFilter(_LOGFILE_LEVELS, _LOGFILE_DEFAULT_LEVEL))
+            root.addHandler(file_handler)
+
+    if not logging_config.managed:
+        attach_logfile_handler()
         return
-    _LOGGING_IS_SETUP = True  # pyright: ignore [reportConstantRedefinition]
 
-    # Configure root logging level.
-    project_root_logger = logging.getLogger("modmail")
-    project_root_logger.setLevel(CONFIG.logging.root_level)
+    managed_loggers: dict[str, int] = {
+        "": logging_config.root_level,
+        "modmail": logging_config.modmail_level,
+        "discord": logging_config.discord_level,
+        "discord.state": logging_config.discord_state_level,
+        "discord.http": logging_config.discord_http_level,
+        "discord.gateway": logging_config.discord_gateway_level,
+        "sqlalchemy": logging_config.sqlalchemy_level,
+        "sqlalchemy.engine": logging_config.sqlalchemy_engine_level,
+        "pymongo": logging_config.pymongo_level,
+        "pymongo.topology": logging_config.pymongo_topology_level,
+    }
 
-    # Configure RichHandler for console logging with rich formatting.
-    formatter = logging.Formatter(CONFIG.logging.stdout_format)
+    user_levels: dict[str, int] = {}
+    for name, level in managed_loggers.items():
+        lg = logging.getLogger(name)
+        for h in list(lg.handlers):
+            lg.removeHandler(h)
+            h.close()
 
-    # Suppress tracebacks from certain modules for cleaner output.
-    import discord
+        # Determine the minimum level for this logger based on console and file outputs
+        min_level = logging_config.root_level if level == logging.NOTSET else level
 
-    tracebacks_suppress: list[ModuleType] = [discord]
+        if logging_config.logfile is not None:
+            for n, lv in sorted(_LOGFILE_LEVELS.items(), key=lambda x: -len(x[0])):
+                if name == n or name.startswith(n + "."):
+                    if lv == logging.NOTSET:
+                        min_level = min(min_level, _LOGFILE_DEFAULT_LEVEL)
+                    else:
+                        min_level = min(min_level, lv)
+                    break
+        lg.setLevel(min_level)
+        if name:
+            user_levels[name] = level
 
-    try:
-        import sqlalchemy
+    # Configure loggers in _LOGFILE_LEVELS not in managed_loggers
+    if logging_config.logfile is not None:
+        configured = {name for name in managed_loggers if name}
+        for n, lv in _LOGFILE_LEVELS.items():
+            if n in configured:
+                continue
+            lg = logging.getLogger(n)
+            for h in list(lg.handlers):
+                lg.removeHandler(h)
+                h.close()
+            file_effective = _LOGFILE_DEFAULT_LEVEL if lv == logging.NOTSET else lv
+            lg.setLevel(min(logging_config.root_level, file_effective))
 
-        tracebacks_suppress.append(sqlalchemy)
-    except ImportError:
-        pass
-
-    try:
-        import pymongo
-
-        tracebacks_suppress.append(pymongo)
-    except ImportError:
-        pass
-
-    try:
-        import uvloop
-
-        tracebacks_suppress.append(uvloop)
-    except ImportError:
-        pass
-
-    handler = RichHandler(
+    fmt = logging.Formatter(logging_config.stdout_format)
+    console = RichHandler(
         show_level=True,
         rich_tracebacks=True,
         tracebacks_show_locals=True,
         log_time_format=lambda dt: Text(dt.strftime("%X,%f")[:-3]),
-        tracebacks_suppress=tracebacks_suppress,
+        tracebacks_suppress=_load_suppress_targets(),
     )
-    handler.setFormatter(formatter)
-    handler.setLevel(CONFIG.logging.console_level)
-    project_root_logger.addHandler(handler)
-
-    # Configure Discord logging
-    logger_dc1 = logging.getLogger("discord")
-    logger_dc1.setLevel(CONFIG.logging.discord_level)
-    logger_dc1.addHandler(handler)
-
-    logger_dc2 = logging.getLogger("discord.state")
-    logger_dc2.setLevel(CONFIG.logging.discord_state_level)
-    logger_dc2.addHandler(handler)
-
-    logger_dc3 = logging.getLogger("discord.http")
-    logger_dc3.setLevel(CONFIG.logging.discord_http_level)
-    logger_dc3.addHandler(handler)
-
-    logger_dc4 = logging.getLogger("discord.gateway")
-    logger_dc4.setLevel(CONFIG.logging.discord_gateway_level)
-    logger_dc4.addHandler(handler)
-
-    # Configure RotatingFileHandler for file logging with rotation.
-    if CONFIG.logging.logfile is not None:
-        logfile_handler = RotatingFileHandler(
-            CONFIG.logging.logfile,
-            mode="a",
-            maxBytes=CONFIG.logging.logfile_max_size,
-            backupCount=CONFIG.logging.logfile_backup_count,
-        )
-        logfile_handler.setFormatter(FileFormatter(CONFIG.logging.logfile_format))
-        logfile_handler.setLevel(CONFIG.logging.logfile_level)
-        project_root_logger.addHandler(logfile_handler)
-        logger_dc1.addHandler(logfile_handler)
-
-    # TODO: Configure sql + mongodb logging.
+    # TODO: enable markup by default for modmail logs
+    console.setFormatter(fmt)
+    console_min_level = min(
+        [*user_levels.values(), logging_config.root_level],
+        key=lambda x: logging_config.root_level if x == logging.NOTSET else x,
+    )
+    console.setLevel(console_min_level)
+    console.addFilter(PerLoggerFilter(user_levels, logging_config.root_level))
+    root.addHandler(console)
+    attach_logfile_handler()

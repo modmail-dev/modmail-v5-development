@@ -35,7 +35,7 @@ async def ticket_thread_delete(cog: Modmail, payload: discord.RawThreadDeleteEve
     if payload.guild_id != cog.bot.staff_guild.guild_id:
         return
 
-    ticket_model = await cog.bot.database_client.get_ticket_by_channel(payload.thread_id, only_open=True)
+    ticket_model = await cog.bot.db.get_ticket_by_channel(payload.thread_id, only_open=True)
     if not ticket_model:
         return
 

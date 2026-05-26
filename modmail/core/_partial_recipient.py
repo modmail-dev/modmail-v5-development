@@ -1,4 +1,4 @@
-"""[`PartialRecipient`][] — lightweight Discord-user-compatible wrapper backed by stored DB data."""
+"""Lightweight Discord-user-compatible wrapper backed by stored DB data."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import discord
 if TYPE_CHECKING:
     import datetime
 
-    from ..backends.common import TicketUserModel
+    from ..backends import TicketUserModel
     from .bot import Bot
 
 __all__ = ["PartialRecipient"]
@@ -38,7 +38,7 @@ class PartialRecipient:
 
     @property
     def user_model(self) -> TicketUserModel:
-        """The underlying stored [TicketUserModel][]{ data-preview }."""
+        """The underlying stored [`TicketUserModel`][]."""
         return self._model
 
     @property

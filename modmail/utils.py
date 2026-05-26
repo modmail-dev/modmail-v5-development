@@ -47,7 +47,7 @@ def strtobool(val: str) -> bool:
 def int_to_color_hex(value: int) -> str:
     """Convert a 24-bit integer to a `#RRGGBB` hex color string.
 
-    32-bit values are treated as RGBA (`0xRRGGBBAA`); the low alpha byte is discarded.
+    32-bit values are treated as RGBA (`0xRRGGBBAA`). The low alpha byte is discarded.
 
     Args:
         value: RGB (`0xRRGGBB`) color integer.
@@ -103,7 +103,7 @@ class MultiKeyCollection[T]:
     """Collection that can access values with different keys.
 
     This class acts like a multi-key dictionary.
-    The object cannot be built-in immutable types like int, str, tuple, etc.
+    The object cannot be built-in immutable types like `int`, `str`, `tuple`, etc.
 
     Examples:
         >>> collection = MultiKeyCollection("key1", "key2")
@@ -167,7 +167,7 @@ class MultiKeyCollection[T]:
             The object if found, otherwise None.
 
         Raises:
-            KeyError: If the key is not found or if key and value pair is not found.
+            KeyError: If the key is not found or if the key-value pair is not found.
         """
         key, value = key_value
         if key not in self.key_names:
@@ -306,7 +306,7 @@ class MultiKeyCollection[T]:
 
         Raises:
             ValueError: If the key is not found.
-            KeyError: If the key and value pair is not found.
+            KeyError: If the key-value pair is not found.
         """
         if key not in self.key_names:
             raise ValueError(f"Attribute '{key}' is not found")

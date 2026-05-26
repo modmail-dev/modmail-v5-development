@@ -2,11 +2,11 @@
 
 Supports two use-cases:
 
-- **CLI autogenerate** — ``uv run alembic revision --autogenerate -m "name"``:
-  ``ALEMBIC_URL`` must be set (directly or via a ``.env`` file).
+- **CLI autogenerate** -- `uv run alembic revision --autogenerate -m "name"`:
+  `ALEMBIC_URL` must be set (directly or via a `.env` file).
   Basic logging is configured automatically.
 
-- **Programmatic upgrade** — called via ``migration.do_migration``: the URL is
+- **Programmatic upgrade** -- called via `migration.do_migration`: the URL is
   already injected into the Alembic config before this file runs, and logging
   is left to the application.
 """
@@ -35,7 +35,7 @@ def render_item(type_: str, obj: object, autogen_context: AutogenContext) -> str
     """Teach Alembic how to render custom types so it emits correct imports.
 
     Returns:
-        A string representation of the type if handled, ``False`` to fall back to default rendering.
+        A string representation of the type if handled, `False` to fall back to default rendering.
     """
     if type_ == "type" and isinstance(obj, UTCTimestamp):
         autogen_context.imports.add("import modmail.backends.sql.models.base")

@@ -50,7 +50,7 @@ async def sclose_command(
 ) -> None:
     """Close the current ticket without notifying the recipient(s).
 
-    Any `message` or `attachment` is saved in the ticket log but not delivered.
+    Any `message_text` or `attachment` is saved in the ticket log but not delivered.
 
     Args:
         cog: The Modmail cog instance.

@@ -1,11 +1,4 @@
-"""SQL database backend package.
-
-Exposes SQLBackend, the SQLAlchemy + aiosqlite implementation of DBBackend.
-
-Notes:
-    Modules from this directory should not import from ``modmail.core.*``
-    to avoid circular import issues.
-"""
+"""SQL database backend package."""
 
 from __future__ import annotations
 

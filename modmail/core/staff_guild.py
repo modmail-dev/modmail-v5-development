@@ -1,4 +1,4 @@
-"""[`StaffGuild`][] — ticket lifecycle, channel setup, and access control for the staff guild."""
+"""Ticket lifecycle, channel setup, and access control for the staff guild."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Literal, cast
 
 import discord
 
-from .. import CONFIG
-from ..backends.common import TicketModel, TicketUserModel
+from ..backends import TicketModel, TicketUserModel
+from ..config import config
 from ..enum import AccessLevel, ProfileType, TicketStatus
 from ..errors import (
     BadPermissionsError,
@@ -31,9 +31,6 @@ if TYPE_CHECKING:
 __all__ = ["StaffGuild"]
 
 logger = logging.getLogger(__name__)
-
-# Discord API error code for "Maximum number of pinned threads reached (1)".
-_MAX_PINNED_THREADS_ERROR_CODE = 30047
 
 
 class StaffGuild:
@@ -59,7 +56,7 @@ class StaffGuild:
     @property
     def guild_id(self) -> int:
         """The Discord ID of the configured staff server."""
-        return CONFIG.bot.staff_server_id
+        return config.bot.staff_server_id
 
     @property
     def MIN_PERMISSIONS(self) -> discord.Permissions:  # noqa: N802
@@ -147,7 +144,7 @@ class StaffGuild:
         if not self.guild_exists:  # Check if the guild exists
             raise NoStaffGuildError(f"Staff guild with ID {self.guild_id} not found.")
 
-        category_or_forum_id = self.bot.database_client.settings.main_category_or_forum_id
+        category_or_forum_id = self.bot.db.settings.main_category_or_forum_id
         if category_or_forum_id is None:
             raise NoModmailCategoryError("No modmail category or forum found in the database.")
 
@@ -174,7 +171,7 @@ class StaffGuild:
         if not self.guild_exists:
             return None
 
-        channel_id = self.bot.database_client.settings.log_channel_id
+        channel_id = self.bot.db.settings.log_channel_id
         if channel_id is None:
             return None
 
@@ -213,7 +210,7 @@ class StaffGuild:
         if not self.guild_exists:
             return None
 
-        channel_id = self.bot.database_client.settings.storage_channel_id
+        channel_id = self.bot.db.settings.storage_channel_id
         if channel_id is None:
             return None
 
@@ -277,7 +274,7 @@ class StaffGuild:
             self._get_bot_role_or_member(): self.MIN_PERMISSIONS_OVERWRITE,
         }
 
-        for profile in self.bot.database_client.profiles:
+        for profile in self.bot.db.profiles:
             if profile.access_level is not None and profile.access_level >= AccessLevel.staff:
                 if profile.profile_type == ProfileType.role:
                     if (role := self.guild.get_role(profile.profile_id)) is None:
@@ -427,7 +424,9 @@ class StaffGuild:
             try:
                 await log_channel.edit(pinned=True, locked=True, reason=log_reason)
             except discord.HTTPException as e:
-                if e.code == _MAX_PINNED_THREADS_ERROR_CODE:
+                # Discord API error code for "Maximum number of pinned threads reached (1)".
+                max_pinned_threads_error_code = 30047
+                if e.code == max_pinned_threads_error_code:
                     logger.error(
                         "Could not pin the log thread in forum %s because the maximum pinned threads is reached",
                         category_or_forum,
@@ -437,7 +436,7 @@ class StaffGuild:
                     raise
             await storage_channel.edit(position=1)
 
-        await self.bot.database_client.update_settings(
+        await self.bot.db.update_settings(
             main_category_or_forum_id=category_or_forum.id,
             log_channel_id=log_channel.id,
             storage_channel_id=storage_channel.id,
@@ -466,7 +465,7 @@ class StaffGuild:
         if not self.is_setup():
             return
 
-        if profile_id == CONFIG.bot.bot_id:
+        if profile_id == config.bot.bot_id:
             logger.debug("Not granting access to the bot itself")
             return
 
@@ -507,7 +506,7 @@ class StaffGuild:
         if not self.is_setup():
             return
 
-        if profile_id == CONFIG.bot.bot_id:
+        if profile_id == config.bot.bot_id:
             logger.debug("Not revoking access from the bot itself")
             return
 
@@ -602,7 +601,7 @@ class StaffGuild:
             raise TicketCreationError from exc
 
         ticket = TicketModel(
-            bot_id=CONFIG.bot.bot_id,
+            bot_id=config.bot.bot_id,
             key=TicketModel.generate_key(),
             recipients=[TicketUserModel.from_user(user) for user in recipients],
             channel_id=channel.id,
@@ -622,7 +621,7 @@ class StaffGuild:
             )
 
         try:
-            await self.bot.database_client.create_ticket(ticket)
+            await self.bot.db.create_ticket(ticket)
         except TicketCreationError as exc:
             await _handle_ticket_creation_failure(exc)
             raise
@@ -669,9 +668,9 @@ class StaffGuild:
             return TicketView(self, lookup)
 
         if isinstance(lookup, discord.User | discord.Member):
-            ticket_model = await self.bot.database_client.get_ticket_by_recipient(lookup.id)
+            ticket_model = await self.bot.db.get_ticket_by_recipient(lookup.id)
         else:
-            ticket_model = await self.bot.database_client.get_ticket_by_channel(lookup.id, only_open=True)
+            ticket_model = await self.bot.db.get_ticket_by_channel(lookup.id, only_open=True)
 
         if ticket_model is None:
             logger.debug("No ticket found for %s", lookup)
@@ -680,7 +679,7 @@ class StaffGuild:
         if not ticket_model.recipients:
             logger.error("Ticket %s has no recipients, auto-closing.", ticket_model.key)
             try:
-                await self.bot.database_client.close_ticket(
+                await self.bot.db.close_ticket(
                     ticket_model.key,
                     TicketUserModel.from_user(cast("discord.ClientUser", self.bot.user)),
                     ticket_status=TicketStatus.closed_by_deletion,

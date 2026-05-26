@@ -47,6 +47,8 @@ greenlet==3.3.0
     # via sqlalchemy
 idna==3.11
     # via yarl
+lark==1.3.1
+    # via modmail-py
 lazy-model==0.4.0
     # via beanie
 mako==1.3.10
@@ -73,15 +75,15 @@ pycares==4.11.0 ; sys_platform != 'win32'
     # via aiodns
 pycparser==2.23 ; implementation_name != 'PyPy' and sys_platform != 'win32'
     # via cffi
-pydantic==2.13.3
+pydantic==2.13.4
     # via
     #   beanie
     #   lazy-model
     #   modmail-py
     #   pydantic-settings
-pydantic-core==2.46.3
+pydantic-core==2.46.4
     # via pydantic
-pydantic-settings==2.14.0
+pydantic-settings==2.14.1
     # via modmail-py
 pygments==2.20.0
     # via rich
@@ -91,14 +93,14 @@ python-dotenv==1.2.2
     # via
     #   modmail-py
     #   pydantic-settings
-pyyaml==6.0.3
-    # via modmail-py
 rich==15.0.0
     # via modmail-py
 sqlalchemy==2.0.49
     # via
     #   alembic
     #   modmail-py
+tomli-w==1.2.0
+    # via modmail-py
 typing-extensions==4.15.0
     # via
     #   alembic

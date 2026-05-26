@@ -48,7 +48,7 @@ async def reply_command(
 ) -> None:
     """Send a reply to the ticket's recipient(s).
 
-    At least one of `message` or `attachment` must be provided.
+    At least one of `message_text` or `attachment` must be provided.
 
     Args:
         cog: The Modmail cog instance.

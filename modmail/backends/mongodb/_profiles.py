@@ -12,7 +12,7 @@ from ._base import MongoDBBackendBase
 from .models import MongoDBProfileDocument
 
 if TYPE_CHECKING:
-    from ..common.models import ProfileModel
+    from modmail.backends.common import ProfileModel
 
 
 class MongoDBProfilesMixin(MongoDBBackendBase):

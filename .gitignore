@@ -3,7 +3,7 @@
 /logs/
 
 # Ignore database and config files
-config.yaml
+config.toml
 *.db
 
 # Tests are currently disabled

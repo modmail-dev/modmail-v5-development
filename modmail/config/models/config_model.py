@@ -1,35 +1,26 @@
-"""Primary configuration model for the Modmail bot.
-
-This module defines the primary configuration model for the Modmail bot.
-It uses Pydantic for data validation and settings management, ensuring
-that the configuration is correctly loaded and validated from various sources.
-"""
+"""Primary configuration model for the Modmail bot."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Literal
 
 from babel.core import negotiate_locale
 from packaging.version import Version
-from pydantic import Field, ValidationInfo, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from .bot_model import BotConfig
+from .database_model import DatabaseConfig
 from .logging_model import LoggingConfig
-from .mongodb_database_model import MongoDBDatabaseConfig
 from .permission_model import PermissionConfig
-from .sql_database_model import SQLDatabaseConfig
 
 __all__ = ["Config"]
-
-type SupportedDatabases = Literal["sql", "mongodb"]
 
 LOCALES_ROOT = Path(__file__).resolve().parent.parent.parent / "locales"
 
 
-def _discover_locale_dirs() -> set[str]:
+def _discover_locale_dirs() -> tuple[str, ...]:
     """Return locale directory names found under `modmail/locales/`.
 
     Directories ending with `-custom` are excluded — they are handled
@@ -37,42 +28,39 @@ def _discover_locale_dirs() -> set[str]:
     """
     found: set[str] = set()
     if not LOCALES_ROOT.is_dir():
-        return found
-    for child in sorted(LOCALES_ROOT.iterdir()):
+        return ()
+    for child in LOCALES_ROOT.iterdir():
         if child.is_dir() and (child / "LC_MESSAGES").is_dir() and not child.name.endswith("-custom"):
             found.add(child.name)
-    return found
+    return tuple(sorted(found, key=str.casefold))
 
 
-class Config(BaseSettings):
-    """Primary configuration model for the Modmail bot.
-
-    This class represents the complete configuration for the Modmail bot,
-    including bot settings, database configurations, logging, permissions,
-    and localization settings.
-
-    Attributes:
-        version: The config schema version.
-        bot: The bot configuration settings.
-        allowed_locales: A set of allowed locales for message translations.
-        default_locale: The default locale for the bot.
-        database_type: The type of database being used (sql or mongodb).
-        sql_config: The SQL database configuration if using SQL.
-        mongodb_config: The MongoDB configuration if using MongoDB.
-        permission: The permission configuration settings.
-        logging: The logging configuration settings.
-    """
+class Config(
+    BaseSettings,
+    frozen=True,  # pyright: ignore [reportGeneralTypeIssues]
+    str_strip_whitespace=True,
+    coerce_numbers_to_str=True,
+    use_attribute_docstrings=True,
+):
+    """Primary configuration model for the Modmail bot."""
 
     version: str = "1.0"  # the config version
+    """The config schema version."""
     bot: BotConfig
-    allowed_locales: set[str] = Field(default_factory=set)
-    default_locale: str = ""
+    """The bot configuration settings."""
+    allowed_locales: tuple[str, ...] = Field((), validate_default=True)
+    """Tuple of allowed locales for message translations. Auto-discovered from available locale
+    directories if left empty."""
+    default_locale: str = Field("", validate_default=True)
+    """The default locale for the bot. If empty, the first allowed locale is used."""
     log_url: str
-    database_type: SupportedDatabases
-    sql_config: SQLDatabaseConfig | None = Field(None, validate_default=True)
-    mongodb_config: MongoDBDatabaseConfig | None = Field(None, validate_default=True)
-    permission: PermissionConfig = Field(PermissionConfig(), validate_default=True)
-    logging: LoggingConfig = Field(LoggingConfig(), validate_default=True)
+    """URL where log entries are posted."""
+    database: DatabaseConfig
+    """The database connection configuration."""
+    permission: PermissionConfig = Field(default_factory=PermissionConfig)
+    """The permission configuration settings."""
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    """The logging configuration settings."""
 
     # Don't load .env when testing.
     if os.environ.get("PYTEST_VERSION") is None:
@@ -139,131 +127,84 @@ class Config(BaseSettings):
 
         return version
 
-    @model_validator(mode="after")
-    def _validate_locales(self) -> Config:
-        """Validate allowed_locales and default_locale, then compile and load bundles.
+    @field_validator("allowed_locales")
+    @classmethod
+    def _validate_allowed_locales(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        """Validate and resolve allowed locale codes.
 
-        If allowed_locales is empty the available locale directories are
-        auto-discovered.  Each entry is matched against the available
-        directories via `babel.core.negotiate_locale`.  `.mo` files are
-        compiled on demand and then loaded into the `Translator`.
+        When `value` is non-empty, each entry is deduplicated and matched against
+        the available locale directories via `babel.core.negotiate_locale`.
+
+        When `value` is empty the available directories are auto-discovered.
+
+        `.mo` files are compiled and loaded into the `Translator`.
 
         Returns:
-            The validated config instance with resolved locale fields.
+            A sorted tuple of resolved BCP-47 locale codes.
 
         Raises:
             ValueError: If a locale does not match any available directory
                 or bundle loading fails.
         """
         from modmail.i18n import Translator
-        from modmail.locales import ensure_compiled
 
-        available = _discover_locale_dirs()
-        raw = self.allowed_locales
+        available_locales = _discover_locale_dirs()
 
-        if raw:
-            resolved: set[str] = set()
-            for entry in raw:
+        if value:
+            resolved_set: set[str] = set()
+            for entry in value:
+                # Deduplicate entries and check if they're valid
+                if entry in resolved_set:
+                    continue
                 entry_str = str(entry)
-                match = negotiate_locale([entry_str.replace("_", "-")], list(available), sep="-")
+                match = negotiate_locale([entry_str.replace("_", "-")], available_locales, sep="-")
                 if match is None:
                     raise ValueError(
-                        f"Locale {entry_str!r} does not match any available locale directory ({sorted(available)})"
+                        f"Locale {entry_str!r} does not match any available locale directory ({available_locales})"
                     )
-                resolved.add(match)
+                resolved_set.add(match)
+            resolved = tuple(sorted(resolved_set, key=str.casefold))
         else:
-            resolved = available
+            resolved = available_locales
 
-        ensure_compiled()
+        if not resolved:
+            raise ValueError(
+                "No allowed locales resolved. Ensure locale directories are present under "
+                "'modmail/locales/' or specify allowed locales in the config."
+            )
+
         try:
-            Translator.load_bundles(sorted(resolved))
+            Translator.load_bundles(resolved)
         except Exception as e:
             raise ValueError(f"Failed to load translation bundles for {resolved}: {e}") from e
+        return resolved
 
-        self.allowed_locales = resolved
-
-        if not self.default_locale:
-            self.default_locale = next(iter(resolved))
-        else:
-            match = negotiate_locale([self.default_locale.replace("_", "-")], list(resolved), sep="-")
-            if match is None:
-                raise ValueError(
-                    f"Default locale {self.default_locale!r} does not match "
-                    f"any allowed locale ({sorted(resolved)})"
-                )
-            self.default_locale = match
-
-        return self
-
-    @field_validator("sql_config", mode="before")
+    @field_validator("default_locale")
     @classmethod
-    def check_using_sql_database_config[T](cls, v: T, info: ValidationInfo) -> T | None:
-        """Sets up SQL database configuration when SQL is selected.
+    def _validate_default_locale(cls, value: str, info: ValidationInfo) -> str:
+        """Validate and resolve the default locale code.
 
         Args:
-            v: The SQL configuration value.
-            info: Validation context containing other field values.
+            value: The locale code to validate.
+            info: Validation context with access to `allowed_locales` in
+                `info.data`.
 
         Returns:
-            SQL configuration if using SQL database, otherwise None.
+            The resolved BCP-47 locale code.
+
+        Raises:
+            ValueError: If the locale does not match any allowed locale.
         """
-        if info.data.get("database_type") == "sql":
-            if not v:
-                # This may error since it could be missing required fields.
-                v = SQLDatabaseConfig()  # pyright: ignore [reportCallIssue, reportAssignmentType]
-            return v
-        return None
+        allowed_locales = info.data["allowed_locales"]
+        if not value:
+            if "en-US" in allowed_locales:
+                return "en-US"
+            return allowed_locales[0]
 
-    @field_validator("mongodb_config", mode="before")
-    @classmethod
-    def check_using_mongodb_database_config[T](cls, v: T, info: ValidationInfo) -> T | None:
-        """Sets up MongoDB configuration when MongoDB is selected.
-
-        Args:
-            v: The MongoDB configuration value.
-            info: Validation context containing other field values.
-
-        Returns:
-            MongoDB configuration if using MongoDB, otherwise None.
-        """
-        if info.data.get("database_type") == "mongodb":
-            if not v:
-                # This may error since it could be missing required fields.
-                v = MongoDBDatabaseConfig()  # pyright: ignore [reportCallIssue, reportAssignmentType]
-            return v
-        return None
-
-    @field_validator("logging", mode="before")
-    @classmethod
-    def set_default_logging_config(cls, v: LoggingConfig | None) -> LoggingConfig:
-        """Provides default logging configuration if none is specified.
-
-        Args:
-            v: The logging configuration or None.
-
-        Returns:
-            The provided logging configuration or a default one.
-        """
-        if v is None:
-            return LoggingConfig()
-        return v
-
-    @field_validator("permission", mode="before")
-    @classmethod
-    def set_default_permission_config(cls, v: PermissionConfig | None) -> PermissionConfig:
-        """Provides default permission configuration if none is specified.
-
-        Args:
-            v: The permission configuration or None.
-
-        Returns:
-            The provided permission configuration or a default one.
-        """
-        if v is None:
-            return PermissionConfig()
-        return v
-
-    # TODO: Add a validator to check if the dependencies for the database type is installed
+        match = negotiate_locale([value.replace("_", "-")], allowed_locales, sep="-")
+        if match is None:
+            raise ValueError(f"Default locale {value!r} does not match any allowed locale ({allowed_locales})")
+        return match
 
     @field_validator("log_url")
     @classmethod
@@ -279,7 +220,7 @@ class Config(BaseSettings):
         Raises:
             ValueError: If the log URL is not valid.
         """
-        v = v.strip()
-        if not v.startswith("https://"):
+        if not v.startswith("https://") and not v.startswith("http://"):
+            # Allow http, but don't suggest it since it's not secure.
             raise ValueError("Log URL must start with 'https://'")
         return v.strip("/ ")  # Remove trailing slash if present

@@ -36,34 +36,44 @@ def _add_subparser(
     help_text: str,
     func: Callable[[argparse.Namespace], None],
 ) -> None:
+    """Register a subcommand with optional --locale flag."""
     p = sub.add_parser(name, help=help_text)
     p.add_argument("-l", "--locale", help="Single locale (default: all configured)")
     p.set_defaults(func=func)
 
 
 def _wrap_extract(args: argparse.Namespace) -> None:
+    """Run extract_locales with parsed args."""
     extract_locales(args.locale)
 
 
 def _wrap_check(args: argparse.Namespace) -> None:
+    """Run check_locales and exit with status 1 on failure."""
     if not check_locales(args.locale):
         sys.exit(1)
 
 
 def _wrap_compile(args: argparse.Namespace) -> None:
+    """Run compile_locales with parsed args."""
     compile_locales(args.locale)
 
 
 def _wrap_add(args: argparse.Namespace) -> None:
+    """Run add_locale with parsed args."""
     add_locale(args.locale)
 
 
 def _wrap_custom(args: argparse.Namespace) -> None:
+    """Run create_custom_locale with parsed args."""
     create_custom_locale(args.base)
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Entry point for `python -m modmail.locales`."""
+    """Entry point for `python -m modmail.locales`.
+
+    Args:
+        argv: Command-line arguments (defaults to `sys.argv`).
+    """
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
 
     parser = argparse.ArgumentParser(

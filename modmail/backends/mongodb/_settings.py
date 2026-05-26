@@ -13,7 +13,7 @@ from ._base import MongoDBBackendBase
 from .models import MongoDBSettingsDocument
 
 if TYPE_CHECKING:
-    from ..common.models import SettingsModel
+    from modmail.backends.common import SettingsModel
 
 logger = logging.getLogger(__name__)
 

@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, cast
 import sqlalchemy.exc
 from sqlalchemy import delete, update
 
+from modmail.backends.common import InstanceLockModel, LockInfo
 from modmail.errors import DatabaseOperationError
 
-from ..common.db_backend import LockInfo
 from ._base import SQLBackendBase
 from .models import SQLInstanceLockTable
 
@@ -19,8 +19,6 @@ if TYPE_CHECKING:
     from typing import Any
 
     from sqlalchemy.engine import CursorResult
-
-    from ..common.models import InstanceLockModel
 
 logger = logging.getLogger(__name__)
 

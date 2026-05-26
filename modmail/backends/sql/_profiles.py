@@ -13,7 +13,7 @@ from ._base import SQLBackendBase
 from .models import SQLProfileTable
 
 if TYPE_CHECKING:
-    from ..common.models import ProfileModel
+    from modmail.backends.common import ProfileModel
 
 
 class SQLProfilesMixin(SQLBackendBase):

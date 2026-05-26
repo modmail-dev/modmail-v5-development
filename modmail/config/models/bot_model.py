@@ -1,9 +1,4 @@
-"""Bot configuration model definitions.
-
-This module defines the Pydantic model for the bot configuration settings.
-It includes validation logic to ensure the configuration is correct and
-provides utility methods for handling bot-specific settings.
-"""
+"""Bot configuration model."""
 
 from __future__ import annotations
 
@@ -20,7 +15,13 @@ logger = logging.getLogger(__name__)
 IDType = Annotated[int, Field(gt=100000000000000, lt=99999999999999999999)]  # 15-20 digit integer
 
 
-class BotConfig(BaseModel):
+class BotConfig(
+    BaseModel,
+    frozen=True,
+    str_strip_whitespace=True,
+    coerce_numbers_to_str=True,
+    use_attribute_docstrings=True,
+):
     """Configuration model for the bot settings."""
 
     token: SecretStr
@@ -106,21 +107,6 @@ class BotConfig(BaseModel):
             raise ValueError("Slash commands and prefixed commands cannot be both disabled.")
         return v
 
-    @field_validator("owner_ids", mode="before")
-    @classmethod
-    def handle_empty_owner_ids(cls, v: set[IDType] | None) -> set[IDType]:
-        """Handles empty owner_ids by returning an empty set.
-
-        Args:
-            v: Set of owner IDs or None.
-
-        Returns:
-            Empty set if None, otherwise the original set.
-        """
-        if not v:
-            return set()
-        return v
-
     @field_validator("enable_jishaku")
     @classmethod
     def check_jishaku_installed(cls, v: bool) -> bool:
@@ -134,7 +120,7 @@ class BotConfig(BaseModel):
         """
         if v:
             try:
-                import jishaku  # pyright: ignore  # noqa: F401, PGH003
+                __import__("jishaku")
             except ImportError:
                 logger.error("Jishaku is not installed, but is enabled in configs.")
                 return False

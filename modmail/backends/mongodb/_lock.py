@@ -9,17 +9,15 @@ from typing import TYPE_CHECKING, cast
 import pymongo.errors
 from beanie import UpdateResponse
 
+from modmail.backends.common import InstanceLockModel, LockInfo
 from modmail.errors import DatabaseOperationError
 
-from ..common.db_backend import LockInfo
 from ._base import MongoDBBackendBase
 from .models import MongoDBInstanceLockDocument
 
 if TYPE_CHECKING:
     from beanie.odm.queries.update import UpdateOne
     from pymongo.results import UpdateResult
-
-    from ..common.models import InstanceLockModel
 
 logger = logging.getLogger(__name__)
 

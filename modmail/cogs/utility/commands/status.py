@@ -9,8 +9,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from modmail.backends.common import ActivityModel
-from modmail.core import Context, ParamInfo, Str, admin_only, bot_group, ephemeral_scope, locale_for
+from modmail.backends import ActivityModel
+from modmail.core import Context, ParamInfo, admin_only, bot_group, ephemeral_scope, locale_for
 from modmail.enum import ActivityType, StatusType
 from modmail.i18n import _
 
@@ -33,7 +33,7 @@ __all__ = ["status_command"]
         )
     },
 )
-async def status_command(cog: Utility, ctx: Context, *, status: Str | None = None) -> None:
+async def status_command(cog: Utility, ctx: Context, *, status: str | None = None) -> None:
     """Show or set the bot's Discord presence.
 
     With no argument, replies ephemerally with the current status and activity.
@@ -49,8 +49,8 @@ async def status_command(cog: Utility, ctx: Context, *, status: Str | None = Non
     """
     if not status:
         with ephemeral_scope(ctx.interaction):
-            current_status = cog.bot.database_client.settings.status
-            current_activity = cog.bot.database_client.settings.activity
+            current_status = cog.bot.db.settings.status
+            current_activity = cog.bot.db.settings.activity
             if current_status is not None and current_activity is not None:
                 # @param status: Human-readable status description (e.g. "Online")
                 status_part = ctx.t(_("msg.status.current", status=current_status))

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from beanie.odm.queries.update import UpdateOne
     from pymongo.results import UpdateResult
 
-    from ..common.models import TicketMessageModel, TicketModel, TicketUserModel
+    from modmail.backends.common import TicketMessageModel, TicketModel, TicketUserModel
 
 
 class MongoDBTicketsMixin(MongoDBBackendBase):

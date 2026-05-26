@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, Any, Final
 import discord
 from discord.ext import commands
 
-from modmail import CONFIG, utils
-from modmail.backends.common import ProfileModel
+from modmail import utils
+from modmail.backends import ProfileModel
+from modmail.config import config
 from modmail.core import (
     BaseLayoutView,
     BaseModal,
@@ -109,7 +110,7 @@ class ProfileCustomizeModal(BaseModal):
             self.defer(interaction)
             new_profile = self.profile.model_copy(update=to_update)
             try:
-                await self._bot.database_client.update_profile(new_profile)
+                await self._bot.db.update_profile(new_profile)
             except DatabaseOperationError as e:
                 logger.error("Failed to update profile %d customization: %s", new_profile.profile_id, e)
                 await self.send_ephemeral(interaction, _("view.profile.editor.update_failed"))
@@ -119,7 +120,9 @@ class ProfileCustomizeModal(BaseModal):
             self._editor_view.render()
 
         await self.send_ephemeral(
-            interaction, _("view.profile.modal.customize.success", profile=self.profile.mention)
+            interaction,
+            # @param profile: The profile mention.
+            _("view.profile.modal.customize.success", profile=self.profile.mention),
         )
 
 
@@ -175,9 +178,10 @@ class ProfileAddOverrideModal(BaseModal):
 
         canonical = index.resolve(self.command_name.value)
         if canonical is None:
-            # @param command: The user-typed command name
             await self.send_ephemeral(
-                interaction, _("msg.profile.override.command_not_found", command=self.command_name.value)
+                interaction,
+                # @param command: The user-typed command name
+                _("msg.profile.override.command_not_found", command=self.command_name.value),
             )
             return
 
@@ -188,7 +192,7 @@ class ProfileAddOverrideModal(BaseModal):
                 if canonical != base and not isinstance(cmd, commands.Group):
                     canonical = base  # wildcards only apply to groups
 
-                if CONFIG.bot.enable_jishaku and cmd.cog_name == "Jishaku":
+                if config.bot.enable_jishaku and cmd.cog_name == "Jishaku":
                     await self.send_ephemeral(interaction, _("msg.profile.override.jishaku"))
                     return
 
@@ -211,8 +215,10 @@ class ProfileAddOverrideModal(BaseModal):
         if self.profile.permission_overrides.get(canonical) == self._override_value:
             await self.send_ephemeral(
                 interaction,
+                # @param command: The display name of the command.
                 _("view.profile.modal.add_override.already_allow", command=display)
                 if self._override_value == PermissionOverrideValue.allow
+                # @param command: The display name of the command.
                 else _("view.profile.modal.add_override.already_deny", command=display),
             )
             return
@@ -222,7 +228,7 @@ class ProfileAddOverrideModal(BaseModal):
         overrides[canonical] = self._override_value
         new_profile = self.profile.model_copy(update={"permission_overrides": overrides})
         try:
-            await self._bot.database_client.update_profile(new_profile)
+            await self._bot.db.update_profile(new_profile)
         except DatabaseOperationError as e:
             logger.error("Failed to set override %r on profile %d: %s", canonical, new_profile.profile_id, e)
             await self.send_ephemeral(interaction, _("view.profile.editor.update_failed"))
@@ -239,8 +245,10 @@ class ProfileAddOverrideModal(BaseModal):
 
         await self.send_ephemeral(
             interaction,
+            # @param command: The display name of the command.
             _("view.profile.editor.override.allow_success", command=display)
             if self._override_value == PermissionOverrideValue.allow
+            # @param command: The display name of the command.
             else _("view.profile.editor.override.deny_success", command=display),
         )
 
@@ -308,6 +316,7 @@ class ProfileRemoveOverrideModal(BaseModal):
         if key_to_remove is None:
             await self.send_ephemeral(
                 interaction,
+                # @param command: The override name that was typed by the user.
                 _("view.profile.modal.remove_override.not_found", command=self.override_name.value),
             )
             return
@@ -319,7 +328,11 @@ class ProfileRemoveOverrideModal(BaseModal):
 
         self._editor_view.render()
         display = index.label(key_to_remove)
-        await self.send_ephemeral(interaction, _("view.profile.modal.remove_override.success", command=display))
+        await self.send_ephemeral(
+            interaction,
+            # @param command: The display name of the removed override.
+            _("view.profile.modal.remove_override.success", command=display),
+        )
 
 
 class ConfirmDeleteView(BaseLayoutView):
@@ -345,21 +358,15 @@ class ConfirmDeleteView(BaseLayoutView):
         self._editor_view = editor_view
         self._interaction = interaction
 
-        confirm_btn: discord.ui.Button[ConfirmDeleteView] = discord.ui.Button(
-            label=self._t(_("view.profile.editor.delete.btn_confirm")),
-            style=discord.ButtonStyle.danger,
-        )
-        confirm_btn.callback = self._on_confirm
-
-        cancel_btn: discord.ui.Button[ConfirmDeleteView] = discord.ui.Button(
-            label=self._t(_("view.prompt.cancel")),
-            style=discord.ButtonStyle.secondary,
-        )
-        cancel_btn.callback = self._on_cancel
-
         action_row: discord.ui.ActionRow[ConfirmDeleteView] = discord.ui.ActionRow()
-        action_row.add_item(confirm_btn)
-        action_row.add_item(cancel_btn)
+        action_row.add_item(
+            self._btn(
+                self._t(_("view.profile.editor.delete.btn.confirm")),
+                discord.ButtonStyle.danger,
+                self._on_confirm,
+            )
+        )
+        action_row.add_item(self._cancel_btn(callback=self._on_cancel))
 
         self.add_item(
             discord.ui.Container(
@@ -388,7 +395,7 @@ class ConfirmDeleteView(BaseLayoutView):
         self.defer(interaction)
 
         try:
-            await self._bot.database_client.delete_profile(profile_id=self.profile.profile_id)
+            await self._bot.db.delete_profile(profile_id=self.profile.profile_id)
         except DatabaseOperationError as e:
             logger.error("Failed to delete profile %d: %s", self.profile.profile_id, e)
             await self.send_ephemeral(interaction, _("view.profile.editor.update_failed"))
@@ -408,7 +415,9 @@ class ConfirmDeleteView(BaseLayoutView):
 
         # Using _editor_view._t() since close_message will be rendered onto _editor_view
         close_message = self._editor_view._t(
-            _("view.profile.editor.delete.deleted_content"), profile=self.profile.mention
+            # @param profile: The profile mention.
+            _("view.profile.editor.delete.deleted_content"),
+            profile=self.profile.mention,
         )
         if access_sync_failed:
             close_message += "\n" + self._editor_view._t(_("view.profile.editor.access_sync_failed"))
@@ -498,7 +507,7 @@ class ProfileEditorView(BaseLayoutView):
         new_profile = self.profile.model_copy(update={"permission_overrides": overrides})
 
         try:
-            await self._bot.database_client.update_profile(new_profile)
+            await self._bot.db.update_profile(new_profile)
         except DatabaseOperationError as e:
             logger.error("Failed to remove override %r from profile %d: %s", key, new_profile.profile_id, e)
             return False
@@ -534,7 +543,7 @@ class ProfileEditorView(BaseLayoutView):
         Returns:
             `True` if [`profile`][] changed, `False` if it was already up to date.
         """
-        current = self._bot.database_client.get_profile(self.profile.profile_id, self.profile.profile_type)
+        current = self._bot.db.get_profile(self.profile.profile_id, self.profile.profile_type)
         if current is None:
             current = ProfileModel(
                 bot_id=self.profile.bot_id,
@@ -589,29 +598,6 @@ class ProfileEditorView(BaseLayoutView):
         if self._profile_sync_task is None:
             self._profile_sync_task = asyncio.create_task(self._profile_sync_loop())
 
-    @staticmethod
-    def _btn(
-        label: str,
-        style: discord.ButtonStyle,
-        callback: Any,
-        *,
-        disabled: bool = False,
-    ) -> discord.ui.Button[ProfileEditorView]:
-        """Create a button bound to `callback`.
-
-        Args:
-            label: Button label text.
-            style: Discord button style.
-            callback: Async callable to invoke on click.
-            disabled: Whether the button should be rendered as non-interactive.
-
-        Returns:
-            The configured button.
-        """
-        btn: discord.ui.Button[ProfileEditorView] = discord.ui.Button(label=label, style=style, disabled=disabled)
-        btn.callback = callback
-        return btn
-
     def _build_container(self) -> discord.ui.Container[ProfileEditorView]:
         """Build and return the container for the current editor state.
 
@@ -621,9 +607,9 @@ class ProfileEditorView(BaseLayoutView):
         if self._done_card is not None:
             return self._done_card
 
-        # ── Header: mention + type label + delete button ──
-
         header_text = self._t(
+            # @param profile: The profile mention.
+            # @param type: The profile type (user or role).
             _("view.profile.editor.header"),
             profile=self.profile.mention,
             type=_("view.profile.editor.type.user")
@@ -632,7 +618,7 @@ class ProfileEditorView(BaseLayoutView):
         )
 
         async def on_delete(interaction: discord.Interaction) -> None:
-            profile = self._bot.database_client.get_profile(self.profile.profile_id, self.profile.profile_type)
+            profile = self._bot.db.get_profile(self.profile.profile_id, self.profile.profile_type)
             if profile is None:
                 # The profile doesn't exist in the first place
                 self.defer(interaction)
@@ -651,9 +637,10 @@ class ProfileEditorView(BaseLayoutView):
                 self._confirm_delete_view = ConfirmDeleteView(editor_view=self, interaction=interaction)
                 await self.send(interaction, view=self._confirm_delete_view)
 
-        # ── Summary: current level, tag, color ──
-
         summary_text = self._t(
+            # @param level: The access level of the profile.
+            # @param tag: The display tag of the profile.
+            # @param color: The color hex of the profile.
             _(
                 "view.profile.editor.summary",
                 level=self.profile.access_level
@@ -665,8 +652,6 @@ class ProfileEditorView(BaseLayoutView):
                 else _("view.profile.editor.not_set"),
             )
         )
-
-        # ── Access level select ──
 
         level_options = [
             discord.SelectOption(
@@ -721,7 +706,7 @@ class ProfileEditorView(BaseLayoutView):
             old_level = self.profile.access_level
             new_profile = self.profile.model_copy(update={"access_level": selected_level})
             try:
-                await self._bot.database_client.update_profile(new_profile)
+                await self._bot.db.update_profile(new_profile)
             except DatabaseOperationError as e:
                 logger.error("Failed to update profile %d access level: %s", new_profile.profile_id, e)
                 await self.send_ephemeral(interaction, _("view.profile.editor.update_failed"))
@@ -749,8 +734,6 @@ class ProfileEditorView(BaseLayoutView):
                 await self.send_ephemeral(interaction, _("view.profile.editor.access_sync_failed"))
 
         level_select.callback = on_level_select
-
-        # ── Appearance button ──
 
         async def on_customize(interaction: discord.Interaction) -> None:
             changed = self.resync_profile()
@@ -793,14 +776,10 @@ class ProfileEditorView(BaseLayoutView):
         Returns:
             A list of Component v2 items for the overrides section of the editor card.
         """
-        # ── Header: override count ──
-
         overrides_header = self._t(
             ngettext("view.profile.editor.overrides.header", len(self.profile.permission_overrides))
         )
         result: list[discord.ui.Item[ProfileEditorView]] = [discord.ui.TextDisplay(overrides_header)]
-
-        # ── Add buttons ──
 
         async def on_add_allow(interaction: discord.Interaction) -> None:
             await interaction.response.send_modal(
@@ -825,8 +804,6 @@ class ProfileEditorView(BaseLayoutView):
             disabled=self._disabled,
         )
 
-        # ── Override list and remove controls ──
-
         # Used for labeling, so only using the display locale
         index = self._bot.permission_command_index(self._locale)
 
@@ -845,8 +822,10 @@ class ProfileEditorView(BaseLayoutView):
         ):
             lines = [
                 self._t(
+                    # @param command: The display name of the allowed command.
                     _("view.profile.editor.override.line_allow")
                     if v == PermissionOverrideValue.allow
+                    # @param command: The display name of the denied command.
                     else _("view.profile.editor.override.line_deny"),
                     command=_label(k),
                 )
@@ -855,8 +834,6 @@ class ProfileEditorView(BaseLayoutView):
             result.append(discord.ui.TextDisplay("\n".join(lines)))
 
             if len(overrides) <= self._SELECT_MAX:
-                # ── Remove select ──
-
                 remove_options = [
                     discord.SelectOption(
                         label=_label(k)[:100],
@@ -939,6 +916,9 @@ class ProfileListView(BaseLayoutView):
 
         lines = [
             self._t(
+                # @param mention: The profile mention.
+                # @param level: The access level of the profile.
+                # @param overrides: The number of permission overrides.
                 _(
                     "msg.profile.list.row",
                     mention=profile.mention,
@@ -954,6 +934,8 @@ class ProfileListView(BaseLayoutView):
         title = self._t(ngettext("msg.profile.list.title", len(profiles)))
         profile_cmd = self._t(_("cmd.profile.name"))
         edit_cmd = self._t(_("cmd.profile.edit.name"))
+        # @param profile_cmd: The profile command name.
+        # @param edit_cmd: The edit command name.
         tip = self._t(_("msg.profile.list.tip", profile_cmd=profile_cmd, edit_cmd=edit_cmd))
         content = f"{title}\n\n" + "\n".join(lines)
 
@@ -979,7 +961,7 @@ async def profile_command(cog: Utility, ctx: Context) -> None:
         cog: The [`Utility`][] cog instance.
         ctx: The command context.
     """
-    profiles = cog.bot.database_client.profiles
+    profiles = cog.bot.db.profiles
     if not profiles:
         await ctx.reply(_("msg.profile.list.empty"), ephemeral=True)
         return
@@ -1013,7 +995,7 @@ async def profile_edit_command(cog: Utility, ctx: Context, target: ProfileLookup
     profile = target.profile
     if profile is None:
         profile = ProfileModel(
-            bot_id=CONFIG.bot.bot_id,
+            bot_id=config.bot.bot_id,
             profile_id=target.entity.id,
             profile_type=target.profile_type,
         )
@@ -1069,7 +1051,7 @@ async def profile_delete_command(
     if target is not None:
         profile = target.profile
     elif id_ is not None:
-        profile = next((p for p in cog.bot.database_client.profiles if p.profile_id == id_), None)
+        profile = next((p for p in cog.bot.db.profiles if p.profile_id == id_), None)
     else:
         await ctx.reply(_("msg.profile.delete.none"), ephemeral=True)
         return
@@ -1079,7 +1061,7 @@ async def profile_delete_command(
         return
 
     try:
-        await cog.bot.database_client.delete_profile(profile_id=profile.profile_id)
+        await cog.bot.db.delete_profile(profile_id=profile.profile_id)
     except DatabaseOperationError as e:
         logger.error("Failed to delete profile %d: %s", profile.profile_id, e)
         await ctx.reply(_("msg.profile.delete.failed"), ephemeral=True)
@@ -1093,6 +1075,9 @@ async def profile_delete_command(
             logger.error("Failed to revoke Discord access for profile %d: %s", profile.profile_id, e)
             access_sync_failed = True
 
-    await ctx.reply(_("msg.profile.delete.success", profile=profile.mention))
+    await ctx.reply(
+        # @param profile: The profile mention.
+        _("msg.profile.delete.success", profile=profile.mention)
+    )
     if access_sync_failed:
         await ctx.reply(_("view.profile.editor.access_sync_failed"), ephemeral=True)

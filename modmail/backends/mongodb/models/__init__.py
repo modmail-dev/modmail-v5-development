@@ -1,9 +1,4 @@
-"""Beanie ODM document models for the MongoDB backend.
-
-Notes:
-    Modules from this directory should not import from ``modmail.core.*``
-    to avoid circular import issues.
-"""
+"""Beanie ODM document models for the MongoDB backend."""
 
 from __future__ import annotations
 

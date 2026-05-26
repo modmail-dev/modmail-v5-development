@@ -1,4 +1,4 @@
-"""Main [`Bot`][] subclass with event handlers, permission checks, and message-sending utilities."""
+"""Main [`Bot`][] with event handlers, permission checks, and message-sending utilities."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import functools
 import logging
 import signal
 import sys
+from importlib.metadata import version as _version
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast, overload
 
 import discord
@@ -14,8 +15,8 @@ from discord.app_commands import locale_str
 from discord.ext import commands
 from packaging.version import Version
 
-from .. import CONFIG, __version__
 from ..backends import create_db_client
+from ..config import config
 from ..enum import (
     ActivityType,
     PermissionOverrideValue,
@@ -45,7 +46,7 @@ from .staff_guild import StaffGuild
 if TYPE_CHECKING:
     from collections.abc import Coroutine
 
-    from ..backends.common import ActivityModel, DBClient, ProfileModel
+    from ..backends import ActivityModel, DBClient, ProfileModel
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ class Bot(commands.Bot):
     """[`commands.Bot`][] subclass wiring together Modmail's database, permissions, and staff guild."""
 
     permission_command_index: PermissionCommandIndex
-    """Locale-aware index of commands for permission override management, built at startup."""
+    """Index of commands for permission override management."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Configure intents, command prefix, presence defaults, and internal services."""
@@ -66,19 +67,11 @@ class Bot(commands.Bot):
             guilds=True, messages=True, reactions=True, typing=True, message_content=True, expressions=True
         )
 
-        if CONFIG.bot.prefix is not None:  # Prefix is enabled
-            logger.info("Using prefix: %s", CONFIG.bot.prefix)
-            command_prefix: list[str] = [CONFIG.bot.prefix]
-            if CONFIG.bot.respond_bot_mention:
-                command_prefix += [f"<@!{CONFIG.bot.bot_id}> ", f"<@{CONFIG.bot.bot_id}> "]
-        else:
-            command_prefix = []
-
         # Set owner IDs, if any, otherwise discord.py will fetch the owner IDs from Discord.
-        if CONFIG.bot.owner_ids:
-            kwargs.setdefault("owner_ids", CONFIG.bot.owner_ids)
+        if config.bot.owner_ids:
+            kwargs.setdefault("owner_ids", config.bot.owner_ids)
 
-        kwargs.setdefault("command_prefix", command_prefix)
+        kwargs.setdefault("command_prefix", None)
         kwargs.setdefault("intents", intents)
         kwargs.setdefault("case_insensitive", True)
         kwargs.setdefault("strip_after_prefix", True)
@@ -107,23 +100,37 @@ class Bot(commands.Bot):
         """Fire-and-forget background tasks kept alive until they complete."""
 
         self.translator: Translator = Translator()
-        """Handles FTL-based localization."""
+        """Locale translation service."""
         self.staff_guild: StaffGuild = StaffGuild(self)
         """Manages the configured staff Discord server and ticket lifecycle."""
 
-        self.version: str = __version__
+        self.version: str = _version("modmail.py")
         """Semver string for this Modmail instance."""
         logger.debug("[bold green]Bot version: %s", self.version, extra={"markup": True, "highlighter": None})
 
         self.reachability: ReachabilityRegistry = ReachabilityRegistry()
-        """In-memory tracker for recipient DM reachability."""
+        """Tracks whether recipient DMs are reachable."""
 
-        self.database_client: DBClient = create_db_client(CONFIG)
+        self.db: DBClient = create_db_client(config)
         """Primary interface to the configured backend database."""
 
         self.add_check(self._bot_can_run_check)
         self.add_check(self._user_access_check)
         self.before_invoke(self.on_before_invoke)
+
+    async def get_prefix(self, message: discord.Message) -> list[str]:
+        """Resolve the command prefix from live config at message-processing time.
+
+        Returns:
+            Current prefix list from config, or an empty list when prefix commands are disabled.
+        """
+        prefix = config.bot.prefix
+        if prefix is None:
+            return []
+        prefixes = [prefix]
+        if config.bot.respond_bot_mention:
+            prefixes += [f"<@!{config.bot.bot_id}> ", f"<@{config.bot.bot_id}> "]
+        return prefixes
 
     async def setup_hook(self) -> None:
         """Run post-login initialization: public-bot check, slash sync, and override key index setup."""
@@ -133,7 +140,7 @@ class Bot(commands.Bot):
 
         # Modmail should not be public, this is a safety check.
         if app_info.bot_public:
-            if CONFIG.bot.bypass_public_bot_check:
+            if config.bot.bypass_public_bot_check:
                 logger.warning(
                     "[yellow]You have enabled bypass_public_bot_check. This is highly not recommended. "
                     'Make sure to turn off "Public Bot" in the Discord Developer Portal.',
@@ -149,14 +156,14 @@ class Bot(commands.Bot):
         # Set the translator for the command tree. Should be done before syncing.
         await self.tree.set_translator(self.translator)
 
-        if not CONFIG.bot.use_slash_commands:
+        if not config.bot.use_slash_commands:
             logger.info("Slash commands are disabled.")
 
         slash_synced = False
 
-        if CONFIG.bot.force_sync_commands:
+        if config.bot.force_sync_commands:
             slash_synced = True
-            if CONFIG.bot.use_slash_commands:
+            if config.bot.use_slash_commands:
                 logger.info("Force syncing slash commands.")
                 logger.warning(
                     "[red]You should turn off force_sync_commands, or else your bot will be rate-limited.",
@@ -172,48 +179,48 @@ class Bot(commands.Bot):
                 await self._unsync_slash_commands()
 
         else:
-            if CONFIG.bot.use_slash_commands:
+            if config.bot.use_slash_commands:
                 # Sync slash commands if last synced in a different version.
-                if self.database_client.settings.last_slash_synced_version != self.version:
+                if self.db.settings.last_slash_synced_version != self.version:
                     slash_synced = True
                     await self._sync_slash_commands()
             else:
                 # Un-sync slash commands if last synced is not None (it's un-synced when None).
-                if self.database_client.settings.last_slash_synced_version is not None:
+                if self.db.settings.last_slash_synced_version is not None:
                     slash_synced = True
                     await self._unsync_slash_commands()
 
         # Update the last ran locale in the database.
-        last_ran_locale = self.database_client.settings.last_ran_locale
-        default_locale_str = CONFIG.default_locale
+        last_ran_locale = self.db.settings.last_ran_locale
+        default_locale_str = config.default_locale
         if last_ran_locale != default_locale_str:
             if last_ran_locale is not None:  # The locale was changed, need to resync the commands.
                 logger.info("Locale changed from %s to %s", last_ran_locale, default_locale_str)
-                if CONFIG.bot.use_slash_commands and not slash_synced:
+                if config.bot.use_slash_commands and not slash_synced:
                     slash_synced = True
                     await self._sync_slash_commands()
 
-            await self.database_client.update_settings(last_ran_locale=default_locale_str)
+            await self.db.update_settings(last_ran_locale=default_locale_str)
 
-        last_slash_minimum_permission_int = self.database_client.settings.last_slash_minimum_permission_int
-        if last_slash_minimum_permission_int != CONFIG.permission.slash_minimum_permission_int:
+        last_slash_minimum_permission_int = self.db.settings.last_slash_minimum_permission_int
+        if last_slash_minimum_permission_int != config.permission.slash_minimum_permission_int:
             if last_slash_minimum_permission_int is not None:
                 logger.info(
                     "Slash minimum permission changed from %s to %s",
                     last_slash_minimum_permission_int,
-                    CONFIG.permission.slash_minimum_permission_int,
+                    config.permission.slash_minimum_permission_int,
                 )
-                if CONFIG.bot.use_slash_commands and not slash_synced:
+                if config.bot.use_slash_commands and not slash_synced:
                     slash_synced = True
                     await self._sync_slash_commands()
-            await self.database_client.update_settings(
-                last_slash_minimum_permission_int=CONFIG.permission.slash_minimum_permission_int
+            await self.db.update_settings(
+                last_slash_minimum_permission_int=config.permission.slash_minimum_permission_int
             )
 
         # Update the last ran version in the database.
-        last_ran_version = self.database_client.settings.last_ran_version
+        last_ran_version = self.db.settings.last_ran_version
         if last_ran_version != self.version:
-            await self.database_client.update_settings(last_ran_version=self.version)
+            await self.db.update_settings(last_ran_version=self.version)
             logger.debug("Updated last ran version to %s", self.version)
 
         self.permission_command_index = PermissionCommandIndex.from_bot(self)
@@ -225,7 +232,7 @@ class Bot(commands.Bot):
         logger.debug("Syncing slash commands (this may take a while).")
         await self.tree.sync()
         logger.debug("Slash commands synced.")
-        await self.database_client.update_settings(last_slash_synced_version=self.version)
+        await self.db.update_settings(last_slash_synced_version=self.version)
 
     async def _unsync_slash_commands(self) -> None:
         """Clear all registered slash commands from Discord and mark as un-synced in the database."""
@@ -233,23 +240,23 @@ class Bot(commands.Bot):
         self.tree.clear_commands(guild=None)
         await self.tree.sync()
         logger.debug("Slash commands un-synced.")
-        await self.database_client.update_settings(last_slash_synced_version=None)
+        await self.db.update_settings(last_slash_synced_version=None)
 
     def _resolve_config_permission_overrides(self) -> None:
         """Resolve config override keys through the command index using the default locale.
 
         Runs after [`permission_command_index`][] is built. Each key in
-        `CONFIG.permission.overrides` is resolved against the index so that both
+        `config.permission.overrides` is resolved against the index so that both
         canonical names and the default-locale localized names are accepted in the YAML.
         Unrecognized keys are left in place with a warning logged.
         """
-        index = self.permission_command_index(CONFIG.default_locale)
-        overrides = CONFIG.permission.overrides
+        index = self.permission_command_index(config.default_locale)
+        overrides = config.permission.overrides
         new_overrides: dict[str, RequiredAccessLevel] = {}
         for key, value in overrides.items():
             resolved = index.resolve(key, allow_raw_key=True)
             if resolved is None:
-                logger.warning("CONFIG permission override: ignoring unrecognized command %r", key)
+                logger.warning("config permission override: ignoring unrecognized command %r", key)
                 new_overrides[key] = value
             else:
                 new_overrides[resolved] = value
@@ -263,7 +270,7 @@ class Bot(commands.Bot):
         then rewrites any matching keys in every profile's `permission_overrides` dict
         and persists the updated profiles to the database.
         """
-        # TODO: Also rename the CONFIG.permission.overrides keys
+        # TODO: Also rename the config.permission.overrides keys
         renames = {
             k: v
             for cog in self.cogs.values()
@@ -273,7 +280,7 @@ class Bot(commands.Bot):
         if not renames:
             return
 
-        for profile in self.database_client.profiles:
+        for profile in self.db.profiles:
             new_overrides: dict[str, PermissionOverrideValue] = {}
             changed = False
 
@@ -292,9 +299,7 @@ class Bot(commands.Bot):
                     new_overrides[key] = value
 
             if changed:
-                await self.database_client.update_profile(
-                    profile.model_copy(update={"permission_overrides": new_overrides})
-                )
+                await self.db.update_profile(profile.model_copy(update={"permission_overrides": new_overrides}))
 
     def _task_done_callback(self, task: asyncio.Task[Any], *, suppress_errors: bool) -> None:
         """Discard `task` from tracking and log any unhandled exception.
@@ -337,30 +342,6 @@ class Bot(commands.Bot):
         task.add_done_callback(functools.partial(self._task_done_callback, suppress_errors=suppress_errors))
         return task
 
-    async def close(self) -> None:
-        """Cancel all in-flight background tasks and wait for them to stop.
-
-        Sends [`asyncio.Task.cancel`][] to every tracked task, then waits up to 5 seconds
-        for them to acknowledge cancellation. Each task times out independently — an exception
-        in one does not affect the others. Tasks still running after the timeout are logged
-        as a warning and dropped from tracking.
-
-        Note:
-            The disconnect step is shielded from cancellation so that cleanup always
-            completes even when this coroutine is called from within a cancelled task
-            (e.g. during `async with` exit after SIGTERM / SIGINT).
-        """
-        await asyncio.shield(self.database_client.disconnect())
-        await super().close()
-        if self._pending_tasks:
-            logger.debug("Cancelling %d pending background task(s).", len(self._pending_tasks))
-            for task in list(self._pending_tasks):
-                task.cancel()
-            _, still_running = await asyncio.wait(self._pending_tasks, timeout=5.0)
-            if still_running:
-                logger.warning("%d background task(s) did not stop within the timeout.", len(still_running))
-            self._pending_tasks.clear()
-
     def run(self, *args: Any, **kwargs: Any) -> NoReturn:
         """Always raises; use [`run_bot`][] to start the bot.
 
@@ -378,23 +359,45 @@ class Bot(commands.Bot):
         self._exit_status = 0
 
         async def bot_runner() -> None:
-            await self.database_client.connect()
+            await self.db.connect()
+            try:
+                for ext in ("utility", "modmail"):
+                    logger.debug("Loading extension %s", ext)
+                    await self.load_extension(f".cogs.{ext}", package="modmail")
+                if config.bot.enable_jishaku:
+                    logger.warning("[red]Loading extension jishaku (this may be unsafe)", extra={"markup": True})
+                    await self.load_extension("jishaku")
 
-            for ext in ["utility", "modmail"]:
-                logger.debug("Loading extension %s", ext)
-                await self.load_extension(f".cogs.{ext}", package="modmail")
-            if CONFIG.bot.enable_jishaku:
-                logger.warning("[red]Loading extension jishaku (this may be unsafe)", extra={"markup": True})
-                await self.load_extension("jishaku")
+                async with self:
+                    logger.info("[bold green]Modmail is starting.", extra={"markup": True})
+                    await self.start(config.bot.token.get_secret_value(), reconnect=True)
+            finally:
+                if self._pending_tasks:
+                    logger.debug("Cancelling %d pending background task(s).", len(self._pending_tasks))
+                    for task in list(self._pending_tasks):
+                        task.cancel()
+                    try:
+                        _, still = await asyncio.wait(self._pending_tasks, timeout=5.0)
+                        if still:
+                            logger.warning("%d background task(s) did not stop within the timeout.", len(still))
+                    except Exception:
+                        logger.debug("Error during background task cancellation.", exc_info=True)
+                    self._pending_tasks.clear()
 
-            async with self:
-                logger.info("[bold green]Modmail is starting.", extra={"markup": True})
-                await self.start(CONFIG.bot.token.get_secret_value(), reconnect=True)
+                try:
+                    await asyncio.shield(self.db.disconnect())
+                except Exception:
+                    logger.debug("Error during database disconnect.", exc_info=True)
 
-        # Route SIGTERM through KeyboardInterrupt so it follows the same graceful
-        # path as Ctrl+C — asyncio.run() cancels the main task, __aexit__ calls
-        # close() once, and the except KeyboardInterrupt below handles it.
+        # Route known termination signals through KeyboardInterrupt so they follow
+        # the same graceful path as Ctrl+C — asyncio.run() cancels the main task,
+        # __aexit__ runs the inherited close(), and the finally block handles
+        # cleanup.  Only register signals that exist on the current platform.
         signal.signal(signal.SIGTERM, signal.default_int_handler)
+        for sig_name in ("SIGHUP", "SIGBREAK"):
+            sig = getattr(signal, sig_name, None)
+            if sig is not None:
+                signal.signal(sig, signal.default_int_handler)
 
         try:
             if not TYPE_CHECKING:
@@ -417,7 +420,7 @@ class Bot(commands.Bot):
                     "[bold red]Another instance of this bot is already running "
                     "(host: %s, PID: %d, started: %s). "
                     "Stop the other instance before starting a new one. "
-                    "If it crashed, wait 30 seconds for the lock to expire automatically.",
+                    "If it crashed, wait 20 seconds for the lock to expire automatically.",
                     e.hostname,
                     e.pid,
                     e.acquired_at,
@@ -466,7 +469,7 @@ class Bot(commands.Bot):
         await self.wait_until_ready()
 
         other_server_names = [
-            f"{guild} ({guild.id})" for guild in self.guilds if guild.id != CONFIG.bot.staff_server_id
+            f"{guild} ({guild.id})" for guild in self.guilds if guild.id != config.bot.staff_server_id
         ]
 
         # Check if the bot is in the staff server.
@@ -475,7 +478,7 @@ class Bot(commands.Bot):
             logger.critical(
                 "[bold red]The bot is not in the staff server (%d). "
                 "Please double check the ID, invite the bot to the server, and then restart the bot.",
-                CONFIG.bot.staff_server_id,
+                config.bot.staff_server_id,
                 extra={"markup": True},
             )
             if other_server_names:  # If the bot is in other servers, show them.
@@ -519,7 +522,7 @@ class Bot(commands.Bot):
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         """Close the bot if removed from the configured staff guild."""
         logger.info("Removed from guild %s", guild.name)
-        if guild.id == CONFIG.bot.staff_server_id:
+        if guild.id == config.bot.staff_server_id:
             await self._not_in_guild_close()
             return
 
@@ -548,8 +551,8 @@ class Bot(commands.Bot):
         dc_status: discord.Status | None = None
 
         # db_activity and db_status should be the same as activity and status if provided
-        db_activity = self.database_client.settings.activity
-        db_status = self.database_client.settings.status
+        db_activity = self.db.settings.activity
+        db_status = self.db.settings.status
 
         if db_activity:
             if db_activity.type == ActivityType.custom:
@@ -589,11 +592,11 @@ class Bot(commands.Bot):
 
         # Update the database settings
         if activity is not None and status is not None:
-            await self.database_client.update_settings(activity=activity, status=status)
+            await self.db.update_settings(activity=activity, status=status)
         elif activity is not None:
-            await self.database_client.update_settings(activity=activity)
+            await self.db.update_settings(activity=activity)
         elif status is not None:
-            await self.database_client.update_settings(status=status)
+            await self.db.update_settings(status=status)
 
         dc_activity, dc_status = self._get_discord_presence_from_settings()
 
@@ -603,7 +606,7 @@ class Bot(commands.Bot):
     async def clear_bot_presence(self) -> None:
         """Clear both activity and status from the database and Discord display."""
         logger.debug("Clearing bot presence.")
-        await self.database_client.update_settings(activity=None, status=None)
+        await self.db.update_settings(activity=None, status=None)
         await self.set_bot_presence()
 
     async def on_command_error(self, context: commands.Context[Any], exception: commands.CommandError) -> None:
@@ -665,6 +668,21 @@ class Bot(commands.Bot):
                     )
             return
 
+        if isinstance(
+            exc, commands.BadArgument | commands.ArgumentParsingError | commands.MissingRequiredArgument
+        ):
+            logger.debug("Bad argument in %s: %s", context.command, exc)
+            cmd = context.command.qualified_name if context.command else "?"
+            await self.send_message(
+                # @param cmd: The qualified command name.
+                _("msg.error.bad_argument", cmd=cmd, escape=False),
+                channel=context,
+                ephemeral=True,
+                reference=context.message,
+                fail_silently=True,
+            )
+            return
+
         # commands.CommandInvokeError — prefix command body raised an exception.
         # discord.app_commands.CommandInvokeError — slash/hybrid body raised a non-CommandError.
         # Both carry .original with the underlying exception.
@@ -686,7 +704,7 @@ class Bot(commands.Bot):
             )
 
             await self.send_message(
-                _("msg.permission.command_error"),
+                _("msg.error.command"),
                 channel=context,
                 ephemeral=True,
                 reference=context.message,
@@ -798,7 +816,7 @@ class Bot(commands.Bot):
             The resolved access level.
         """
         # Jishaku is an owner-only debug extension that enforces its own access checks.
-        if CONFIG.bot.enable_jishaku and base_command.cog_name == "Jishaku":
+        if config.bot.enable_jishaku and base_command.cog_name == "Jishaku":
             return RequiredAccessLevel.owner
 
         default_access_level: RequiredAccessLevel | None = None
@@ -812,10 +830,10 @@ class Bot(commands.Bot):
             command_name = cls.get_canonical_command_name(command)
 
             # If the parent command has a wildcard override. e.g. "profile+" will match "profile add"
-            override = CONFIG.permission.overrides.get(command_name + "+")
+            override = config.permission.overrides.get(command_name + "+")
 
             if i == 0:  # Check for override on the exact command name
-                override = CONFIG.permission.overrides.get(command_name, override)
+                override = config.permission.overrides.get(command_name, override)
 
             if override is not None:
                 return override
@@ -843,11 +861,11 @@ class Bot(commands.Bot):
         """
         all_profiles: list[ProfileModel] = []  # All profiles to check for permission overrides
 
-        user_profile = self.database_client.get_profile(user.id, ProfileType.user)
+        user_profile = self.db.get_profile(user.id, ProfileType.user)
         if isinstance(user, discord.Member):  # Command invoked in a guild
             # Loops all roles from @everyone -> top role
             for role in user.roles:
-                role_profile = self.database_client.get_profile(role.id, ProfileType.role)
+                role_profile = self.db.get_profile(role.id, ProfileType.role)
                 if role_profile is not None:
                     all_profiles.insert(0, role_profile)
         if user_profile is not None:
@@ -909,7 +927,7 @@ class Bot(commands.Bot):
             return UserAccessResult(UserAccessDenyReason.BOT)
 
         if command is not None:
-            if CONFIG.bot.enable_jishaku and command.cog_name == "Jishaku":
+            if config.bot.enable_jishaku and command.cog_name == "Jishaku":
                 return UserAccessResult(UserAccessAllowReason.JISHAKU)
 
             if await self.is_owner(author):
@@ -937,7 +955,7 @@ class Bot(commands.Bot):
         del is_owner
 
         if (
-            CONFIG.permission.discord_admin_bypass
+            config.permission.discord_admin_bypass
             and isinstance(author, discord.Member)
             and author.guild_permissions.administrator
             and command_access_level != RequiredAccessLevel.owner
@@ -985,7 +1003,7 @@ class Bot(commands.Bot):
         if command_access_level == RequiredAccessLevel.owner:
             return UserAccessResult(UserAccessDenyReason.OWNER_ONLY)
 
-        if CONFIG.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
+        if config.permission.default_access_everyone and command_access_level == RequiredAccessLevel.everyone:
             return UserAccessResult(UserAccessAllowReason.EVERYONE)
 
         for profile in profiles:
@@ -1035,7 +1053,7 @@ class Bot(commands.Bot):
     def translate(
         self, string: locale_str, *, locale: str | None = None, escape: bool | None = None, **kwargs: Any
     ) -> str:
-        """Translate `string` to `locale` (`CONFIG.default_locale` when `None`).
+        """Translate `string` to `locale` (`config.default_locale` when `None`).
 
         Args:
             string: The [`locale_str`][] to translate.

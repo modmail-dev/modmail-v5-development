@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import discord
 from discord.ext import commands
 
-from .. import CONFIG
+from ..config import config
 from ..errors import BadPermissionsError, NotInTicketError, StaffGuildNotConfiguredError
 
 if TYPE_CHECKING:
@@ -107,10 +107,10 @@ class CommandBuilder[T: Co]:
         self.wrappers.append((commands.guild_only, (), {}))
 
         # Set the default permissions for the slash command
-        if CONFIG.permission.slash_minimum_permission_int != 0:
+        if config.permission.slash_minimum_permission_int != 0:
             self.wrappers.append((
                 discord.app_commands.default_permissions,
-                (discord.Permissions(CONFIG.permission.slash_minimum_permission_int),),
+                (discord.Permissions(config.permission.slash_minimum_permission_int),),
                 {},
             ))
 
@@ -384,7 +384,7 @@ def in_modmail_ticket() -> Any:
         if missing.value:
             raise BadPermissionsError(channel=ctx.channel, missing=missing)
 
-        ticket_model = await ctx.bot.database_client.get_ticket_by_channel(ctx.channel.id, only_open=True)
+        ticket_model = await ctx.bot.db.get_ticket_by_channel(ctx.channel.id, only_open=True)
         if ticket_model is None:
             raise NotInTicketError("This command can only be used in Modmail tickets.")
 

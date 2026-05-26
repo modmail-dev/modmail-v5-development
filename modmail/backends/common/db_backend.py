@@ -23,7 +23,7 @@ from modmail.errors import DatabaseOperationError, InstanceAlreadyRunningError
 from .models import InstanceLockModel
 
 if TYPE_CHECKING:
-    from modmail.config import Config
+    from modmail.config.models import Config, DatabaseConfig
     from modmail.enum import TicketStatus
 
     # Resolve docs import
@@ -42,7 +42,7 @@ __all__ = ["DBBackend", "LockInfo"]
 logger = logging.getLogger(__name__)
 
 _LOCK_HEARTBEAT_INTERVAL: int = 5
-_LOCK_STALE_THRESHOLD: int = 25
+_LOCK_STALE_THRESHOLD: int = 20
 
 
 @dataclass
@@ -82,6 +82,11 @@ class DBBackend(ABC):
         self._config = config
         self._instance_id: str = str(uuid.uuid4())
         self._heartbeat_task: asyncio.Task[None] | None = None
+
+    @property
+    def _db_config(self) -> DatabaseConfig:
+        """The [DatabaseConfig][]{ data-preview } for this `bot_id`."""
+        return self._config.database
 
     @abstractmethod
     async def _try_insert_lock(self, lock_data: InstanceLockModel) -> bool:
@@ -188,6 +193,14 @@ class DBBackend(ABC):
 
         if existing is None:
             raise InstanceAlreadyRunningError(None, None, None)
+
+        logger.debug(
+            "Existing lock heartbeat_at=%s, stale_cutoff=%s (threshold=%ds), is_stale=%s",
+            existing.heartbeat_at,
+            stale_cutoff,
+            _LOCK_STALE_THRESHOLD,
+            existing.heartbeat_at <= stale_cutoff,
+        )
 
         if existing.heartbeat_at > stale_cutoff:
             raise InstanceAlreadyRunningError(existing.hostname, existing.pid, existing.acquired_at)

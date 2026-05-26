@@ -1,110 +1,71 @@
-# AGENTS.md
+# Modmail v5
 
-## Setup & verification
+> **Before editing any file, re-read this file first.** Every rule below
+> is mandatory — assume nothing, verify everything.
+
+## Docstring quick-ref
+
+| Rule | Wrong | Right |
+|---|---|---|
+| Single backticks only | ``discord`` | `discord` |
+| No implementation details in attr desc | "Per-logger floor for..." | "Logging level for the `discord` package." |
+| Line length 105 (docstrings) | lines > 105 chars | split to ≤ 105 |
+| No semicolons | `for the user;` | `for the user.` |
+
+The full rules are in the Conventions section below.
+
+## Git safety
+
+- **Never run destructive git operations**: no `git checkout`, `git reset --hard`, `git revert`, `git clean`, `git push --force`, or any command that discards or overwrites uncommitted changes. If you need to restore a file, ask first.
+- **Never run `rm` on tracked files** — warn the user before doing so.
+
+## Commands
 
 ```bash
+# Setup
 uv sync --locked --compile-bytecode --no-default-groups --extra speed --extra <DBTYPE>
-# DBTYPE: mongodb | sqlite | postgresql | mysql | mariadb
-cp config.yaml.example config.yaml  # edit token, staff_server_id, etc.
-uv run python start.py
-```
+cp config.toml.example config.toml  # edit token, staff_server_id, etc.
 
-Run before marking work done:
-
-```bash
+# Required before marking any work done
 uv run ruff check --fix && uv run ruff format
 uv run pyright
 ```
 
-- **Python 3.14 only** (`requires-python = "==3.14.*"`).
-- Line length: 115 (docstrings: 105). Ruff `preview = true`.
-- Tests are **obsolete/disabled** — do not run/create them, do not use as reference.
+## Conventions
 
-## Hard conventions
+- **Line length**: 115 (docstrings: 105). Ruff `preview = true`.
+- **Docstrings**: Google style. Cross-refs: `[Name][]`.
+- **Attribute descriptions**: inline `"""` under each field, for the user, no implementation details, no semicolons.
+- **US spelling** (`color`, not `colour`).
+- **Never add suppression comments** (`# noqa`, `# type: ignore`, `# pyright: ignore`). If ruff or pyright complains, fix the code, don't silence it.
+- **Tests are obsolete/disabled** — do not create, run, or reference them.
+- **No Cog classes**: commands are `async` functions decorated with `@bot_command()` or `@bot_group()`. Function names must end with `_command`.
+- **Single backticks only** in docstrings (`code`, never ``code``).
+- **No section divider comments** (no `# ----` banners, separator blocks, or partitioning markers).
+- **Config is a proxy**: `from modmail.config import config`. Do not construct `Config(...)` directly — access before init raises `RuntimeError`. Mutate at runtime via `get_store().update(...)`.
+- **Don't call `Bot.run()`** — it raises `NotImplementedError`. Always use `Bot.run_bot()`.
 
-- **Every `.py` file starts with** `from __future__ import annotations` (enforced via ruff isort `required-imports`).
-- **Never add suppression comments** (`# noqa`, `# type: ignore`, `# pyright: ignore`).
-- Docstrings: **Google style**. Cross-refs: `[Name][]`. Unrecognized section headers become admonition boxes (`Note:`, `Warning:`, etc.).
-- Attribute descriptions: for the user, no implementation details, no semicolons.
-- Use US spelling (`color`, not `colour`).
-- **Single backticks only** (``` `code` ```, never ``` ``code`` ```) — in docstrings.
-- **No section divider comments** (no `# ----` banners, separator blocks, or partitioning markers in code).
+## Non-obvious patterns
 
-## Startup order
-
-1. `modmail.__main__` → `modmail.init()` → `modmail.run_bot()`
-2. `init()` calls `config.load_config()` (YAML → Pydantic `Config`), stores in module `_state["config"]`.
-3. `run_bot()` creates `Bot()`, which calls `create_db_client(CONFIG)` to wire the backend.
-4. `Bot.run_bot()` → `database_client.connect()` → loads two extensions (`modmail.cogs.utility`, `modmail.cogs.modmail`) → `bot.start()`. On shutdown, calls `database_client.disconnect()`.
-5. `modmail.CONFIG` is a lazy `__getattr__` — raises `RuntimeError` if accessed before `init()`.
-
-## Command system (`modmail/core/commands.py`)
-
-Cogs are **not** written as classes. Commands are plain `async` functions decorated with `@bot_command()` or `@bot_group()`, which wrap them in `CommandBuilder` / `GroupBuilder`. These *defer* command creation — they store the callback + kwargs without calling `commands.hybrid_command()`.
-
-At cog load time, `create_cog()` dynamically builds a `Cog` subclass via `type(name, (Cog,), methods)`.
-
-`CommandBuilder.get_commands(cog_name)` injects `cog_name` into the callback's `__qualname__` (discord.py builds the command tree from qualnames), auto-applies `app_commands.rename` / `app_commands.describe` from `param_info`, applies deferred wrappers from `@wrap()`, then calls `commands.hybrid_command(...)(func)`. `GroupBuilder` extends this to recursively build subgroups.
-
-Use `@wrap()` to attach standard discord.py checks:
-
-```python
-@wrap(commands.has_permissions, manage_messages=True)
-@bot_command(name=...)
-async def my_command(cog, ctx): ...
-```
-
-`@in_modmail_ticket()` (built on `wrap`) checks the channel is an open ticket in the staff guild.
-
-## Permissions (`modmail/core/permission.py` + `bot.py`)
-
-Two checks run on every command: `_bot_can_run_check` (no-op) and `_user_access_check` (calls `Bot.check_user_access()`).
-
-`check_user_access()` resolves `RequiredAccessLevel` via: (1) `CONFIG.permission.overrides`, (2) `__permission__` attribute from `@staff_only` etc., (3) defaults to `everyone`. Then evaluates profiles (user + role profiles, `@everyone` upward): profile deny overrides, profile allow overrides (exact or wildcard `name+`), owner-only guard, Discord admin bypass, level match (`access_level >= required_level`), everyone default.
-
-Profiles live in `DBClient.profiles` (in-memory cache). Modifying a profile triggers `StaffGuild.grant_access()` / `revoke_access()` to update Discord channel permission overwrites.
-
-## Tickets (`modmail/core/staff_guild.py` + `_ticket_view.py`)
-
-**DM listener** (`dm_receive.py`): ignores bots/non-DM, checks guild setup, skips valid prefix commands, calls `staff_guild.get_ticket()` or `staff_guild.create_ticket()`.
-
-**`StaffGuild`** owns channel setup and access. **`TicketView`** is the runtime handle for an open ticket — message relay, DM delivery, layout building.
-
-`create_ticket()`: creates a channel/thread → builds `TicketModel` (12-char random `key`) → persists → creates `TicketView` → `view.open()` posts log entry, staff info layout (account age, shared servers, past count), and "opened" DM layout.
-
-**Message relay**: `process_dm_message()` (DM → staff) and `process_reply_message()` (staff → DM) both build Component v2 layouts (`discord.ui.LayoutView`/`Container`). Failed deliveries mark recipients `unreachable` (retried after 30 min). Accent colors encode message type (green=reply, red=close, blurple=DM, yellow=internal).
-
-**Closure**: `TicketView.close()` marks in DB, spawns `_delete_channel()` (delete or archive/lock thread) and `_update_log()` (edits log entry). Channel/thread deletion listeners also trigger `closed_by_deletion`.
-
-## Backends (`modmail/backends/`)
-
-`create_db_client(config)` maps `database_type` → `DBClient(SQLBackend(config))` or `DBClient(MongoDBBackend(config))`. `DBClient` wraps a `DBBackend`, provides in-memory caches (`profiles`, `settings`) and an instance lock. All persistence goes through `DBClient` methods.
-
-Shared Pydantic models in `common/models/`: `TicketModel`, `TicketMessageModel`, `TicketDMMessageModel`, `TicketUserModel`, `ProfileModel`, `SettingsModel`, `ActivityModel`, `InstanceLockModel`. Both backends persist the same models — **update both when changing persistence**.
-
-## Config loading
-
-`config/loader.py` reads YAML → `Config(**data)`. `Config` extends `pydantic_settings.BaseSettings` — env vars override file values (prefix `modmail__`, delimiter `__`). SQL driver suffix is auto-injected (`postgresql://...` → `postgresql+asyncpg://...`).
-
-## Localization
-
-Gettext (`.po`/`.mo`) via **Babel**. Source files in `modmail/locales/<locale>/LC_MESSAGES/messages.po`, auto-compiled on startup.
-
-`modmail/i18n.py` — `_()` / `_n()` / `_c()` / `_cn()` helpers, plus `cgettext`/`upgettext`/`ngettext`/`unpgettext` aliases. Translator set on `bot.tree` in `setup_hook()`.
-
-`modmail/core/locale.py` — `locale_for()` resolves locale against config. `modmail/core/ephemeral.py` — per-interaction locale routing.
-
-**CLI:** `python -m modmail.locales {extract,check,compile,add,custom}` (`extract` scans sources → updates `.po` → compiles `.mo`).
-
-- Msgids use dotted paths (`cmd.reply.name`, `msg.ticket.log.body.open`). Placeholders: `{name}`.
-- Context (`msgctxt`) via `upgettext("ctx", "key")` when same key needs different translations.
-- `_("internal.blank")` → `""`, `_("internal.error")` → `"!Error!"`.  `internal.*` msgids are rejected by the extractor (known set); unknown ones emit a warning.
-- Comments above `_()` with `@param`/`@info`/`@see` become translator notes in `.po`.
-- **Custom locale**: `python -m modmail.locales custom [BASE]` creates `locales/<BASE>-custom/`.  The directory name uses `-custom` suffix; babel sees `xx_YY@custom` (first `-` → `_`, suffix `-custom` → `@custom`).  At startup `Translator.load_bundles()` loads the custom `.mo` (if present) and checks it before every translation lookup — any translated `msgstr` overrides the default locale.  `config_model._discover_locale_dirs()` excludes `*-custom` so it never appears in `allowed_locales` / `default_locale`.
-
-## Other gotchas
-
-- SQL migrations: `uv run alembic revision --autogenerate -m "description"`. Post-write hooks auto-format via ruff.
-- `Bot.run()` raises `NotImplementedError` — always use `Bot.run_bot()`.
-- Callback function names should end with `_command` — `Bot.add_command()` logs a debug warning if not.
-- Custom locale: directory name uses `-custom` suffix; babel locale uses `@custom` modifier. `_to_babel_locale()` handles the conversion. Only one `*-custom` directory may exist.
+- **SQL driver injection**: the async driver suffix is added automatically (`postgresql://` → `postgresql+asyncpg://`). Don't append it manually.
+- **Backend detection**: the database backend is detected from the URI scheme, not a config key.
+- **Ticket channel check**: use `@in_modmail_ticket()` to guard commands that require an open ticket.
+- **Runtime config editing**: `get_store().update("bot.prefix", SetOp("!"))`.
+- **No member cache**: the bot disables discord.py's default member caching. Use `guild.fetch_member()` — `guild.get_member()` returns `None`.
+- **Allowed mentions default off**: `allowed_mentions` is set to `discord.AllowedMentions.none()`. Mentions do not resolve unless explicitly opted into per-message.
+- **Ticket flow**: DMs to the bot → `staff_guild.create_ticket()` creates a channel/thread in the staff guild → `TicketView` bridges DM ↔ staff messages until close (channel deleted/archived, ticket marked in DB).
+- **Permission evaluation**: `check_user_access()` evaluates in order: profile deny overrides → profile allow overrides (exact + wildcard `name+`) → owner check → Discord admin bypass → `access_level >= required_level` → everyone default.
+- **Both backends persist the same models**: SQL and MongoDB share Pydantic models in `backends/common/models/`. Update both `SQL*Mixin` and `MongoDB*Mixin` when changing persistence schema.
+- **`spawn_task()` for fire-and-forget**: use `bot.spawn_task(coro)` instead of `asyncio.create_task()`. Tasks are tracked in `_pending_tasks` (prevent GC) and canceled on bot shutdown.
+- **Cog `TYPE_CHECKING` trick**: cogs are dynamically built via `create_cog()`. Each `cogs/*/__init__.py` uses `if TYPE_CHECKING: class Name(Cog): ... else: Name = create_cog(...)` to keep type checkers happy.
+- **Localization**: Gettext `.po`/`.mo` via Babel with dotted-path msgids (`cmd.reply.name`). `_()`/`_n()`/`_c()`/`_cn()` return `locale_str` (not `str`); Discord resolves per-user locale at send time. Use `ctx.t(_("key"))` inside commands for a rendered `str` in the user's locale. Placeholders: `{name}`. Context via `upgettext("ctx", "key")`.
+  - PO files auto-compiled to MO on startup via config validator → `ensure_compiled()`.
+  - CLI: `python -m modmail.locales {extract,check,compile,add,custom}`.
+  - Custom locale: `python -m modmail.locales custom [BASE]` creates `locales/<BASE>-custom/`; babel sees `xx_YY@custom`. Only one `*-custom` dir allowed. Custom `.mo` checked before every lookup — translated `msgstr` overrides the default.
+  - `internal.*` msgids are rejected by the extractor (known set: `internal.blank`, `internal.error`); unknown ones emit a warning.
+  - **Construction-time vs translation-time kwargs**: `_("key", name=val)` stores `name=val` in the `locale_str`. `ctx.t(_("key"), name=val2)` merges on top, both works.
+  - **Translator comments**: Comments above `_()` calls with `@info`, `@param`, or `@see` become auto-comments in `.po` files.
+    - `@info: text` — explains what the string is used for when the msgid isn't self-explanatory.
+    - `@param param-name: Description` — required for every `{placeholder}` in the msgid. One `@param` line per parameter, format `@param name: description`.
+    - `@see other.msgid.key` — copies the `@param` lines from `other.msgid.key` to this entry (useful when two msgids share the same parameters).
+- **`EmbedProxy` for lazy translation**: stores `locale_str` values unresolved. `to_embed(translator, locale)` resolves all strings at send time, so one proxy renders into any locale.

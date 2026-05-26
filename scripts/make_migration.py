@@ -5,7 +5,7 @@ current ORM state against it, runs autogenerate, then deletes the temp file.
 
 The generated migration files use SQLAlchemy abstract types and work on all
 supported dialects (SQLite, PostgreSQL, MySQL/MariaDB).  The one exception is
-PostgreSQL native enum type management (``CREATE TYPE`` / ``DROP TYPE``):
+PostgreSQL native enum type management (`CREATE TYPE` / `DROP TYPE`):
 autogenerate cannot emit those from a SQLite diff, so add them manually if a
 migration adds or removes an enum column.
 

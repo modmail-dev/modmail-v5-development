@@ -1,7 +1,4 @@
-"""Enumeration types used throughout Modmail.
-
-Defines access levels, ticket states, activity types, and other shared enums.
-"""
+"""Enumeration types used throughout Modmail."""
 
 from __future__ import annotations
 
@@ -59,7 +56,7 @@ class AccessLevel(enum.IntEnum):
     Ordered from lowest to highest privilege.
 
     Attributes:
-        everyone: All users; no special permissions required.
+        everyone: All users. No special permissions required.
         staff: Basic staff access.
         manager: Elevated staff access with management capabilities.
         admin: Full administrative access.
@@ -76,7 +73,7 @@ class AccessLevel(enum.IntEnum):
         Returns:
             locale_str: the localized name.
         """
-        from modmail.i18n import _
+        from .i18n import _
 
         match self:
             case AccessLevel.everyone:
@@ -96,7 +93,7 @@ class RequiredAccessLevel(enum.IntEnum):
     assigned to a profile but can be required by certain commands.
 
     Attributes:
-        everyone: No restriction; any user may run the command.
+        everyone: No restriction. Any user may run the command.
         staff: Requires staff access or higher.
         manager: Requires manager access or higher.
         admin: Requires admin access or higher.
@@ -115,7 +112,7 @@ class RequiredAccessLevel(enum.IntEnum):
         Returns:
             locale_str: the localized name.
         """
-        from modmail.i18n import _
+        from .i18n import _
 
         match self:
             case RequiredAccessLevel.everyone:
@@ -182,6 +179,7 @@ class UserAccessAllowReason(enum.StrEnum):
         PROFILE_ALLOW: A profile override explicitly allows access.
         EVERYONE: The command requires no special access and the everyone-default is on.
         LEVEL_MATCH: The user's profile access level meets or exceeds the required level.
+        JISHAKU: The user invoked a jishaku (debug) command.
         UNKNOWN: The user was granted access for an unknown reason.
     """
 
@@ -234,7 +232,7 @@ class ActivityType(enum.Enum):
         Returns:
             locale_str: the localized prefix (e.g. "Playing", "Listening to").
         """
-        from modmail.i18n import _
+        from .i18n import _
 
         match self:
             case ActivityType.playing:
@@ -289,7 +287,7 @@ class StatusType(enum.Enum):
         Returns:
             locale_str: the localized status name.
         """
-        from modmail.i18n import _
+        from .i18n import _
 
         match self:
             case StatusType.online:

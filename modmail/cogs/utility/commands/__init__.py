@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from .about import about_command
+from .config import config_command
 from .help import help_command
 from .profile import profile_command
 from .status import status_command
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 __all__ = [
     "about_command",
     "all_commands",
+    "config_command",
     "help_command",
     "profile_command",
     "status_command",
@@ -28,4 +30,5 @@ all_commands: list[CommandBuilder[Any]] = [
     about_command,
     status_command,
     profile_command,
+    config_command,
 ]

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, Integer, PrimaryKeyConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from modmail.backends.common.models import ProfileModel
+from modmail.backends.common import ProfileModel
 from modmail.enum import AccessLevel, ProfileType
 
 from .base import TABLE_OPTS, Snowflake, SQLBase

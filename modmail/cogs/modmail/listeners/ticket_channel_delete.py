@@ -35,7 +35,7 @@ async def ticket_channel_delete(cog: Modmail, channel: discord.abc.GuildChannel)
     if channel.guild.id != cog.bot.staff_guild.guild_id:
         return
 
-    ticket_model = await cog.bot.database_client.get_ticket_by_channel(channel.id, only_open=True)
+    ticket_model = await cog.bot.db.get_ticket_by_channel(channel.id, only_open=True)
     if not ticket_model:
         return
 

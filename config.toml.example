@@ -1,0 +1,172 @@
+# -----------------------------------------------------------------------------
+# How to edit config.toml:
+#
+# 1. Copy config.toml.example to config.toml and open it in a text editor.
+#
+# 2. Each [section] and key = value pair represents a setting.
+#
+# 3. Values can be strings ("hello"), booleans (true/false), numbers (123),
+#    arrays ([1, 2, 3]), or inline tables ({key = "value"}).
+#
+# 4. Remove the '#' symbol to uncomment a setting and make it active.
+#
+# 5. Once finished, save the file and start the bot.
+#
+# 6. You can also edit these settings at runtime with the /config command
+#    (owner-only) without needing to edit this file directly.
+# -----------------------------------------------------------------------------
+
+# The version of the config file, do not change.
+version = 1.0
+
+# Required: The URL to the bot's log viewer.
+log_url = "https://example.com/"
+
+# Which locales the bot should support.
+# Currently supported: en-US (English)
+# allowed_locales = ["en-US"]
+
+# The default locale for the bot.
+# default_locale = "en-US"
+
+# ---------------------------------------------------------------------------
+# Bot settings
+# ---------------------------------------------------------------------------
+
+[bot]
+# Required: The bot's token, REPLACE WITH YOUR BOT'S TOKEN!
+token = "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.12345.XYZ"
+
+# Required: The ID of your staff server (where new tickets are created).
+# See https://dis.gd/findmyid to find your server's ID.
+staff_server_id = 100000000000001
+
+# The bot's prefix. Set to "" to disable prefixed commands.
+# prefix = "?"
+
+# Whether the bot should respond to mentions.
+# respond_bot_mention = true
+
+# The IDs of the bot's owners. Defaults to the application owner if not set.
+# Add multiple IDs as a comma-separated array: [111, 222, 333]
+# owner_ids = [100000000000001]
+
+# Whether to use slash commands (i.e. /cmd).
+# use_slash_commands = true
+
+# Force sync/un-sync slash commands on startup (development only).
+# force_sync_commands = false
+
+# Enable the jishaku debug extension (requires jishaku installed).
+# enable_jishaku = false
+
+# Bypass the public bot check (not recommended).
+# bypass_public_bot_check = false
+
+# Hide owner-only commands from non-owners in /help.
+# hide_owner_commands = true
+
+# Hide commands the user cannot access from /help.
+# hide_inaccessible = true
+
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
+
+[database]
+# Database connection URI. Backend type is detected automatically:
+#   MongoDB:   "mongodb://localhost:27017"  or  "mongodb+srv://..."
+#   SQLite:    "sqlite:///modmail.db"
+#   Postgres:  "postgresql://user:password@localhost/modmail"
+#   MySQL:     "mysql://user:password@localhost/modmail"
+#   MariaDB:   "mariadb://user:password@localhost/modmail"
+uri = "sqlite:///modmail.db"
+
+# Database name (MongoDB only). Falls back to the URI's database or "modmail".
+# database = "modmail"
+
+# Allow invalid TLS certificates (MongoDB only, not recommended).
+# tls_allow_invalid_certificates = false
+
+# ---------------------------------------------------------------------------
+# Permissions
+# ---------------------------------------------------------------------------
+
+[permission]
+# Users with Discord "Administrator" permission bypass access checks.
+# discord_admin_bypass = true
+
+# Everyone can use commands at the "everyone" access level by default.
+# default_access_everyone = true
+
+# Minimum Discord permissions integer required to see slash commands.
+# Default (11264): View Channel, Send Messages, Manage Messages.
+# Set to 0 to show commands to everyone.
+# Calculate custom values: https://discordapi.com/permissions.html#11264
+# slash_minimum_permission_int = 11264
+
+# Custom permission overrides for specific commands.
+# Access levels: everyone, staff, manager, admin, owner
+# Append "+" to a group name to apply to all subcommands (e.g. "status+").
+[permission.overrides]
+# "some command name" = "staff"
+# "some group+" = "everyone"
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+[logging]
+# Available levels: NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL.
+# NOTSET means no override — inherits root_level.
+
+# Let Modmail configure logging (true) or skip entirely (false).
+# managed = true
+
+# Shorthand: clamp every console-level field below WARNING up to WARNING.
+# Useful for hiding third-party library output in production.
+# Set to false for fine-grained control.
+# error_only = true
+
+# Console output level for the modmail package.
+# modmail_level = "INFO"
+
+# Default console level for loggers not listed.
+# root_level = "WARNING"
+
+# Discord.py console output levels.
+# discord_level = "INFO"
+# discord_state_level = "INFO"
+# discord_http_level = "INFO"
+# discord_gateway_level = "INFO"
+
+# SQLAlchemy console output levels.
+# sqlalchemy_level = "WARNING"
+# sqlalchemy_engine_level = "WARNING"
+
+# PyMongo console output levels.
+# pymongo_level = "WARNING"
+# pymongo_topology_level = "WARNING"
+
+# -- Logfile settings (fixed levels) --------------------------------
+# File output uses fixed per-logger levels (not user-configurable):
+#   modmail=DEBUG, discord.state=DEBUG,
+#   discord/discord.http/discord.gateway=INFO,
+#   sqlalchemy/pymongo/pymongo.topology=INFO,
+#   everything else=WARNING.
+
+# Path to logfile. Set to "" to disable file logging.
+# logfile = "logs/modmail.log"
+
+# Logfile format.
+# See https://docs.python.org/3/library/logging.html#logrecord-attributes for all format specifiers.
+# logfile_format = "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d %(message)s"
+
+# Maximum logfile bytes before rotation (default 10 MB).
+# logfile_max_size = 10485760
+
+# Number of rotated backups to keep (default 3).
+# logfile_backup_count = 3
+
+# Console format. Level is already prepended by RichHandler.
+# stdout_format = "%(message)s"

@@ -21,6 +21,8 @@ from babel.support import NullTranslations as _NullTranslations, Translations as
 from discord import app_commands
 from discord.app_commands import locale_str
 
+from .config import config
+
 if TYPE_CHECKING:
     from typing import Any
 
@@ -70,6 +72,7 @@ class Translator(app_commands.Translator):
     _custom_bundle: _NullTranslations | None = None
     _custom_locale: str | None = None
     _fallback_locale: str = "en-US"
+    _fallback_bundle: _NullTranslations | None = None
 
     async def translate(
         self,
@@ -79,32 +82,45 @@ class Translator(app_commands.Translator):
     ) -> str | None:
         """discord.py `app_commands.Translator` entry point.
 
+        Args:
+            string: The `locale_str` to translate.
+            locale: Target locale as a `discord.Locale` or BCP-47 string.
+            context: Translation context type from discord.py.
+
         Returns:
             Translated string, or `None`.
         """
         return self.translate_sync(string, locale)
 
     @classmethod
-    def load_bundles(cls, locales: list[str]) -> None:
-        """Load `.mo` files from *dir_path* for every locale in *locales*.
+    def load_bundles(cls, locales: tuple[str, ...]) -> None:
+        """Load `.mo` files for the given *locales* from the locale directory.
 
-        `"en-US"` is always loaded as the ultimate fallback.  Call this
+        `"en-US"` is always loaded as the ultimate fallback. Call this
         once during configuration validation.
 
         Args:
             locales: BCP-47 locale strings to load.
         """
-        fallback_bundle = _BabelTranslations.load(LOCALES_ROOT, locales=[cls._fallback_locale], domain=cls._DOMAIN)
+        from .locales import ensure_compiled
+
+        ensure_compiled()
+
+        if cls._fallback_bundle is None:
+            cls._fallback_bundle = _BabelTranslations.load(
+                LOCALES_ROOT, locales=[cls._fallback_locale], domain=cls._DOMAIN
+            )
+            cls._bundles[cls._fallback_locale] = cls._fallback_bundle
 
         for bcp47_locale in sorted(locales):
             if bcp47_locale == cls._fallback_locale:
-                cls._bundles[cls._fallback_locale] = fallback_bundle
                 continue
             t = _BabelTranslations.load(LOCALES_ROOT, locales=[bcp47_locale], domain=cls._DOMAIN)
-            t.add_fallback(fallback_bundle)
+            t.add_fallback(cls._fallback_bundle)
             cls._bundles[bcp47_locale] = t
 
         cls.load_custom_bundle()
+        logger.info("Loaded translation bundles for locales: %s", ", ".join(cls._bundles))
 
     @classmethod
     def load_custom_bundle(cls) -> None:
@@ -125,17 +141,13 @@ class Translator(app_commands.Translator):
         """Return the translation bundle most appropriate for *locale*.
 
         Uses `babel.core.negotiate_locale` to find the best match from
-        the available `_bundles`, falling back to `cls._fallback_locale`
-        (`"en-US"`) when none matches.
+        the available `_bundles`, falling back to `config.default_locale`
         """
         available = list(cls._bundles)
         match = negotiate_locale([locale], available, sep="-")
         if match is not None:
             return cls._bundles[match]
-
-        from . import CONFIG
-
-        return cls._bundles[CONFIG.default_locale]
+        return cls._bundles[config.default_locale]
 
     @classmethod
     def format_template(cls, template: str, bcp47_locale: str, **kwargs: Any) -> str:
@@ -148,13 +160,21 @@ class Translator(app_commands.Translator):
         * Date, time, and number types are formatted locale-aware.
         * Unmatched or malformed `{...}` tokens are left as-is.
 
+        Args:
+            template: The template string with `{name}` placeholders.
+            bcp47_locale: The target locale as a BCP-47 string.
+            **kwargs: Values to substitute into the template.
+
         Returns:
             The rendered string.
         """
         locale = _BabelLocale.parse(bcp47_locale, sep="-")
 
         def _format_value(value: Any) -> str:
-            """Format a single substitution value for the target locale.
+            """Format a substitution value for display.
+
+            Args:
+                value: The substitution value to format.
 
             Returns:
                 The formatted string.
@@ -247,6 +267,14 @@ class Translator(app_commands.Translator):
             kwargs[key] = value
 
         def _lookup(bundle: _NullTranslations) -> str:
+            """Look up a translation from a bundle using context/plural rules.
+
+            Args:
+                bundle: The translation bundle to query.
+
+            Returns:
+                The translated (but unformatted) string, or None.
+            """
             if ctx and plural_msgid and count is not None:
                 return bundle.unpgettext(ctx, msgid, plural_msgid, count)
             if ctx:
@@ -267,14 +295,19 @@ class Translator(app_commands.Translator):
     def gettext(cls, msgid: str, /, *, escape: bool = True, **kwargs: object) -> locale_str:
         """Mark *msgid* for translation and pre-render in the default locale.
 
+        Args:
+            msgid: The message ID to translate.
+            escape: When True, escape Discord markdown in the result.
+            **kwargs: Formatting values for `{placeholders}`.
+
         Returns:
             A `locale_str` whose `.message` holds the rendered string and
             `.extras` carries the msgid plus all kwargs for re-rendering.
         """
-        if msgid.startswith("internal."):
+        if msgid.startswith("internal.") or cls._fallback_bundle is None:
             default_message = msgid
         else:
-            default_message = cls._bundles[cls._fallback_locale].gettext(msgid)
+            default_message = cls._fallback_bundle.gettext(msgid)
 
         kwargs["_string"] = msgid
         kwargs["_escape"] = escape
@@ -289,14 +322,20 @@ class Translator(app_commands.Translator):
         convention.  A `count` kwarg is auto-injected as *n* unless
         already present.
 
+        Args:
+            msgid: The message ID to translate.
+            n: The number for plural selection.
+            escape: When True, escape Discord markdown in the result.
+            **kwargs: Formatting values for `{placeholders}`.
+
         Returns:
             A `locale_str` with the pre-rendered plural form.
         """
         plural_msgid = msgid + ".plural"
-        if msgid.startswith("internal."):
+        if msgid.startswith("internal.") or cls._fallback_bundle is None:
             default_message = msgid
         else:
-            default_message = cls._bundles[cls._fallback_locale].ngettext(msgid, plural_msgid, n)
+            default_message = cls._fallback_bundle.ngettext(msgid, plural_msgid, n)
 
         kwargs["_string"] = msgid
         kwargs["_string_plural"] = plural_msgid
@@ -311,13 +350,19 @@ class Translator(app_commands.Translator):
         Uses `upgettext` / `msgctxt` to distinguish strings that share
         a msgid but differ by *context*.
 
+        Args:
+            context: Translation context.
+            msgid: The message ID to translate.
+            escape: When True, escape Discord markdown in the result.
+            **kwargs: Formatting values for `{placeholders}`.
+
         Returns:
             A `locale_str` with the pre-rendered contextual form.
         """
-        if msgid.startswith("internal."):
+        if msgid.startswith("internal.") or cls._fallback_bundle is None:
             default_message = msgid
         else:
-            default_message = cls._bundles[cls._fallback_locale].upgettext(context, msgid)
+            default_message = cls._fallback_bundle.upgettext(context, msgid)
 
         kwargs["_context"] = context
         kwargs["_string"] = msgid
@@ -332,6 +377,13 @@ class Translator(app_commands.Translator):
 
         Combines `upgettext` (context) with `ngettext` (plural).  Uses
         `unpgettext` / `msgctxt` + plural forms.
+
+        Args:
+            context: Translation context.
+            msgid: The message ID to translate.
+            n: The number for plural selection.
+            escape: When True, escape Discord markdown in the result.
+            **kwargs: Formatting values for `{placeholders}`.
 
         Returns:
             A `locale_str` with the pre-rendered contextual plural form.
@@ -353,6 +405,11 @@ class Translator(app_commands.Translator):
 def _(msgid: str, /, *, escape: bool = True, **kwargs: object) -> locale_str:
     """Shorthand for `Translator.gettext`.
 
+    Args:
+        msgid: The message ID to translate.
+        escape: When True, escape Discord markdown in the result.
+        **kwargs: Formatting values for `{placeholders}`.
+
     Returns:
         A `locale_str` pre-rendered in the default locale.
     """
@@ -361,6 +418,12 @@ def _(msgid: str, /, *, escape: bool = True, **kwargs: object) -> locale_str:
 
 def _n(msgid: str, n: int, /, *, escape: bool = True, **kwargs: object) -> locale_str:
     """Underscore shorthand for `ngettext`.
+
+    Args:
+        msgid: The message ID to translate.
+        n: The number for plural selection.
+        escape: When True, escape Discord markdown in the result.
+        **kwargs: Formatting values for `{placeholders}`.
 
     Returns:
         A `locale_str` with the pre-rendered plural form.
@@ -371,6 +434,12 @@ def _n(msgid: str, n: int, /, *, escape: bool = True, **kwargs: object) -> local
 def _c(context: str, msgid: str, /, *, escape: bool = True, **kwargs: object) -> locale_str:
     """Underscore shorthand for `upgettext` / `cgettext`.
 
+    Args:
+        context: Translation context.
+        msgid: The message ID to translate.
+        escape: When True, escape Discord markdown in the result.
+        **kwargs: Formatting values for `{placeholders}`.
+
     Returns:
         A `locale_str` with the pre-rendered contextual form.
     """
@@ -379,6 +448,13 @@ def _c(context: str, msgid: str, /, *, escape: bool = True, **kwargs: object) ->
 
 def _cn(context: str, msgid: str, n: int, /, *, escape: bool = True, **kwargs: object) -> locale_str:
     """Underscore shorthand for `unpgettext`.
+
+    Args:
+        context: Translation context.
+        msgid: The message ID to translate.
+        n: The number for plural selection.
+        escape: When True, escape Discord markdown in the result.
+        **kwargs: Formatting values for `{placeholders}`.
 
     Returns:
         A `locale_str` with the pre-rendered contextual plural form.
@@ -389,6 +465,11 @@ def _cn(context: str, msgid: str, n: int, /, *, escape: bool = True, **kwargs: o
 def gettext(msgid: str, /, *, escape: bool = True, **kwargs: object) -> locale_str:
     """Long-form alias for `_()` / `Translator.gettext`.
 
+    Args:
+        msgid: The message ID to translate.
+        escape: When True, escape Discord markdown in the result.
+        **kwargs: Formatting values for `{placeholders}`.
+
     Returns:
         A `locale_str` pre-rendered in the default locale.
     """
@@ -397,6 +478,12 @@ def gettext(msgid: str, /, *, escape: bool = True, **kwargs: object) -> locale_s
 
 def ngettext(msgid: str, n: int, /, *, escape: bool = True, **kwargs: object) -> locale_str:
     """Shorthand for `Translator.ngettext`.
+
+    Args:
+        msgid: The message ID to translate.
+        n: The number for plural selection.
+        escape: When True, escape Discord markdown in the result.
+        **kwargs: Formatting values for `{placeholders}`.
 
     Returns:
         A `locale_str` with the pre-rendered plural form.
@@ -407,6 +494,12 @@ def ngettext(msgid: str, n: int, /, *, escape: bool = True, **kwargs: object) ->
 def upgettext(context: str, msgid: str, /, *, escape: bool = True, **kwargs: object) -> locale_str:
     """Shorthand for `Translator.upgettext`.
 
+    Args:
+        context: Translation context.
+        msgid: The message ID to translate.
+        escape: When True, escape Discord markdown in the result.
+        **kwargs: Formatting values for `{placeholders}`.
+
     Returns:
         A `locale_str` with the pre-rendered contextual form.
     """
@@ -416,6 +509,12 @@ def upgettext(context: str, msgid: str, /, *, escape: bool = True, **kwargs: obj
 def cgettext(context: str, msgid: str, /, *, escape: bool = True, **kwargs: object) -> locale_str:
     """Long-form alias for `upgettext` / `_c` / `Translator.upgettext`.
 
+    Args:
+        context: Translation context.
+        msgid: The message ID to translate.
+        escape: When True, escape Discord markdown in the result.
+        **kwargs: Formatting values for `{placeholders}`.
+
     Returns:
         A `locale_str` with the pre-rendered contextual form.
     """
@@ -424,6 +523,13 @@ def cgettext(context: str, msgid: str, /, *, escape: bool = True, **kwargs: obje
 
 def unpgettext(context: str, msgid: str, n: int, /, *, escape: bool = True, **kwargs: object) -> locale_str:
     """Shorthand for `Translator.unpgettext`.
+
+    Args:
+        context: Translation context.
+        msgid: The message ID to translate.
+        n: The number for plural selection.
+        escape: When True, escape Discord markdown in the result.
+        **kwargs: Formatting values for `{placeholders}`.
 
     Returns:
         A `locale_str` with the pre-rendered contextual plural form.

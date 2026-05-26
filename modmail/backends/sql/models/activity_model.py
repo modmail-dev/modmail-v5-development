@@ -12,7 +12,7 @@ from modmail.enum import ActivityType
 from .base import Snowflake, SQLBase
 
 if TYPE_CHECKING:
-    from modmail.backends.common.models import ActivityModel
+    from modmail.backends.common import ActivityModel
 
 __all__ = ["SQLActivityTable"]
 

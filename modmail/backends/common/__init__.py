@@ -1,9 +1,4 @@
-"""Common database backend abstractions and shared models.
-
-Notes:
-    Modules from this directory should not import from ``modmail.core.*``
-    to avoid circular import issues.
-"""
+"""Common database backend abstractions and shared models."""
 
 from __future__ import annotations
 

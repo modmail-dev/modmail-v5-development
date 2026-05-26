@@ -10,9 +10,9 @@ from sqlalchemy import event, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError, TimeoutError as SATimeoutError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
+from modmail.backends.common import DBBackend
 from modmail.errors import DatabaseConnectionError
 
-from ..common.db_backend import DBBackend
 from ._base import SQLBackendBase
 from ._lock import SQLLockMixin
 from ._profiles import SQLProfilesMixin
@@ -81,7 +81,7 @@ class SQLBackend(
             DatabaseConnectionError: If the connection attempt or engine setup fails.
             InstanceAlreadyRunningError: If the instance is already running.
         """
-        uri = self._sql_config.uri.get_secret_value()
+        uri = self._db_config.uri.get_secret_value()
         dialect = uri.split("+")[0].split(":")[0].lower()
 
         if dialect not in _SUPPORTED_DIALECTS:
@@ -191,7 +191,7 @@ class SQLBackend(
         logger.debug("Connected to SQL database.")
 
         logger.debug("Running database migrations.")
-        await do_migration(self._sql_config.uri.get_secret_value())
+        await do_migration(self._db_config.uri.get_secret_value())
 
         # May raise InstanceAlreadyRunningError when another bot is holding the instance lock
         await self._acquire_instance_lock()
@@ -200,6 +200,9 @@ class SQLBackend(
         """Dispose of the database engine and clear the session factory."""
         self._async_sessionmaker = None
         if self._async_engine:
-            await self._async_engine.dispose()
+            try:
+                await self._async_engine.dispose()
+            except RuntimeError:
+                logger.debug("Failed to dispose engine (event loop already closed).")
             self._async_engine = None
             logger.debug("Disconnected from SQL database.")

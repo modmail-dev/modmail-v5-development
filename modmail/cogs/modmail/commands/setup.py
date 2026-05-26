@@ -150,8 +150,12 @@ class SetupWizardView(BaseLayoutView):
         self.clear_items()
         self.add_item(self._build_container())
 
-    def _render(self, interaction: discord.Interaction) -> None:
+    def _render(self, interaction: discord.Interaction) -> asyncio.Task[None]:
         """Re-render the current step and edit the triggering message in-place.
+
+        Returns:
+            An `asyncio.Task` that completes once the message is edited. The caller
+            can `await` this to ensure the message updates before proceeding.
 
         Raises:
             RuntimeError: If called after the wizard has already completed.
@@ -159,37 +163,24 @@ class SetupWizardView(BaseLayoutView):
         if self._completed:
             raise RuntimeError("_render called after wizard completed")
         self.build()
-        self._update_message(interaction)
+        return self._update_message(interaction)
 
-    @staticmethod
-    def _btn(label: str, style: discord.ButtonStyle, callback: Any) -> discord.ui.Button[SetupWizardView]:
-        """Create a button and bind its callback.
-
-        Args:
-            label: Button label text.
-            style: Discord button style.
-            callback: Async callable to invoke on click.
-
-        Returns:
-            The configured button.
-        """
-        btn: discord.ui.Button[SetupWizardView] = discord.ui.Button(label=label, style=style)
-        btn.callback = callback
-        return btn
-
-    def _cancel_btn(self) -> discord.ui.Button[SetupWizardView]:
+    def _cancel_btn(self, callback: Any | None = None) -> discord.ui.Button[SetupWizardView]:
         """Create the shared danger-styled cancel button.
+
+        Note:
+            The `callback` parameter is ignored. The wizard always uses its own cancel behavior.
 
         Returns:
             The configured cancel button.
         """
 
-        async def callback(interaction: discord.Interaction) -> None:  # noqa: RUF029
+        async def _cancel_callback(interaction: discord.Interaction) -> None:
             self._step = _WizardStep.CANCELED
             self.stop()
-            self._render(interaction)
+            await self._render(interaction)
 
-        return self._btn(self._t(_("view.prompt.cancel")), discord.ButtonStyle.danger, callback)
+        return super()._cancel_btn(_cancel_callback)
 
     def _build_container(self) -> discord.ui.Container[SetupWizardView]:
         """Build and return the container for the current step.
@@ -212,16 +203,16 @@ class SetupWizardView(BaseLayoutView):
 
             case _WizardStep.STEP_0:
 
-                async def on_continue(interaction: discord.Interaction) -> None:  # noqa: RUF029
+                async def on_continue(interaction: discord.Interaction) -> None:
                     self._step = _WizardStep.STEP_1
-                    self._render(interaction)
+                    await self._render(interaction)
 
                 return discord.ui.Container(
                     discord.ui.TextDisplay(self._t(_("view.setup.wizard.reconfigure.content"))),
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
                     discord.ui.ActionRow(
                         self._btn(
-                            self._t(_("view.setup.wizard.reconfigure.btn_continue")),
+                            _("view.setup.wizard.reconfigure.btn.continue"),
                             discord.ButtonStyle.primary,
                             on_continue,
                         ),
@@ -232,24 +223,22 @@ class SetupWizardView(BaseLayoutView):
 
             case _WizardStep.STEP_1:
 
-                async def on_category(interaction: discord.Interaction) -> None:  # noqa: RUF029
+                async def on_category(interaction: discord.Interaction) -> None:
                     self._setup_type = "category"
                     self._step = _WizardStep.STEP_2
-                    self._render(interaction)
+                    await self._render(interaction)
 
-                async def on_forum(interaction: discord.Interaction) -> None:  # noqa: RUF029
+                async def on_forum(interaction: discord.Interaction) -> None:
                     self._setup_type = "forum"
                     self._step = _WizardStep.STEP_2
-                    self._render(interaction)
+                    await self._render(interaction)
 
-                category_label = self._t(_("view.setup.wizard.type.category"))
-                forum_label = self._t(_("view.setup.wizard.type.forum"))
                 return discord.ui.Container(
                     discord.ui.TextDisplay(self._t(_("view.setup.wizard.type.content"))),
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
                     discord.ui.ActionRow(
-                        self._btn(category_label, discord.ButtonStyle.primary, on_category),
-                        self._btn(forum_label, discord.ButtonStyle.primary, on_forum),
+                        self._btn(_("view.setup.wizard.type.category"), discord.ButtonStyle.primary, on_category),
+                        self._btn(_("view.setup.wizard.type.forum"), discord.ButtonStyle.primary, on_forum),
                         self._cancel_btn(),
                     ),
                     accent_color=discord.Color.blurple(),
@@ -258,30 +247,23 @@ class SetupWizardView(BaseLayoutView):
             case _WizardStep.STEP_2:
                 is_category = self._setup_type == "category"
 
-                async def on_create_new(interaction: discord.Interaction) -> None:  # noqa: RUF029
+                async def on_create_new(interaction: discord.Interaction) -> None:
                     self._channel_id = None
                     self._channel_name = None
                     self._step = _WizardStep.STEP_4
-                    self._render(interaction)
+                    await self._render(interaction)
 
-                async def on_use_existing(interaction: discord.Interaction) -> None:  # noqa: RUF029
+                async def on_use_existing(interaction: discord.Interaction) -> None:
                     self._step = _WizardStep.STEP_3
-                    self._render(interaction)
+                    await self._render(interaction)
 
-                async def on_back_step_2(interaction: discord.Interaction) -> None:  # noqa: RUF029
+                async def on_back_step_2(interaction: discord.Interaction) -> None:
                     self._setup_type = None
                     self._channel_id = None
                     self._channel_name = None
                     self._step = _WizardStep.STEP_1
-                    self._render(interaction)
+                    await self._render(interaction)
 
-                create_label = self._t(_("view.setup.wizard.new_existing.btn.create"))
-                existing_label = self._t(
-                    _("view.setup.wizard.new_existing.btn.existing_category")
-                    if is_category
-                    else _("view.setup.wizard.new_existing.btn.existing_forum")
-                )
-                back_label = self._t(_("view.setup.wizard.btn.back"))
                 return discord.ui.Container(
                     discord.ui.TextDisplay(
                         self._t(
@@ -292,9 +274,19 @@ class SetupWizardView(BaseLayoutView):
                     ),
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
                     discord.ui.ActionRow(
-                        self._btn(create_label, discord.ButtonStyle.primary, on_create_new),
-                        self._btn(existing_label, discord.ButtonStyle.secondary, on_use_existing),
-                        self._btn(back_label, discord.ButtonStyle.secondary, on_back_step_2),
+                        self._btn(
+                            _("view.setup.wizard.new_existing.btn.create"),
+                            discord.ButtonStyle.primary,
+                            on_create_new,
+                        ),
+                        self._btn(
+                            _("view.setup.wizard.new_existing.btn.existing_category")
+                            if is_category
+                            else _("view.setup.wizard.new_existing.btn.existing_forum"),
+                            discord.ButtonStyle.secondary,
+                            on_use_existing,
+                        ),
+                        self._back_btn(on_back_step_2),
                         self._cancel_btn(),
                     ),
                     accent_color=discord.Color.blurple(),
@@ -343,13 +335,12 @@ class SetupWizardView(BaseLayoutView):
 
                 select.callback = on_channel_select
 
-                async def on_back_step_3(interaction: discord.Interaction) -> None:  # noqa: RUF029
+                async def on_back_step_3(interaction: discord.Interaction) -> None:
                     self._channel_id = None
                     self._channel_name = None
                     self._step = _WizardStep.STEP_2
-                    self._render(interaction)
+                    await self._render(interaction)
 
-                back_label = self._t(_("view.setup.wizard.btn.back"))
                 return discord.ui.Container(
                     discord.ui.TextDisplay(
                         self._t(
@@ -361,7 +352,7 @@ class SetupWizardView(BaseLayoutView):
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
                     discord.ui.ActionRow(select),
                     discord.ui.ActionRow(
-                        self._btn(back_label, discord.ButtonStyle.secondary, on_back_step_3),
+                        self._back_btn(on_back_step_3),
                         self._cancel_btn(),
                     ),
                     accent_color=discord.Color.blurple(),
@@ -378,14 +369,16 @@ class SetupWizardView(BaseLayoutView):
                     await self._update_message(interaction)  # Ensure WORKING card is shown before proceeding
                     self.stop()  # Stops the .wait(), proceed the setup in do_setup() below
 
-                async def on_back_step_4(interaction: discord.Interaction) -> None:  # noqa: RUF029
+                async def on_back_step_4(interaction: discord.Interaction) -> None:
                     self._step = _WizardStep.STEP_3 if self._channel_id is not None else _WizardStep.STEP_2
-                    self._render(interaction)
+                    await self._render(interaction)
 
                 if use_existing:
                     content = self._t(
+                        # @param name: The name of the category.
                         _("view.setup.wizard.confirm.existing_category")
                         if is_category
+                        # @param name: The name of the forum.
                         else _("view.setup.wizard.confirm.existing_forum"),
                         name=self._channel_name or "",
                     )
@@ -396,14 +389,12 @@ class SetupWizardView(BaseLayoutView):
                         else _("view.setup.wizard.confirm.new_forum")
                     )
 
-                confirm_label = self._t(_("view.setup.wizard.confirm.btn"))
-                back_label = self._t(_("view.setup.wizard.btn.back"))
                 return discord.ui.Container(
                     discord.ui.TextDisplay(content),
                     discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
                     discord.ui.ActionRow(
-                        self._btn(confirm_label, discord.ButtonStyle.success, on_confirm),
-                        self._btn(back_label, discord.ButtonStyle.secondary, on_back_step_4),
+                        self._btn(_("view.setup.wizard.confirm.btn"), discord.ButtonStyle.success, on_confirm),
+                        self._back_btn(on_back_step_4),
                         self._cancel_btn(),
                     ),
                     accent_color=discord.Color.green(),
@@ -430,6 +421,9 @@ class SetupWizardView(BaseLayoutView):
         """
         if self._setup_type == "category":
             content = self._t(
+                # @param category: The category name.
+                # @param log_channel: The log channel mention.
+                # @param storage_channel: The storage channel mention.
                 _(
                     "view.setup.wizard.success.category",
                     category=category_or_forum.name,
@@ -439,6 +433,9 @@ class SetupWizardView(BaseLayoutView):
             )
         else:
             content = self._t(
+                # @param forum: The forum channel mention.
+                # @param log_channel: The log channel mention.
+                # @param storage_channel: The storage channel mention.
                 _(
                     "view.setup.wizard.success.forum",
                     forum=category_or_forum.mention,

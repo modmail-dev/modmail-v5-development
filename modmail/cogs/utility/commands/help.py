@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 import logging
-import math
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 
 import discord
 from discord.app_commands import locale_str
 from discord.ext import commands as _commands
 
-from modmail import CONFIG
+from modmail.config import config
 from modmail.core import (
-    BaseLayoutView,
     Cog,
     Context,
+    PaginatedLayoutView,
     ParamInfo,
-    Str,
     bot_command,
     ephemeral_scope,
     locale_for,
@@ -28,16 +26,14 @@ from modmail.enum import RequiredAccessLevel
 from modmail.i18n import _, ngettext
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from .. import Utility
 
 __all__ = ["help_command"]
 
 logger = logging.getLogger(__name__)
 
-_SELECT_PAGE_SIZE: int = 10
-_MAX_SELECT_LABEL_LEN: int = 100
-_MAX_SELECT_DESC_LEN: int = 100
-_MAX_LIST_DESC_LEN: int = 80
 
 _ACCESS_COLORS: dict[RequiredAccessLevel, discord.Color] = {
     RequiredAccessLevel.everyone: discord.Color.light_grey(),
@@ -178,7 +174,7 @@ def _build_command(
         params=params,
         parent_keys=[ctx.bot.get_canonical_command_name(p) for p in getattr(cmd, "parents", [])],
         is_prefix_only=is_prefix_only,
-        is_jishaku=CONFIG.bot.enable_jishaku and cmd.cog_name == _JISHAKU_COG_NAME,
+        is_jishaku=config.bot.enable_jishaku and cmd.cog_name == _JISHAKU_COG_NAME,
     )
 
 
@@ -197,7 +193,7 @@ def _build_cat_info(ctx: Context, cog_key: str, commands: list[_CommandEntry]) -
             commands=commands,
         )
 
-    if CONFIG.bot.enable_jishaku and cog_key == _JISHAKU_COG_NAME:
+    if config.bot.enable_jishaku and cog_key == _JISHAKU_COG_NAME:
         return _CategoryInfo(
             category_key=cog_key,
             display_name=ctx.t(_("view.help.category.jishaku.name")),
@@ -241,7 +237,7 @@ def _build_cat_info(ctx: Context, cog_key: str, commands: list[_CommandEntry]) -
 async def _build_categories(ctx: Context) -> dict[str, _CategoryInfo]:
     """Build an ordered category map from the bot's live command tree.
 
-    Applies access filtering based on [`CONFIG.bot`][] settings:
+    Applies access filtering based on [`config.bot`][] settings:
     - Owner-only commands hidden when [`BotConfig.hide_owner_commands`][] is `True`
       and the invoking user is not an owner.
     - All inaccessible commands hidden when [`BotConfig.hide_inaccessible`][] is `True`.
@@ -278,11 +274,11 @@ async def _build_categories(ctx: Context) -> dict[str, _CategoryInfo]:
         display_name = index.label(canonical_key)
         command = _build_command(ctx, cmd, display_name, cog_key=cog_key)
 
-        if CONFIG.bot.hide_owner_commands:
+        if config.bot.hide_owner_commands:
             if command.access_level == RequiredAccessLevel.owner and not is_owner:
                 continue
 
-        if CONFIG.bot.hide_inaccessible:
+        if config.bot.hide_inaccessible:
             user_access = await ctx.bot.check_user_access(
                 author=ctx.author,
                 command_key=command.canonical_key,
@@ -317,7 +313,12 @@ async def _build_categories(ctx: Context) -> dict[str, _CategoryInfo]:
     return ordered
 
 
-class HelpView(BaseLayoutView):
+class _ContextType(TypedDict):
+    mode: Literal["category"] | Literal["overview"] | None
+    cog_key: str | None
+
+
+class HelpView(PaginatedLayoutView[_CategoryInfo | _CommandEntry, _ContextType]):
     """Interactive Component v2 help browser.
 
     Presents three navigable pages: an overview with category selection, a category page
@@ -343,7 +344,6 @@ class HelpView(BaseLayoutView):
         """
         super().__init__(ctx.bot, ctx.author, interaction=ctx.interaction, timeout=timeout)
         self._categories = categories
-        self._current_interactive: list[discord.ui.Select[HelpView] | discord.ui.Button[HelpView]] = []
         if isinstance(initial_entry, _CommandEntry):
             self._show_command(initial_entry)
         elif isinstance(initial_entry, _CategoryInfo):
@@ -351,22 +351,34 @@ class HelpView(BaseLayoutView):
         else:
             self._show_overview()
 
+    @property
+    def _accent_color(self) -> discord.Color:
+        if self._context["mode"] == "overview":
+            return discord.Color.blurple()
+        if self._context["cog_key"] is None or self._context["cog_key"] not in self._categories:
+            return discord.Color.blurple()
+        return self._categories[self._context["cog_key"]].color
+
+    def _make_context(self) -> _ContextType:
+        return {"mode": None, "cog_key": None}
+
     def _make_cmd_select_option(self, command: _CommandEntry) -> discord.SelectOption:
         """Build a select option for a single command entry.
 
         Returns:
             A [`discord.SelectOption`][] with label, description, and value set.
         """
-        name = command.display_name
-        if command.fallback_name:
-            name = f"{name} [{command.fallback_name}]"
-        label = name[:_MAX_SELECT_LABEL_LEN]
+        select_limit = 100
+
+        name = discord.utils.remove_markdown(command.display_name)
+        if fallback_name := discord.utils.remove_markdown(command.fallback_name):
+            name = f"{name} [{fallback_name}]"
+        label = name[:select_limit]
 
         access = self._t(command.access_level.__locale_str__())
-        if command.description:
+        if desc_text := discord.utils.remove_markdown(command.description):
             prefix = f"{access} · "
-            remaining = _MAX_SELECT_DESC_LEN - len(prefix)
-            desc_text = command.description
+            remaining = select_limit - len(prefix)
             if len(desc_text) > remaining:
                 desc_text = desc_text[: remaining - 1] + "…"
             description: str | None = f"{prefix}{desc_text}"
@@ -381,222 +393,167 @@ class HelpView(BaseLayoutView):
         Returns:
             A Discord markdown string for use in a [`discord.ui.TextDisplay`][].
         """
+        desc_limit = 80
+
         access = self._t(command.access_level.__locale_str__())
-        desc = command.description
-        short_desc = desc[: _MAX_LIST_DESC_LEN - 1] + "…" if len(desc) > _MAX_LIST_DESC_LEN else desc
+        short_desc = (
+            command.description[: desc_limit - 1] + "…"
+            if len(command.description) > desc_limit
+            else command.description
+        )
         desc_part = f" — {short_desc}" if short_desc else ""
 
-        if command.fallback_name:
-            annotation = f" *({command.fallback_name})*"
+        if fallback_name := command.fallback_name:
+            annotation = f" [{fallback_name}]"
         elif command.is_prefix_only:
-            annotation = f" *({self._t(_('view.help.prefix_only'))})*"
+            annotation = f" ({self._t(_('view.help.prefix_only'))})"
         else:
             annotation = ""
-
         return f"- **{command.display_name}**{annotation}{desc_part}  `{access}`"
-
-    def _build_nav_row(self, cog_key: str, page: int, total_pages: int) -> discord.ui.ActionRow[HelpView]:
-        """Build the navigation row: back (leftmost, primary), prev, next.
-
-        Returns:
-            An [`discord.ui.ActionRow`][] containing the applicable navigation buttons.
-        """
-        nav_row: discord.ui.ActionRow[HelpView] = discord.ui.ActionRow()
-
-        # Back always comes first (primary style to distinguish from nav buttons)
-        back_btn: discord.ui.Button[HelpView] = discord.ui.Button(
-            label=self._t(_("view.help.btn.back")),
-            style=discord.ButtonStyle.primary,
-        )
-
-        async def on_back(interaction: discord.Interaction) -> None:  # noqa: RUF029
-            self._show_overview()
-            self._update_message(interaction)
-
-        back_btn.callback = on_back
-        self._current_interactive.append(back_btn)
-        nav_row.add_item(back_btn)
-
-        if total_pages > 1:
-            prev_btn: discord.ui.Button[HelpView] = discord.ui.Button(
-                label=self._t(_("view.help.btn.prev")),
-                style=discord.ButtonStyle.secondary,
-                disabled=page == 0,
-            )
-
-            async def on_prev(interaction: discord.Interaction) -> None:  # noqa: RUF029
-                self._show_category(cog_key, page - 1)
-                self._update_message(interaction)
-
-            prev_btn.callback = on_prev
-            self._current_interactive.append(prev_btn)
-            nav_row.add_item(prev_btn)
-
-            next_btn: discord.ui.Button[HelpView] = discord.ui.Button(
-                label=self._t(_("view.help.btn.next")),
-                style=discord.ButtonStyle.secondary,
-                disabled=page >= total_pages - 1,
-            )
-
-            async def on_next(interaction: discord.Interaction) -> None:  # noqa: RUF029
-                self._show_category(cog_key, page + 1)
-                self._update_message(interaction)
-
-            next_btn.callback = on_next
-            self._current_interactive.append(next_btn)
-            nav_row.add_item(next_btn)
-
-        return nav_row
 
     def _show_overview(self) -> None:
         """Rebuild the view to show the category-selection overview page."""
-        self._current_interactive.clear()
-        self.clear_items()
-
-        if not self._categories:
-            no_access_items: list[discord.ui.Item[HelpView]] = [
-                discord.ui.TextDisplay(self._t(_("view.help.title"))),
-                discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                discord.ui.TextDisplay(self._t(_("view.help.no_access"))),
-            ]
-            self.add_item(discord.ui.Container(*no_access_items, accent_color=discord.Color.blurple()))
-            return
-
-        total_cmds = sum(len(c.commands) for c in self._categories.values())
-        total_cats = len(self._categories)
-        cat_word = self._t(ngettext("view.help.stats.category", total_cats))
-        cmd_word = self._t(ngettext("view.help.stats.command", total_cmds))
-        stats = self._t(_("view.help.stats.template", categories_word=cat_word, commands_word=cmd_word))
-
-        cat_lines = "\n".join(
-            f"**{info.display_name}** — {info.description}" if info.description else f"**{info.display_name}**"
-            for info in self._categories.values()
+        self._context["mode"] = "overview"
+        self._render_page(
+            page=0, title=self._t(_("view.help.title")), items=tuple(self._categories.values()), page_size=10
         )
 
-        # TODO: handle/paginate if # cogs > 25 / select max
-        options = [
-            discord.SelectOption(
-                label=cat_info.display_name,
-                description=cat_info.description[:_MAX_SELECT_DESC_LEN] or None,
-                value=cog_key,
-            )
-            for cog_key, cat_info in self._categories.items()
-        ]
-
-        cat_select: discord.ui.Select[HelpView] = discord.ui.Select(
-            placeholder=self._t(_("view.help.category.placeholder")),
-            options=options,
-        )
-
-        async def on_cat_select(interaction: discord.Interaction) -> None:  # noqa: RUF029
-            self._show_category(cat_select.values[0])
-            self._update_message(interaction)
-
-        cat_select.callback = on_cat_select
-        self._current_interactive.append(cat_select)
-
-        action_row: discord.ui.ActionRow[HelpView] = discord.ui.ActionRow()
-        action_row.add_item(cat_select)
-
-        self.add_item(
-            discord.ui.Container(
-                discord.ui.TextDisplay(self._t(_("view.help.title"))),
-                discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                discord.ui.TextDisplay(stats),
-                discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small),
-                discord.ui.TextDisplay(cat_lines),
-                discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                discord.ui.TextDisplay(self._t(_("view.help.subtitle"))),
-                discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small),
-                action_row,
-                accent_color=discord.Color.blurple(),
-            )
-        )
-
-    def _show_category(self, cog_key: str, page: int = 0) -> None:
+    def _show_category(self, cog_key: str) -> None:
         """Rebuild the view to show the commands for `cog_key`, with pagination.
 
         Args:
             cog_key: The internal cog key used in [`_categories`][].
-            page: Zero-based page index into the paginated command list.
         """
-        self._current_interactive.clear()
-        self.clear_items()
-
         cat_info = self._categories.get(cog_key)
         if cat_info is None:
             logger.warning("Category key '%s' not found in categories map; how did we get here?", cog_key)
             self._show_overview()
             return
+        self._context["cog_key"] = cog_key
+        self._context["mode"] = "category"
+        self._render_page(page=0, title=cat_info.display_name, items=cat_info.commands, page_size=10)
 
-        if not cat_info.commands:
-            self._show_category_empty(cog_key=cog_key, cat_info=cat_info)
-            return
+    def _render_body(self, items: Sequence[_CategoryInfo | _CommandEntry]) -> list[discord.ui.Item[Any]]:
+        """Return Container children for the current page mode.
 
-        total_pages = max(1, math.ceil(len(cat_info.commands) / _SELECT_PAGE_SIZE))
-        page = max(0, min(page, total_pages - 1))
-        start = page * _SELECT_PAGE_SIZE
-        page_commands = cat_info.commands[start : start + _SELECT_PAGE_SIZE]
+        Args:
+            items: Items visible on the current page.
+        """
+        if self._context["mode"] is None:
+            logger.warning("Context mode is None; defaulting to overview")
+        if self._context["mode"] == "category":
+            return self._render_category_body(cast("Sequence[_CommandEntry]", items))
+        return self._render_overview_body(cast("Sequence[_CategoryInfo]", items))
 
-        list_text = "\n".join(self._format_list_line(e) for e in page_commands)
+    def _render_overview_body(self, items: Sequence[_CategoryInfo]) -> list[discord.ui.Item[Any]]:
+        """Return Container children for the overview page.
 
-        header = f"### {cat_info.display_name}"
-        if total_pages > 1:
-            # @param page: Current page number (1-indexed)
-            # @param total: Total number of pages
-            indicator = self._t(_("view.help.page_indicator", page=page + 1, total=total_pages))
-            header = f"{header}  ·  *{indicator}*"
+        When `items` is empty (no accessible categories), a single no-access
+        message is returned. Otherwise returns stats, category list, and
+        category select.
 
-        cmd_select: discord.ui.Select[HelpView] = discord.ui.Select(
-            placeholder=self._t(_("view.help.command.placeholder")),
-            options=[self._make_cmd_select_option(e) for e in page_commands],
+        Args:
+            items: Category entries visible on the current page.
+        """
+        if not items:
+            return [
+                discord.ui.TextDisplay(self._t(_("view.help.no_access"))),
+            ]
+
+        select_limit = 100
+
+        total_cmds = sum(len(c.commands) for c in self._categories.values())
+        total_cats = len(self._categories)
+        cat_word = self._t(ngettext("view.help.stats.category", total_cats))
+        cmd_word = self._t(ngettext("view.help.stats.command", total_cmds))
+        # @param categories_word: The localized word for categories.
+        # @param commands_word: The localized word for commands.
+        stats = self._t(_("view.help.stats.template", categories_word=cat_word, commands_word=cmd_word))
+
+        cat_lines = "\n".join(
+            f"**{info.display_name}** — {info.description}" if info.description else f"**{info.display_name}**"
+            for info in items
         )
 
-        async def on_cmd_select(interaction: discord.Interaction) -> None:  # noqa: RUF029
+        # TODO: trim label/desc, remove markdown
+        cat_select: discord.ui.Select[Any] = discord.ui.Select(
+            placeholder=self._t(_("view.help.category.placeholder")),
+            options=[
+                discord.SelectOption(
+                    label=cat_info.display_name,
+                    description=cat_info.description[:select_limit] or None,
+                    value=cat_info.category_key,
+                )
+                for cat_info in items
+            ],
+        )
+
+        async def on_cat_select(interaction: discord.Interaction) -> None:
+            self._show_category(cat_select.values[0])
+            await self._update_message(interaction)
+
+        cat_select.callback = on_cat_select
+
+        return [
+            discord.ui.TextDisplay(stats),
+            discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small),
+            discord.ui.TextDisplay(cat_lines),
+            discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+            discord.ui.TextDisplay(self._t(_("view.help.subtitle"))),
+            discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small),
+            discord.ui.ActionRow(cat_select),
+        ]
+
+    def _render_category_body(self, items: Sequence[_CommandEntry]) -> list[discord.ui.Item[Any]]:
+        """Return Container children for a single category page.
+
+        When `items` is empty (no commands in the category), an empty-state
+        message is returned. Otherwise returns the command list and a command
+        select.
+
+        Args:
+            items: Command entries visible on the current page.
+        """
+        if not items:
+            return [
+                discord.ui.TextDisplay(self._t(_("view.help.category.empty_body"))),
+            ]
+
+        list_text = "\n".join(self._format_list_line(e) for e in items)
+
+        cmd_select: discord.ui.Select[Any] = discord.ui.Select(
+            placeholder=self._t(_("view.help.command.placeholder")),
+            options=[self._make_cmd_select_option(e) for e in items],
+        )
+
+        async def on_cmd_select(interaction: discord.Interaction) -> None:
             key = cmd_select.values[0]
-            found = next((e for e in page_commands if e.canonical_key == key), None)
+            found = next((e for e in items if e.canonical_key == key), None)
             if found is None:
                 logger.warning("Selected command not found, value was '%s'; how did we get here?", key)
                 self.defer(interaction)
             else:
                 self._show_command(found)
-                self._update_message(interaction)
+                await self._update_message(interaction)
 
         cmd_select.callback = on_cmd_select
-        self._current_interactive.append(cmd_select)
 
-        select_row: discord.ui.ActionRow[HelpView] = discord.ui.ActionRow()
-        select_row.add_item(cmd_select)
-        nav_row = self._build_nav_row(cog_key, page, total_pages)
+        return [
+            discord.ui.TextDisplay(list_text),
+            discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
+            discord.ui.ActionRow(cmd_select),
+        ]
 
-        self.add_item(
-            discord.ui.Container(
-                discord.ui.TextDisplay(header),
-                discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                discord.ui.TextDisplay(list_text),
-                discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                select_row,
-                nav_row,
-                accent_color=cat_info.color,
-            )
-        )
+    def _build_nav_back(self) -> discord.ui.Button[Any] | None:
+        """Return a back-to-overview button when on a category page, else `None`."""
+        if self._context.get("mode") != "category":
+            return None
 
-    def _show_category_empty(self, *, cog_key: str, cat_info: _CategoryInfo) -> None:
-        # @param category: Category display name
-        empty_title = self._t(_("view.help.category.empty_title", category=cat_info.display_name))
-        empty_body = self._t(_("view.help.category.empty_body"))
-        nav_row = self._build_nav_row(cog_key, 0, 1)
+        async def on_back(interaction: discord.Interaction) -> None:
+            self._show_overview()
+            await self._update_message(interaction)
 
-        self.add_item(
-            discord.ui.Container(
-                discord.ui.TextDisplay(empty_title),
-                discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                discord.ui.TextDisplay(empty_body),
-                discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                nav_row,
-                accent_color=cat_info.color,
-            )
-        )
+        return self._back_btn(callback=on_back)
 
     def _show_command(self, command: _CommandEntry) -> None:
         """Rebuild the view to show full details for a single command.
@@ -604,9 +561,6 @@ class HelpView(BaseLayoutView):
         Args:
             command: The command entry to display.
         """
-        self._current_interactive.clear()
-        self.clear_items()
-
         cat_info = self._categories.get(command.category_key)
         if not cat_info:
             logger.warning(
@@ -649,36 +603,18 @@ class HelpView(BaseLayoutView):
         if command.is_prefix_only:
             detail_parts.extend(["", f"-# {self._t(_('view.help.detail.prefix_note'))}"])
 
-        back_btn: discord.ui.Button[HelpView] = discord.ui.Button(
-            label=f"← {back_label}",
-            style=discord.ButtonStyle.primary,
-        )
-
         async def on_back(interaction: discord.Interaction) -> None:
             self._show_category(command.category_key)
             await self._update_message(interaction)
 
-        back_btn.callback = on_back
-        self._current_interactive.append(back_btn)
-
-        back_row: discord.ui.ActionRow[HelpView] = discord.ui.ActionRow()
-        back_row.add_item(back_btn)
-
-        color = _ACCESS_COLORS.get(command.access_level, discord.Color.light_grey())
-        self.add_item(
+        self._render_custom_page(
             discord.ui.Container(
                 discord.ui.TextDisplay("\n".join(detail_parts)),
                 discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small),
-                back_row,
-                accent_color=color,
+                discord.ui.ActionRow(self._back_btn(name=back_label, callback=on_back)),
+                accent_color=_ACCESS_COLORS.get(command.access_level, discord.Color.light_grey()),
             )
         )
-
-    async def on_timeout(self) -> None:
-        """Disable all interactive elements on the current page when the view expires."""
-        for item in self._current_interactive:
-            item.disabled = True
-        self._update_message()
 
 
 @bot_command(
@@ -691,7 +627,7 @@ class HelpView(BaseLayoutView):
         )
     },
 )
-async def help_command(cog: Utility, ctx: Context, *, command: Str | None = None) -> None:
+async def help_command(cog: Utility, ctx: Context, *, command: str | None = None) -> None:
     """Display an interactive browser for all available commands.
 
     Args:
@@ -717,11 +653,11 @@ async def help_command(cog: Utility, ctx: Context, *, command: Str | None = None
 
             # Check if the command matches a cog name
             normalized = command.casefold().replace("_", " ")
-            for match_locale in {user_locale, CONFIG.default_locale}:
+            for match_locale in {user_locale, config.default_locale}:
                 for cat_info in categories.values():
                     if cat_info.category_key == _OTHER_COG_KEY:
                         display_name = cog.bot.translate(_("view.help.category.other.name"), locale=match_locale)
-                    elif CONFIG.bot.enable_jishaku and cat_info.category_key == _JISHAKU_COG_NAME:
+                    elif config.bot.enable_jishaku and cat_info.category_key == _JISHAKU_COG_NAME:
                         display_name = cog.bot.translate(_("view.help.category.jishaku.name"), locale=match_locale)
                     else:
                         category_cog = cog.bot.cogs.get(cat_info.category_key)

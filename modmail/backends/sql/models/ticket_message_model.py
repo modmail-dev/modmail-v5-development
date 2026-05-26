@@ -17,7 +17,7 @@ from .ticket_user_model import SQLTicketUserTable
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from modmail.backends.common.models import TicketMessageModel
+    from modmail.backends.common import TicketMessageModel
 
 
 __all__ = ["SQLTicketMessageTable"]

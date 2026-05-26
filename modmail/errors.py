@@ -1,12 +1,8 @@
-"""Custom exceptions used throughout the Modmail project.
-
-This module defines a hierarchy of custom exceptions that are used for
-error handling and reporting within the Modmail application.
-"""
+"""Custom exceptions used throughout Modmail."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from discord.ext import commands
 
@@ -14,13 +10,13 @@ if TYPE_CHECKING:
     import datetime
 
     import discord
-    from discord.app_commands import locale_str
 
-    from modmail.core.context import UserAccessResult
+    from .core.context import UserAccessResult
 
 __all__ = [
     "BadPermissionsError",
     "CacheNotReadyError",
+    "ConfigUpdateError",
     "DatabaseConnectionError",
     "DatabaseError",
     "DatabaseOperationError",
@@ -84,10 +80,6 @@ class InstanceAlreadyRunningError(DatabaseConnectionError):
 
     Raised during startup if the instance lock in the database is held by an active process.
 
-    Attributes:
-        hostname: The hostname of the running instance, or None if unknown.
-        pid: The process ID of the running instance, or None if unknown.
-        acquired_at: When the running instance acquired the lock, or None if unknown.
     """
 
     def __init__(self, hostname: str | None, pid: int | None, acquired_at: datetime.datetime | None) -> None:
@@ -99,8 +91,11 @@ class InstanceAlreadyRunningError(DatabaseConnectionError):
             acquired_at: When the running instance acquired the lock, or None if unknown.
         """
         self.hostname = hostname
+        """The hostname of the running instance."""
         self.pid = pid
+        """The process ID of the running instance."""
         self.acquired_at = acquired_at
+        """When the instance lock was acquired."""
         super().__init__()
 
 
@@ -141,9 +136,9 @@ class BadPermissionsError(ModmailError, commands.CheckFailure):
             missing: Permissions that are required but not held.
         """
         self.channel = channel
-        """The channel or guild in which the permission check failed"""
+        """The channel or guild in which the permission check failed."""
         self.missing = missing
-        """Permissions that are missing"""
+        """Permissions that are missing."""
         parts: list[str] = []
         if channel is not None:
             parts.append(f"in {channel!r}")
@@ -189,17 +184,16 @@ class LocalizedBadArgumentError(ModmailError, commands.BadArgument):
     [`Bot.on_command_error`][modmail.core.bot.Bot.on_command_error] translates
     [`locale_key`][] into the invoking user's locale before sending the reply.
 
-    Attributes:
-        locale_key: The Fluent message key used to produce the translated error text.
     """
 
-    def __init__(self, key: locale_str) -> None:
+    def __init__(self, key: discord.app_commands.locale_str) -> None:
         """Initialize with a locale key.
 
         Args:
             key: The Fluent message key for the translated error message.
         """
         self.locale_key = key
+        """The locale key for the error message."""
         super().__init__(str(key))
 
 
@@ -209,8 +203,6 @@ class UserAccessError(ModmailError, commands.CheckFailure):
     Wraps the full [`UserAccessResult`][] so callers have structured access
     to the denial reason without inspecting the context.
 
-    Attributes:
-        result: The denial outcome produced by [`Bot.check_user_access`][].
     """
 
     def __init__(self, result: UserAccessResult) -> None:
@@ -220,4 +212,28 @@ class UserAccessError(ModmailError, commands.CheckFailure):
             result: The [`UserAccessResult`][] with `allowed=False`.
         """
         self.result = result
+        """The access check result."""
         super().__init__(str(result))
+
+
+class ConfigUpdateError(ModmailError):
+    """Raised when a config update fails validation or parsing.
+
+    Attributes:
+        reason: Short category label for the failure type. Use in the
+            command handler to select a vague user-facing message.
+        detail: Full detail message for logging (not user-facing).
+    """
+
+    def __init__(self, reason: Literal["parse", "validation", "internal", "readonly"], detail: str = "") -> None:
+        """Initialize with a reason category and optional log detail.
+
+        Args:
+            reason: One of `"parse"`, `"validation"`, `"internal"`, `"readonly"`.
+            detail: Full description of the failure (logged, not shown to users).
+        """
+        self.reason = reason
+        """Short category label for the failure type."""
+        self.detail = detail
+        """Full detail message for logging (not user-facing)."""
+        super().__init__(reason)

@@ -27,6 +27,8 @@ __all__ = [
     "extract_locales",
 ]
 
+logger = logging.getLogger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SOURCE_ROOT = PROJECT_ROOT / "modmail"
 LOCALES_DIR = SOURCE_ROOT / "locales"
@@ -40,11 +42,9 @@ _FORMAT_RE = re.compile(r"\{\s*([a-zA-Z0-9_-]+)\s*\}")
 
 _INTERNAL_MSGIDS = frozenset({"internal.blank", "internal.error"})
 
-logger = logging.getLogger(__name__)
-
-_Extracted = dict[str | tuple[str, str], dict[str, Any]]
-_Directives = dict[str, list[str]]
-_SeeSources = dict[str, list[tuple[str, str, int]]]
+type _Extracted = dict[str | tuple[str, str], dict[str, Any]]
+type _Directives = dict[str, list[str]]
+type _SeeSources = dict[str, list[tuple[str, str, int]]]
 
 
 class LocaleError(Exception):
@@ -61,10 +61,8 @@ def _to_babel_locale(locale: str) -> str:
     Returns:
         Babel locale string with underscore and optional `@modifier`.
     """
-    if locale.endswith("-custom"):
-        base = locale.removesuffix("-custom")
-        return base.replace("-", "_") + "@custom"
-    return locale.replace("-", "_")
+    suffix = "@custom" if locale.endswith("-custom") else ""
+    return locale.removesuffix("-custom").replace("-", "_") + suffix
 
 
 def _read_pyproject() -> dict[str, str]:
@@ -98,33 +96,27 @@ def _resolve_constant(node: ast.expr) -> object | None:
     Returns:
         The resolved value, or `None` when unresolvable.
     """
-    if isinstance(node, ast.Constant):
-        value = node.value
-        return value.decode() if isinstance(value, bytes) else value
-
-    if isinstance(node, ast.JoinedStr):
-        parts: list[str] = []
-        for val in node.values:
-            if not (isinstance(val, ast.Constant) and isinstance(val.value, str)):
-                return None
-            parts.append(val.value)
-        return "".join(parts)
-
-    if hasattr(ast, "TemplateStr") and isinstance(node, ast.TemplateStr):
-        parts: list[str] = []
-        for val in node.values:
-            if not (isinstance(val, ast.Constant) and isinstance(val.value, str)):
-                return None
-            parts.append(val.value)
-        return "".join(parts)
-
-    return None
+    match node:
+        case ast.Constant(value=bytes(v)):
+            return v.decode()
+        case ast.Constant(value=v):
+            return v
+        case ast.JoinedStr() | ast.TemplateStr():
+            parts: list[str] = []
+            for val in node.values:
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    parts.append(val.value)
+                else:
+                    return None
+            return "".join(parts)
+        case _:
+            return None
 
 
 def _extract_comments(source: str, call_lineno: int) -> list[str]:
     """Scan comments above *call_lineno* for `@param` / `@info` / `@see` directives.
 
-    AST line numbers are 1-based; `splitlines()` is 0-based so the line
+    AST line numbers are 1-based. `splitlines()` is 0-based, so the line
     immediately before the call is at index `call_lineno - 2`.
 
     Returns:
@@ -155,6 +147,15 @@ def _discover_locales() -> list[str]:
     return found or ["en-US"]
 
 
+def _iter_locales(locale: str | None = None) -> list[str]:
+    """Return locale identifiers to process -- explicit *locale* or auto-discovered.
+
+    Returns:
+        List of locale identifiers.
+    """
+    return [locale] if locale else _discover_locales()
+
+
 def _create_locale(locale: str) -> str:
     """Validate *locale* as BCP-47 and create its directory tree.
 
@@ -175,7 +176,7 @@ def _create_locale(locale: str) -> str:
         raise LocaleError(f"Locale directory already exists: {locale_dir}")
 
     (locale_dir / "LC_MESSAGES").mkdir(parents=True, exist_ok=True)
-    logger.info("Created locale directory: %s", locale_dir)
+    logger.info("Created locale directory: %s", locale_dir.relative_to(LOCALES_DIR))
     return canonical
 
 
@@ -207,7 +208,7 @@ def create_custom_locale(base: str = "en-US") -> str:
     dirname = f"{base}-custom"
     locale_dir = LOCALES_DIR / dirname
     (locale_dir / "LC_MESSAGES").mkdir(parents=True, exist_ok=True)
-    logger.info("Created custom locale directory: %s", locale_dir)
+    logger.info("Created custom locale directory: %s", locale_dir.relative_to(LOCALES_DIR))
 
     meta = _read_pyproject()
     extracted = _SourceScanner().scan()
@@ -216,26 +217,80 @@ def create_custom_locale(base: str = "en-US") -> str:
     catalog = eng.build(extracted)
     eng.write_po(catalog)
     eng.write_mo(catalog)
+    s = _catalog_stats(catalog)
     logger.info(
-        "[%s] Generated PO and MO (%d entries, %d untranslated)",
+        "[%s] Generated PO and MO  (%d total · %d translated · %d untranslated · %d fuzzy · %d obsolete)",
         dirname,
-        len(catalog),
-        _count_untranslated(catalog),
+        s["total"],
+        s["translated"],
+        s["untranslated"],
+        s["fuzzy"],
+        s["obsolete"],
     )
     return dirname
 
 
-def _count_untranslated(catalog: Catalog) -> int:
-    """Number of catalog entries whose `string` is empty.
+def _catalog_stats(catalog: Catalog) -> dict[str, int]:
+    """Return translation stats for a catalog.
 
     Returns:
-        Count of untranslated entries.
+        A dict with *total*, *translated*, *untranslated*, *fuzzy*,
+        and *obsolete* counts.
     """
-    return sum(
-        1
-        for m in catalog
-        if not m.string or (isinstance(m.string, (list, tuple)) and all(not s for s in m.string))
-    )
+    translated = untranslated = fuzzy = 0
+    for m in catalog:
+        if m.string and not (isinstance(m.string, (list, tuple)) and all(not s for s in m.string)):
+            translated += 1
+        else:
+            untranslated += 1
+        fuzzy += m.fuzzy
+    return {
+        "total": translated + untranslated,
+        "translated": translated,
+        "untranslated": untranslated,
+        "fuzzy": fuzzy,
+        "obsolete": len(catalog.obsolete),
+    }
+
+
+def _log_undocumented_params(params: _Directives, catalog: Catalog) -> bool:
+    """Log warnings for msgstr entries whose `{name}` placeholders lack `@param` directives.
+
+    Returns:
+        `True` when all placeholders are documented, `False` otherwise.
+    """
+    clean = True
+    for m in catalog:
+        if not m.string:
+            continue
+        raw_str = m.string
+        if isinstance(raw_str, str):
+            combined = raw_str
+        else:
+            combined = " ".join(s for s in raw_str if s)
+        if not combined:
+            continue
+        placeholders = set(_FORMAT_RE.findall(combined))
+        if not placeholders:
+            continue
+        raw_id = m.id
+        if isinstance(raw_id, str):
+            mid = raw_id
+        elif isinstance(raw_id, tuple):
+            mid = raw_id[0]
+        else:
+            continue
+        param_lines = [c for c in params.get(mid, []) if c.startswith("@param")]
+        param_names = {c.removeprefix("@param").strip().split(":", 1)[0].strip() for c in param_lines}
+        for ph in sorted(placeholders):
+            if ph not in param_names:
+                logger.warning(
+                    "msgstr for %r has format placeholder {%s} without @param directive",
+                    mid,
+                    ph,
+                )
+                clean = False
+    return clean
 
 
 def ensure_compiled() -> None:
@@ -256,13 +311,23 @@ def ensure_compiled() -> None:
         mo_path.parent.mkdir(parents=True, exist_ok=True)
         with mo_path.open("wb") as f:
             mofile.write_mo(f, catalog)
-        logger.info("Compiled %s → %s", po_path, mo_path)
+        s = _catalog_stats(catalog)
+        logger.info(
+            "%s → %s  (%d total · %d translated · %d untranslated · %d fuzzy · %d obsolete)",
+            po_path.relative_to(LOCALES_DIR),
+            mo_path.relative_to(LOCALES_DIR),
+            s["total"],
+            s["translated"],
+            s["untranslated"],
+            s["fuzzy"],
+            s["obsolete"],
+        )
 
 
 class _SeeResolver:
     """Resolve `@see target.key` by copying `@param` lines from the target.
 
-    Local params override; errors are logged with the `file:line` of the
+    Local params override. Errors are logged with the `file:line` of the
     offending directive.
     """
 
@@ -317,6 +382,11 @@ class _SourceScanner:
     """Walk `.py` files and collect every translation call site."""
 
     def scan(self) -> _Extracted:
+        """Walk source files and extract translation entries.
+
+        Returns:
+            Dict of extracted translation entries keyed by msgid.
+        """
         extracted: _Extracted = {}
         for path in sorted(SOURCE_ROOT.rglob("*.py")):
             if LOCALES_DIR in path.parents or "locales.bak" in str(path):
@@ -337,12 +407,18 @@ class _SourceScanner:
 
     @staticmethod
     def _visit_file(source: str, relpath: str, tree: ast.AST) -> list[dict[str, Any]]:
+        """Parse a file and collect translation entries.
+
+        Returns:
+            List of extracted entry dicts.
+        """
         vis = _SourceScanner._Visitor(source, relpath)
         vis.visit(tree)
         return vis.entries
 
     @staticmethod
     def _merge(extracted: _Extracted, entry: dict[str, Any]) -> None:
+        """Merge an entry into the extracted dict, deduplicating."""
         msgid: str = entry["msgid"]
         if msgid.startswith("internal."):
             if msgid not in _INTERNAL_MSGIDS:
@@ -376,6 +452,7 @@ class _SourceScanner:
             self.entries: list[dict[str, Any]] = []
 
         def visit_Call(self, node: ast.Call) -> None:
+            """Record translation call metadata from an AST node."""
             fid = node.func.id if isinstance(node.func, ast.Name) else None
             if fid not in _ALL_FUNCS:
                 self.generic_visit(node)
@@ -423,6 +500,44 @@ class _SourceScanner:
             self.generic_visit(node)
 
 
+def _collect_params(extracted: _Extracted) -> tuple[_Directives, _Directives, _SeeSources]:
+    """Collect `@param`, `@info`, and `@see` directives from extracted entries.
+
+    Returns:
+        Tuple of `(params, infos, see_sources)`.
+    """
+    params: _Directives = {}
+    infos: _Directives = {}
+    sees: _SeeSources = {}
+
+    for entry in extracted.values():
+        mid: str = entry["msgid"]
+        for c in entry["comments"]:
+            if c.startswith("@param"):
+                bucket = params.setdefault(mid, [])
+                if c not in bucket:
+                    bucket.append(c)
+            elif c.startswith("@info"):
+                bucket = infos.setdefault(mid, [])
+                if c not in bucket:
+                    bucket.append(c)
+            elif c.startswith("@see "):
+                target = c[5:].strip()
+                if not target:
+                    logger.warning("%s: empty @see for %r", next(iter(entry["files"])), mid)
+                    continue
+                bucket = params.setdefault(mid, [])
+                if c not in bucket:
+                    bucket.append(c)
+                for fp, lines in entry["files"].items():
+                    sees.setdefault(mid, []).append((target, fp, lines[0] if lines else 0))
+
+        if entry["func"] == "ngettext" and not any(c.startswith("@param count") for c in params.get(mid, [])):
+            params.setdefault(mid, []).append("@param count: The number used to select the plural form.")
+
+    return params, infos, sees
+
+
 class _CatalogEngine:
     """Build, load, merge, and write babel `Catalog` objects for one locale."""
 
@@ -444,6 +559,11 @@ class _CatalogEngine:
         return self._po_dir / f"{DOMAIN}.mo"
 
     def build(self, extracted: _Extracted) -> Catalog:
+        """Build a babel Catalog from extracted entries.
+
+        Returns:
+            A populated `Catalog` with header metadata and locations.
+        """
         header = (
             f"# {self._meta['name']} localization\n"
             f"# Copyright (C) {datetime.now(UTC).year} {self._meta['author']}\n"
@@ -460,7 +580,7 @@ class _CatalogEngine:
         )
         catalog.revision_date = datetime.now(UTC)
 
-        all_params, all_infos, see_sources = self._collect(extracted)
+        all_params, all_infos, see_sources = _collect_params(extracted)
         _SeeResolver(all_params, see_sources).resolve()
 
         for entry in extracted.values():
@@ -484,6 +604,11 @@ class _CatalogEngine:
         return catalog
 
     def load(self) -> Catalog | None:
+        """Load an existing PO file.
+
+        Returns:
+            The loaded `Catalog`, or `None` if the file does not exist.
+        """
         if not self.po_path.is_file():
             return None
         with self.po_path.open("rb") as f:
@@ -491,12 +616,22 @@ class _CatalogEngine:
 
     @staticmethod
     def merge(existing: Catalog | None, template: Catalog) -> Catalog:
+        """Merge an existing catalog into a template catalog.
+
+        Returns:
+            The merged `Catalog`.
+        """
         if existing is None:
             return template
         existing.update(template)
         return existing
 
     def write_po(self, catalog: Catalog) -> Path:
+        """Write the catalog to a PO file.
+
+        Returns:
+            The path to the written PO file.
+        """
         self._po_dir.mkdir(parents=True, exist_ok=True)
         with self.po_path.open("wb") as f:
             pofile.write_po(f, catalog, sort_output=True, include_previous=True)
@@ -507,23 +642,26 @@ class _CatalogEngine:
 
     def _inject_crowdin_header(self) -> None:
         """Inject `X-Crowdin-SourceKey: msgstr` into the en-US PO header."""
-        if "X-Crowdin-SourceKey" in (content := self.po_path.read_text(encoding="utf-8")):
+        content = self.po_path.read_text(encoding="utf-8")
+        if "X-Crowdin-SourceKey" in content:
             return
 
-        # babel does not provide a way to inject custom header fields, so we have to do it manually.
-        # We look for the header section, then inject the custom header below the marker
-        # Other code here is used to ensure the marker is within the header section
-        if (header_begin := content.find('\nmsgid ""\nmsgstr ""\n')) == -1:
+        # babel does not provide a way to inject custom header fields, so we do it manually.
+        # Find the header stanza and inject the custom field below a known marker.
+        header_start = content.find('\nmsgid ""\nmsgstr ""\n')
+        if header_start == -1:
             logger.warning(
                 "[%s] Could not inject X-Crowdin-SourceKey — header stanza not found.",
                 self.locale,
             )
             return
-        header_body = header_begin + len('\nmsgid ""\nmsgstr ""\n')
-        if (next_msgid := content.find('\nmsgid "', header_body)) == -1:
+        header_body = header_start + len('\nmsgid ""\nmsgstr ""\n')
+        next_msgid = content.find('\nmsgid "', header_body)
+        if next_msgid == -1:
             next_msgid = len(content)
 
-        if (marker := '"Content-Transfer-Encoding: 8bit\\n"\n') not in content[header_body:next_msgid]:
+        marker = '"Content-Transfer-Encoding: 8bit\\n"\n'
+        if marker not in content[header_body:next_msgid]:
             logger.warning(
                 "[%s] Could not inject X-Crowdin-SourceKey — header marker not found.",
                 self.locale,
@@ -558,46 +696,23 @@ class _CatalogEngine:
         self.po_path.write_text(text, encoding="utf-8")
 
     def write_mo(self, catalog: Catalog) -> Path:
+        """Write the catalog to a MO file.
+
+        Returns:
+            The path to the written MO file.
+        """
         self._po_dir.mkdir(parents=True, exist_ok=True)
         with self.mo_path.open("wb") as f:
             mofile.write_mo(f, catalog)
         return self.mo_path
 
     @staticmethod
-    def _collect(extracted: _Extracted) -> tuple[_Directives, _Directives, _SeeSources]:
-        params: _Directives = {}
-        infos: _Directives = {}
-        sees: _SeeSources = {}
-
-        for entry in extracted.values():
-            mid: str = entry["msgid"]
-            for c in entry["comments"]:
-                if c.startswith("@param"):
-                    bucket = params.setdefault(mid, [])
-                    if c not in bucket:
-                        bucket.append(c)
-                elif c.startswith("@info"):
-                    bucket = infos.setdefault(mid, [])
-                    if c not in bucket:
-                        bucket.append(c)
-                elif c.startswith("@see "):
-                    target = c[5:].strip()
-                    if not target:
-                        logger.warning("%s: empty @see for %r", next(iter(entry["files"])), mid)
-                        continue
-                    bucket = params.setdefault(mid, [])
-                    if c not in bucket:
-                        bucket.append(c)
-                    for fp, lines in entry["files"].items():
-                        sees.setdefault(mid, []).append((target, fp, lines[0] if lines else 0))
-
-            if entry["func"] == "ngettext" and not any(c.startswith("@param count") for c in params.get(mid, [])):
-                params.setdefault(mid, []).append("@param count: The number used to select the plural form.")
-
-        return params, infos, sees
-
-    @staticmethod
     def _build_comments(msgid: str, params: _Directives, infos: _Directives) -> list[str]:
+        """Build auto_comments from @info and @param directives.
+
+        Returns:
+            List of auto-comment strings.
+        """
         result: list[str] = []
         for info in infos.get(msgid, []):
             text = info.removeprefix("@info").strip().lstrip(":").strip()
@@ -635,6 +750,18 @@ def _check_locale(extracted: _Extracted, engine: _CatalogEngine) -> bool:
         logger.info("[%s] No PO file — %d keys missing.", engine.locale, len(extracted))
         return False
 
+    s = _catalog_stats(existing)
+    logger.info(
+        "[%s] %s  (%d · +%d · -%d · !%d · x%d)",
+        engine.locale,
+        engine.po_path.relative_to(LOCALES_DIR),
+        s["total"],
+        s["translated"],
+        s["untranslated"],
+        s["fuzzy"],
+        s["obsolete"],
+    )
+
     clean = True
     for entry in extracted.values():
         msgid: str = entry["msgid"]
@@ -642,8 +769,14 @@ def _check_locale(extracted: _Extracted, engine: _CatalogEngine) -> bool:
         lookup: str | tuple[str, str] = (msgid, msgid + ".plural") if entry["func"] == "ngettext" else msgid
         found = any(getattr(m, "context", None) == ctx and m.id == lookup for m in existing)
         if not found:
-            logger.info("[%s] Missing: %s%s", engine.locale, msgid, f" (context: {ctx})" if ctx else "")
+            ctx_suffix = f" (context: {ctx})" if ctx else ""
+            logger.info("[%s] Missing: %s%s", engine.locale, msgid, ctx_suffix)
             clean = False
+
+    all_params, _all_infos, see_sources = _collect_params(extracted)
+    _SeeResolver(all_params, see_sources).resolve()
+    if not _log_undocumented_params(all_params, existing):
+        clean = False
     return clean
 
 
@@ -656,18 +789,22 @@ def extract_locales(locale: str | None = None) -> None:
     meta = _read_pyproject()
     extracted = _SourceScanner().scan()
     logger.info("Scanned sources — %d unique msgids found.", len(extracted))
-    for loc in [locale] if locale else _discover_locales():
+    for loc in _iter_locales(locale):
         eng = _CatalogEngine(loc, meta)
         result = _CatalogEngine.merge(eng.load(), eng.build(extracted))
         po = eng.write_po(result)
         mo = eng.write_mo(result)
+        s = _catalog_stats(result)
         logger.info(
-            "[%s]  PO: %s  MO: %s  (%d entries, %d untranslated)",
+            "[%s] %s  %s  (%d total · %d translated · %d untranslated · %d fuzzy · %d obsolete)",
             loc,
-            po,
-            mo,
-            len(result),
-            _count_untranslated(result),
+            po.relative_to(LOCALES_DIR),
+            mo.relative_to(LOCALES_DIR),
+            s["total"],
+            s["translated"],
+            s["untranslated"],
+            s["fuzzy"],
+            s["obsolete"],
         )
 
 
@@ -683,17 +820,16 @@ def check_locales(locale: str | None = None) -> bool:
     meta = _read_pyproject()
     extracted = _SourceScanner().scan()
     logger.info("Scanned sources — %d unique msgids found.", len(extracted))
-    locales = [locale] if locale else _discover_locales()
-
+    locales = _iter_locales(locale)
     failures = 0
     for loc in locales:
         if not _check_locale(extracted, _CatalogEngine(loc, meta)):
             failures += 1
 
     if failures:
-        logger.info("\n%d locale(s) have issues.", failures)
+        logger.info("%d of %d locale(s) have missing keys.", failures, len(locales))
         return False
-    logger.info("All locales clean.")
+    logger.info("All %d locale(s) are complete.", len(locales))
     return True
 
 
@@ -704,12 +840,23 @@ def compile_locales(locale: str | None = None) -> None:
         locale: Single BCP-47 locale to compile, or `None` for all configured.
     """
     meta = _read_pyproject()
-    for loc in [locale] if locale else _discover_locales():
+    for loc in _iter_locales(locale):
         eng = _CatalogEngine(loc, meta)
         if (existing := eng.load()) is None:
             logger.info("[%s] No PO file — skipping.", loc)
             continue
-        logger.info("[%s] Compiled: %s", loc, eng.write_mo(existing))
+        s = _catalog_stats(existing)
+        mo = eng.write_mo(existing)
+        logger.info(
+            "[%s] %s  (%d total · %d translated · %d untranslated · %d fuzzy · %d obsolete)",
+            loc,
+            mo.relative_to(LOCALES_DIR),
+            s["total"],
+            s["translated"],
+            s["untranslated"],
+            s["fuzzy"],
+            s["obsolete"],
+        )
 
 
 def add_locale(locale: str) -> str:
@@ -729,12 +876,16 @@ def add_locale(locale: str) -> str:
     catalog = eng.build(extracted)
     po = eng.write_po(catalog)
     mo = eng.write_mo(catalog)
+    s = _catalog_stats(catalog)
     logger.info(
-        "[%s]  PO: %s  MO: %s  (%d entries, %d untranslated)",
+        "[%s] %s  %s  (%d total · %d translated · %d untranslated · %d fuzzy · %d obsolete)",
         canonical,
-        po,
-        mo,
-        len(catalog),
-        _count_untranslated(catalog),
+        po.relative_to(LOCALES_DIR),
+        mo.relative_to(LOCALES_DIR),
+        s["total"],
+        s["translated"],
+        s["untranslated"],
+        s["fuzzy"],
+        s["obsolete"],
     )
     return canonical

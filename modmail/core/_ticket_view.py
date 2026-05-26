@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 
-from .. import CONFIG
-from ..backends.common import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
+from ..backends import TicketDMMessageModel, TicketMessageModel, TicketModel, TicketUserModel
+from ..config import config
 from ..enum import TicketMessageType, TicketStatus
 from ..errors import (
     BadPermissionsError,
@@ -50,7 +50,7 @@ class TicketView:
     @property
     def log_url(self) -> str:
         """Log viewer URL for this ticket."""
-        return f"{CONFIG.log_url}/{self._model.key}"
+        return f"{config.log_url}/{self._model.key}"
 
     async def open(self, *, starter_message: discord.Message | None = None) -> None:
         """Perform the ticket opening sequence.
@@ -105,11 +105,11 @@ class TicketView:
         )
 
         try:
-            await self._bot.database_client.close_ticket(self._model.key, closer_model, ticket_status=close_status)
+            await self._bot.db.close_ticket(self._model.key, closer_model, ticket_status=close_status)
         except (TicketNotFoundError, DatabaseOperationError) as exc:
             logger.error("Failed to close ticket %s: %s", self._model.key, exc)
             # Refresh the ticket model from the database
-            model = await self._bot.database_client.get_ticket_by_key(self._model.key, only_open=False)
+            model = await self._bot.db.get_ticket_by_key(self._model.key, only_open=False)
             if model is None:
                 logger.warning("Ticket %s disappeared during close operation!", self._model.key)
                 return True
@@ -243,7 +243,7 @@ class TicketView:
             )
 
         self._bot.spawn_task(
-            self._bot.database_client.save_message(
+            self._bot.db.save_message(
                 TicketMessageModel(
                     bot_id=self._model.bot_id,
                     ticket_key=self._model.key,
@@ -318,7 +318,7 @@ class TicketView:
             )
 
         self._bot.spawn_task(
-            self._bot.database_client.save_message(
+            self._bot.db.save_message(
                 TicketMessageModel(
                     bot_id=self._model.bot_id,
                     ticket_key=self._model.key,
@@ -385,7 +385,7 @@ class TicketView:
 
         Layout is title, body in a [`Section`][] with the first recipient's avatar
         as thumbnail, then footer. At least one of the three parts must be provided.
-        Accent colour tracks open/closed status.
+        Accent color tracks open/closed status.
 
         Returns:
             A [`discord.ui.LayoutView`][] ready to send or edit in the log channel.
@@ -424,7 +424,7 @@ class TicketView:
             body_loc = _("msg.ticket.log.body.open")
             # @see msg.ticket.log.body.open
             footer_loc = _("msg.ticket.log.footer.open")
-        elif closer is not None and closer.user_id != CONFIG.bot.bot_id:
+        elif closer is not None and closer.user_id != config.bot.bot_id:
             # @see msg.ticket.log.body.open
             body_loc = _("msg.ticket.log.body.closed")
             # @see msg.ticket.log.body.open
@@ -486,7 +486,7 @@ class TicketView:
             A [`discord.ui.Container`][] with account info, mutual-server entries, and ticket meta.
         """
         try:
-            past_ticket_count = await self._bot.database_client.get_all_tickets_by_recipient(
+            past_ticket_count = await self._bot.db.get_all_tickets_by_recipient(
                 recipient.id, count=True, only_closed=True
             )
         except DatabaseOperationError:
@@ -601,7 +601,7 @@ class TicketView:
 
         Args:
             message: The message to render.
-            message_type: Controls accent colour and which FTL keys are looked up.
+            message_type: Controls accent color and which FTL keys are looked up.
             unreachable: Recipients who did not receive this message.
 
         Returns:
@@ -684,8 +684,8 @@ class TicketView:
         if unreachable:
             container_items.append(
                 discord.ui.TextDisplay(
-                    # @param recipients: Comma-separated list of unreachable recipient mentions
                     self._bot.translate(
+                        # @param recipients: Comma-separated list of unreachable recipient mentions
                         ngettext(
                             "msg.ticket.staff.unreachable",
                             len(unreachable),
@@ -714,7 +714,7 @@ class TicketView:
 
         Args:
             message: The message to render.
-            message_type: Controls accent colour and which FTL keys are looked up.
+            message_type: Controls accent color and which FTL keys are looked up.
 
         Returns:
             A [`discord.ui.LayoutView`][] ready to send to a recipient's DM channel.
@@ -844,7 +844,7 @@ class TicketView:
 
         self._model = self._model.model_copy(update={"log_channel_message_id": log_message.id})
         self._bot.spawn_task(
-            self._bot.database_client.set_ticket_log_channel_message_id(self._model.key, log_message.id),
+            self._bot.db.set_ticket_log_channel_message_id(self._model.key, log_message.id),
             name=f"set_log_message_id:{self._model.key}",
         )
         return True

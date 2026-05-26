@@ -14,7 +14,7 @@ from ._base import SQLBackendBase
 from .models import SQLActivityTable, SQLSettingsTable
 
 if TYPE_CHECKING:
-    from ..common.models import SettingsModel
+    from modmail.backends.common import SettingsModel
 
 logger = logging.getLogger(__name__)
 

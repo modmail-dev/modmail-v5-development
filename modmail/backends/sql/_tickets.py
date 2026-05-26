@@ -17,7 +17,7 @@ from .models import SQLTicketMessageTable, SQLTicketRecipientTable, SQLTicketTab
 if TYPE_CHECKING:
     from sqlalchemy.engine import CursorResult
 
-    from ..common.models import TicketMessageModel, TicketModel, TicketUserModel
+    from modmail.backends.common import TicketMessageModel, TicketModel, TicketUserModel
 
 
 class SQLTicketsMixin(SQLBackendBase):

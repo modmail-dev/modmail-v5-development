@@ -10,9 +10,9 @@ import pymongo.errors
 from beanie import init_beanie  # pyright: ignore [reportUnknownVariableType]
 from pymongo import AsyncMongoClient
 
+from modmail.backends.common import DBBackend
 from modmail.errors import DatabaseConnectionError
 
-from ..common.db_backend import DBBackend
 from ._base import MongoDBBackendBase
 from ._lock import MongoDBLockMixin
 from ._profiles import MongoDBProfilesMixin
@@ -73,9 +73,6 @@ class MongoDBBackend(
             config: The bot [Config][]{ data-preview }.
         """
         super().__init__(config)
-        self.db_name = self._mongodb_config.database
-        """The name of the MongoDB database to connect to."""
-
         self._async_mongo_client: AsyncMongoClient[dict[str, Any]] | None = None
 
     async def _connect(self) -> None:
@@ -94,10 +91,10 @@ class MongoDBBackend(
         try:
             # InvalidURI is raised during AsyncMongoClient initialization if the URI is malformed
             self._async_mongo_client = AsyncMongoClient(
-                self._mongodb_config.uri.get_secret_value(),
+                self._db_config.uri.get_secret_value(),
                 connectTimeoutMS=4000,
                 serverSelectionTimeoutMS=5000,
-                tlsAllowInvalidCertificates=self._mongodb_config.tls_allow_invalid_certificates,
+                tlsAllowInvalidCertificates=self._db_config.tls_allow_invalid_certificates,
                 compressors="zstd,zlib",
                 zlibCompressionLevel=1,
             )
@@ -176,13 +173,13 @@ class MongoDBBackend(
             raise DatabaseConnectionError from e
 
         await init_beanie(
-            database=self._async_mongo_client.get_database(self.db_name),
+            database=self._async_mongo_client.get_database(self._db_config.database),
             document_models=self._document_models,
         )
         logger.debug("Connected to MongoDB.")
 
         logger.debug("Running database migrations.")
-        await do_migration(self._mongodb_config.uri.get_secret_value(), self.db_name)
+        await do_migration(self._db_config.uri.get_secret_value(), self._db_config.database)
 
         # May raise InstanceAlreadyRunningError when another bot is holding the instance lock
         await self._acquire_instance_lock()

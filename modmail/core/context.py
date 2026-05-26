@@ -1,4 +1,4 @@
-"""[`Context`][] — a [`commands.Context`][] subclass with Modmail-specific helpers and attributes."""
+"""A [`commands.Context`][] subclass with Modmail-specific helpers and attributes."""
 
 from __future__ import annotations
 
@@ -307,25 +307,14 @@ class PromptView(BaseLayoutView):
         if isinstance(content, locale_str):
             content = self._t(content)
 
-        cancel_btn: discord.ui.Button[PromptView] = discord.ui.Button(
-            label=self._t(_("view.prompt.cancel")),
-            style=discord.ButtonStyle.danger,
-        )
-        cancel_btn.callback = self._on_cancel
-        self._cancel_btn = cancel_btn
-
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
                     discord.ui.TextDisplay(content),
-                    accessory=cancel_btn,
+                    accessory=self._cancel_btn(callback=self._on_cancel),
                 ),
             )
         )
-
-    def _disable_buttons(self) -> None:
-        """Disable all interactive buttons in the view."""
-        self._cancel_btn.disabled = True
 
     async def _on_cancel(self, interaction: discord.Interaction) -> None:
         """Cancel the wait task, delete the prompt message, and stop the view."""
@@ -373,11 +362,6 @@ class PromptView(BaseLayoutView):
         self._update_message()
         return False
 
-    async def on_timeout(self) -> None:
-        """Disable all buttons when the view times out."""
-        self._disable_buttons()
-        self._update_message()
-
 
 class PromptChoicesView(BaseLayoutView):
     """Component v2 card presenting labeled choices as buttons.
@@ -407,28 +391,24 @@ class PromptChoicesView(BaseLayoutView):
         super().__init__(bot, author, interaction=None, timeout=timeout)
         self.result: int | None = None
         """Index of the chosen option, or `None` if canceled or timed out."""
-        self._buttons: list[discord.ui.Button[PromptChoicesView]] = []
 
         if isinstance(content, locale_str):
             content = self._t(content)
 
+        def make_choice_callback(index: int) -> Callable[..., Any]:
+            async def callback(interaction: discord.Interaction) -> None:
+                self.result = index
+                self.stop()
+                self._disable_buttons()
+                await self._update_message(interaction)
+
+            return callback
+
         action_row: discord.ui.ActionRow[PromptChoicesView] = discord.ui.ActionRow()
         for i, label in enumerate(choices):
-            if isinstance(label, locale_str):
-                label = self._t(label)
-            btn: discord.ui.Button[PromptChoicesView] = discord.ui.Button(
-                label=label, style=discord.ButtonStyle.primary
-            )
-            btn.callback = self._make_choice_callback(i)
-            action_row.add_item(btn)
-            self._buttons.append(btn)
+            action_row.add_item(self._btn(label, discord.ButtonStyle.primary, make_choice_callback(i)))
 
-        cancel: discord.ui.Button[PromptChoicesView] = discord.ui.Button(
-            label=self._t(_("view.prompt.cancel")), style=discord.ButtonStyle.danger
-        )
-        cancel.callback = self._on_cancel
-        action_row.add_item(cancel)
-        self._buttons.append(cancel)
+        action_row.add_item(self._cancel_btn(callback=self._on_cancel))
 
         self.add_item(
             discord.ui.Container(
@@ -437,22 +417,6 @@ class PromptChoicesView(BaseLayoutView):
                 action_row,
             )
         )
-
-    def _disable_buttons(self) -> None:
-        """Disable all interactive buttons in the view."""
-        for btn in self._buttons:
-            btn.disabled = True
-
-    def _make_choice_callback(self, index: int) -> Callable[..., Any]:
-        """Return an async callback that records `index` as the result and stops the view."""
-
-        async def callback(interaction: discord.Interaction) -> None:  # noqa: RUF029
-            self.result = index
-            self.stop()
-            self._disable_buttons()
-            self._update_message(interaction)
-
-        return callback
 
     async def _on_cancel(self, interaction: discord.Interaction) -> None:
         """Delete the prompt message and stop the view."""
@@ -469,8 +433,3 @@ class PromptChoicesView(BaseLayoutView):
         if self.message is None:
             logger.debug("%s.wait() called without message set; timeout cleanup skipped", type(self).__name__)
         return await super().wait()
-
-    async def on_timeout(self) -> None:
-        """Disable all buttons when the view times out."""
-        self._disable_buttons()
-        self._update_message()

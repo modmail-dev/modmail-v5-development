@@ -9,7 +9,7 @@ from babel.core import negotiate_locale
 from discord.app_commands import locale_str
 from discord.ext import commands
 
-from .. import CONFIG
+from ..config import config
 from ..enum import RequiredAccessLevel
 from .commands import CommandBuilder
 
@@ -223,7 +223,7 @@ class PermissionCommandIndex:
         for cmd in bot.walk_commands():
             canonical = bot.get_canonical_command_name(cmd)
             locale_map: dict[str, str] = {}
-            for loc in CONFIG.allowed_locales:
+            for loc in config.allowed_locales:
                 localized = _qualified_name(cmd, loc)
                 locale_map[loc] = localized
                 input_map.setdefault((loc, localized.casefold()), canonical)
@@ -236,7 +236,7 @@ class PermissionCommandIndex:
 
         Args:
             canonical_key: Canonical command key.
-            locale: Target BCP 47 locale string. Falls back to `CONFIG.default_locale`
+            locale: Target BCP 47 locale string. Falls back to `config.default_locale`
                 if no translation is found.
 
         Returns:
@@ -248,8 +248,8 @@ class PermissionCommandIndex:
         locale_map = self._display.get(base)
         if locale_map is None:
             return canonical_key
-        matched = negotiate_locale([locale.replace("_", "-")], list(CONFIG.allowed_locales), sep="-")
-        lookup = matched if matched is not None else CONFIG.default_locale
+        matched = negotiate_locale([locale.replace("_", "-")], config.allowed_locales, sep="-")
+        lookup = matched if matched is not None else config.default_locale
         if name := locale_map.get(lookup):
             return name + suffix
         return canonical_key
@@ -259,7 +259,7 @@ class PermissionCommandIndex:
 
         Args:
             raw: Raw user input (sanitized internally).
-            locale: Target BCP 47 locale string. Falls back to `CONFIG.default_locale`
+            locale: Target BCP 47 locale string. Falls back to `config.default_locale`
                 if no match is found.
             allow_raw_key: When `True`, also accept a bare canonical key as input,
                 useful for deleting orphaned overrides.
@@ -271,8 +271,8 @@ class PermissionCommandIndex:
         suffix = "+" if raw.endswith("+") else ""
         base = raw.removesuffix("+")
 
-        matched = negotiate_locale([locale.replace("_", "-")], list(CONFIG.allowed_locales), sep="-")
-        lookup = matched if matched is not None else CONFIG.default_locale
+        matched = negotiate_locale([locale.replace("_", "-")], config.allowed_locales, sep="-")
+        lookup = matched if matched is not None else config.default_locale
         key = base.casefold()
         if result := self._input_map.get((lookup, key)):
             return result + suffix

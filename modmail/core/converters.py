@@ -1,8 +1,4 @@
-"""Argument converters for both prefix and slash commands.
-
-Exports [`Str`][] (whitespace-stripping), [`ProfileLookup`][] (mentionable → profile),
-and [`ProfileResult`][] for use in hybrid commands.
-"""
+"""Argument converters for both prefix and slash commands."""
 
 from __future__ import annotations
 
@@ -20,45 +16,13 @@ from ..i18n import _
 if TYPE_CHECKING:
     from discord import Interaction
 
-    from modmail.backends.common import ProfileModel
+    from ..backends import ProfileModel
 
 
-__all__ = ["ProfileLookup", "ProfileResult", "Str"]
+__all__ = ["ProfileLookup", "ProfileResult"]
 
 
-type Str = Annotated[str, StrStripConverter]
 type ProfileLookup = Annotated[ProfileResult, _ProfileResultTransformer]
-
-
-class StrStripConverter(discord.app_commands.Transformer, commands.Converter[str]):
-    """Strips leading and trailing whitespace from a string argument.
-
-    Used as the annotation target for [`Str`][], transparent to both prefix and slash commands.
-    """
-
-    async def convert(self, ctx: commands.Context[Any], argument: str) -> str:
-        """Return the argument with surrounding whitespace stripped (prefix path).
-
-        Args:
-            ctx: The command context.
-            argument: Raw argument string supplied by the user.
-
-        Returns:
-            Trimmed argument string.
-        """
-        return argument.strip()
-
-    async def transform(self, interaction: Interaction, value: str) -> str:
-        """Return the value with surrounding whitespace stripped (slash path).
-
-        Args:
-            interaction: The Discord interaction.
-            value: String option value supplied by the user.
-
-        Returns:
-            Trimmed value string.
-        """
-        return value.strip()
 
 
 @dataclass
@@ -123,7 +87,7 @@ class _ProfileResultTransformer(discord.app_commands.Transformer, commands.Conve
             raise LocalizedBadArgumentError(_("error.profile.is_bot"))
 
         profile_type = ProfileType.role if isinstance(entity, discord.Role) else ProfileType.user
-        profile = ctx.bot.database_client.get_profile(entity.id, profile_type)
+        profile = ctx.bot.db.get_profile(entity.id, profile_type)
         return ProfileResult(entity=entity, profile=profile)
 
     async def transform(
@@ -145,5 +109,5 @@ class _ProfileResultTransformer(discord.app_commands.Transformer, commands.Conve
             raise LocalizedBadArgumentError(_("error.profile.is_bot"))
 
         profile_type = ProfileType.role if isinstance(value, discord.Role) else ProfileType.user
-        profile = interaction.client.database_client.get_profile(value.id, profile_type)
+        profile = interaction.client.db.get_profile(value.id, profile_type)
         return ProfileResult(entity=value, profile=profile)

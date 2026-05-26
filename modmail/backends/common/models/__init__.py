@@ -1,9 +1,4 @@
-"""Shared Pydantic models used by all database backends.
-
-Notes:
-    Modules from this directory should not import from ``modmail.core.*``
-    to avoid circular import issues.
-"""
+"""Shared Pydantic models used by all database backends."""
 
 from __future__ import annotations
 

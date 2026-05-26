@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from pymongo import AsyncMongoClient
 
-    from modmail.config.models import Config, MongoDBDatabaseConfig
+    from modmail.config.models import Config, DatabaseConfig
 
 __all__ = ["MongoDBBackendBase"]
 
@@ -28,11 +28,15 @@ class MongoDBBackendBase:
 
     # These are typed here but initialized in MongoDBBackend.__init__ via super().__init__
     _async_mongo_client: AsyncMongoClient[dict[str, Any]] | None
-    db_name: str
 
     # Inherited from DBBackend via MongoDBBackend's MRO
-    _config: Config
-    _instance_id: str
+    if TYPE_CHECKING:
+        _config: Config
+        _instance_id: str
+
+        @property
+        def _db_config(self) -> DatabaseConfig:
+            return NotImplemented
 
     @property
     def client(self) -> AsyncMongoClient[dict[str, Any]]:
@@ -46,14 +50,3 @@ class MongoDBBackendBase:
         if self._async_mongo_client is None:
             raise DatabaseConnectionError("MongoDB client accessed before connect() was called.")
         return self._async_mongo_client
-
-    @property
-    def _mongodb_config(self) -> MongoDBDatabaseConfig:
-        """The [MongoDBDatabaseConfig][]{ data-preview } for this `bot_id`.
-
-        Raises:
-            AttributeError: If the MongoDB config was not provided.
-        """
-        if self._config.mongodb_config is None:
-            raise AttributeError("_mongodb_config accessed but not provided in config.")
-        return self._config.mongodb_config

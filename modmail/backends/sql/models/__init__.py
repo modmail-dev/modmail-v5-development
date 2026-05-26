@@ -1,9 +1,4 @@
-"""SQLAlchemy ORM models for the SQL backend.
-
-Notes:
-    Modules from this directory should not import from ``modmail.core.*``
-    to avoid circular import issues.
-"""
+"""SQLAlchemy ORM models for the SQL backend."""
 
 from __future__ import annotations
 
